@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">FunInSpace</string>
+    <string name="action_settings">Einstellungen</string>
+
+    <string name="lowres">Lowres: %s</string>
+    <string name="hires">Hires: %s</string>
+    <string name="already_loaded">Bild des Tages ist bereits geladen</string>
+    <string name="apod_load">Neues Bild des Tages wurde geladen</string>
+    <string name="no_video_yet">Leider kann %1$s zur Zeit noch nicht angezeigt werden\nURL = %2$s</string>
+    <string name="load_miss_thumbs">Lade %1$d fehlende Thumbnails im Hintergrund&#8230;</string>
+
+    <string name="title_activity_image">ImageActivity</string>
+    <string name="dummy_button">Dummy Button</string>
+    <string name="dummy_content">DUMMY\nCONTENT</string>
+    <string name="filetransfer1">Dies erlaubt die Übertragung der JSON Metadaten und Thumbnail Bilder via Sockets an ein Python listener Script auf einem entfernten Server.</string>
+    <string name="rate_limit_exceeded">FunInSpace hat kein aktuelles Bild des Tages anfordern können. Vermutlich ist das API Rate Limit aufgebraucht.</string>
+    <string name="no_apod">Kein Bild empfangen</string>
+    <string name="no_youtube">FunInSpace erfordert zum Abspielen von YouTube Videos die installierte YouTube App auf Deinem Handy. Bitte installiere diese aus dem Play Store.</string>
+    <string name="sorry">Entschuldigung,</string>
+    <string name="no_support_yet">Medium zur Zeit noch nicht unterstützt.</string>
+
+    <string name="pref_description_wifi_required">Hires Bilder nur laden, wenn WiFi verfügbar</string>
+    <string name="pref_title_wifi_required">WiFi benötigt für Hires Bilder</string>
+
+
+    <string name="item_order">Sortierung</string>
+    <string name="newest_first">newest_first</string>
+    <string-array name="order_titles">
+        <item>Neueste zuerst</item>
+        <item>Älteste zuerst</item>
+    </string-array>
+
+</resources>
