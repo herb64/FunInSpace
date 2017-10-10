@@ -44,6 +44,15 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.youtube.player.YouTubeStandalonePlayer;
+import com.vimeo.networking.Configuration;
+import com.vimeo.networking.VimeoClient;
+import com.vimeo.networking.callbacks.ModelCallback;
+import com.vimeo.networking.callbacks.VimeoCallback;
+import com.vimeo.networking.model.Picture;
+import com.vimeo.networking.model.PictureCollection;
+import com.vimeo.networking.model.Video;
+import com.vimeo.networking.model.VideoList;
+import com.vimeo.networking.model.error.VimeoError;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -117,12 +126,13 @@ public class MainActivity extends AppCompatActivity {
     private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
 
-    // Using JNI for testing with NDK
+    // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
         System.loadLibrary("hfcmlib");
     }
     public native String yT();
     public native String nS();
+    public native String vA();
 
     // App settings variables from preferences dialog
     private boolean newestFirst = true;         // sort order for list of space items
@@ -173,11 +183,6 @@ public class MainActivity extends AppCompatActivity {
         // https://stackoverflow.com/questions/29041027/android-getresources-getdrawable-deprecated-api-22
         //d = ContextCompat.getDrawable(this, android.R.drawable.arrow_down_float);
         d = ContextCompat.getDrawable(this, R.drawable.hfcm);
-
-        // For later NDK Code -- hmm, need a static block ??
-        //System.loadLibrary("native-lib");
-        String test1 = yT();
-        String test2 = nS();
 
         /*FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -266,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
                 if (checked) {
                     selected.add(position);
                 } else {
-                    // hey, either object or postion as parameter? here, both are int...
+                    // hey, either object or postion as parameter? here, both are of type int...
                     // https://stackoverflow.com/questions/4534146/properly-removing-an-integer-from-a-listinteger
                     selected.remove(Integer.valueOf(position));
                 }
@@ -522,6 +527,10 @@ public class MainActivity extends AppCompatActivity {
             if (iList.get(position).getMedia().equals("youtube")) {
                 // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
                 //ivYoutube.setImageResource(R.drawable.youtube_social_icon_red); - done in xml
+                ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
+                ivYoutube.setVisibility(View.VISIBLE);
+            } else if(iList.get(position).getMedia().equals("vimeo")) {
+                ivYoutube.setImageResource(R.drawable.vimeo_icon);
                 ivYoutube.setVisibility(View.VISIBLE);
             } else {
                 ivYoutube.setVisibility(View.INVISIBLE);
@@ -718,6 +727,7 @@ public class MainActivity extends AppCompatActivity {
                 // TODO - handle potential case, where no youtube link like that is returned
                 if (resource_uri != null) {
                     if (sMediaType.equals("video")) {
+                        // note, that this rewrites mediatype!!
                         String host = resource_uri.getHost();
                         List<String> path = resource_uri.getPathSegments();
                         apodItem.setHires(resource_uri.toString());
@@ -739,7 +749,7 @@ public class MainActivity extends AppCompatActivity {
                             apodItem.setLowres("");
                         } else {
                             sMediaType = M_VIDEO_UNKNOWN;
-                            // hmmm, many more possibilities might exist...
+                            // hmmm, many more possibilities might exist, depending on NASA content
                             apodItem.setThumb("th_UNKNOWN.jpg");
                         }
                     } else {
@@ -778,7 +788,9 @@ public class MainActivity extends AppCompatActivity {
 
             // 20.09.2017 - keep a local copy of the nasa json file returned by api for reference
             try {
-                h.writef(String.valueOf(epoch) + ".json", parent.toString(2));
+                if (parent != null) {
+                    h.writef(String.valueOf(epoch) + ".json", parent.toString(2));
+                }
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -990,13 +1002,7 @@ public class MainActivity extends AppCompatActivity {
                 // We get the ID from thumb name
                 playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
             } else {
-                // TODO this is video - media-string changed from "video" to "YouTube-embed"
-                // or vimeo etc... and therefore this needs to be handled here...
-                // https://developers.google.com/youtube/android/player/
-                // https://stackoverflow.com/questions/21278633/play-youtube-videos-in-video-view-in-android
-                new dialogDisplay(MainActivity.this,
-                        getString(R.string.no_video_yet, media, hiresUrl),
-                        getString(R.string.no_support_yet));
+                playVimeo(hiresUrl);
             }
         }
     }
@@ -1020,6 +1026,41 @@ public class MainActivity extends AppCompatActivity {
         } catch(Exception e) {
             new dialogDisplay(this, getString(R.string.no_youtube), getString(R.string.sorry));
         }
+    }
+
+    // Play a vimeo video identified by the url string
+    // hmmm, check this, which works: http://vimeo.com/api/v2/video/11386048.json
+    // - this allows for thumbnails...
+    private void playVimeo(String url) {
+        /*new dialogDisplay(MainActivity.this,
+                getString(R.string.no_video_yet, "vimeo", url),
+                getString(R.string.no_support_yet));*/
+
+        // TODO Finish vimeo code
+        Configuration.Builder b = new Configuration.Builder(vA());
+        VimeoClient.initialize(b.build());
+        //Configuration cfg = VimeoClient.getInstance().getConfiguration();
+        String uri = "/videos/11386048";
+        VimeoClient.getInstance().fetchNetworkContent(uri, new ModelCallback<Video>(Video.class) {
+            @Override
+            public void success(Video video) {
+                int dur;
+                dur = video.duration;
+                String des = video.description;
+                String trail = video.getTrailerUri();
+                PictureCollection pc = video.pictures;
+                String pcuri = pc.uri;
+                //Picture pic = pc.
+                new dialogDisplay(MainActivity.this, trail + "\n" + pcuri + "\n" + des, "vimeotest");
+            }
+
+            @Override
+            public void failure(VimeoError error) {
+
+            }
+        });
+
+        //Video video = VideoList.
     }
 
     // add via alt-insert - For getting result from image Activity for hires size and for GL
