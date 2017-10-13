@@ -7,6 +7,9 @@
     <!-- HFCM: Add this to play with wifi stuff. If not set, elephone P9000 crashes -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- android:hardwareAccelerated="true"
+     in discussion on playing vimeo in webview... added on 13.10.2017-->
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

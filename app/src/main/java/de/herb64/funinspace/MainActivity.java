@@ -3,6 +3,8 @@ package de.herb64.funinspace;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -53,6 +55,8 @@ import com.vimeo.networking.model.PictureCollection;
 import com.vimeo.networking.model.Video;
 import com.vimeo.networking.model.VideoList;
 import com.vimeo.networking.model.error.VimeoError;
+import com.vimeo.networking.model.playback.Play;
+import com.vimeo.networking.model.playback.embed.Embed;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -65,6 +69,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.ParseException;
@@ -103,6 +108,9 @@ import de.herb64.funinspace.models.spaceItem;
         "service_version": "v1"
         }*/
 
+// TODO: if missing or bad hires url, we need to handle this: fall back to lowres
+//       but: on 10.10.2017, it failed, although link was ok - network issue most likely, CHECK!!!
+
 public class MainActivity extends AppCompatActivity {
 
     private spaceItem apodItem;                     // the latest item to be fetched
@@ -126,6 +134,9 @@ public class MainActivity extends AppCompatActivity {
     private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
 
+    // vimeo
+    //private vimeoWorker vimeo = null;
+
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
         System.loadLibrary("hfcmlib");
@@ -143,7 +154,9 @@ public class MainActivity extends AppCompatActivity {
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
-    private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/j77ttfcjn4zonpi/nasatest.json";
+    //private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/j77ttfcjn4zonpi/nasatest.json";
+    // changed to other location on 13.10.2017 into testing folder
+    private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
     //private static final int KIB = 1024;
     //private static final int MIB = 1024 * KIB;
     //private static final int GIB = 1024 * MIB;
@@ -173,7 +186,7 @@ public class MainActivity extends AppCompatActivity {
             loc = getResources().getConfiguration().locale;
         }
 
-        // READ SETTINGS FROM DEFAULT SHARED PREFERENCES
+        // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
         //String order = sharedPref.getString("item_order", "newest_first");
         //newestFirst = order.equals("newest_first");
@@ -199,6 +212,17 @@ public class MainActivity extends AppCompatActivity {
         // onActivityResult is called and values are correct at later times after finishing
         // onCreate() and even the Toast wihing onActivityResult shows the correct value.
         devInfo = new deviceInfo(getApplicationContext());
+
+        /* hmmm, strange behaviour
+        boolean flashInstalled = false;
+        try {
+            PackageManager pm = getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo("com.adobe.flashplayer", 0);
+            if (ai != null)
+                flashInstalled = true;
+        } catch (PackageManager.NameNotFoundException e) {
+            flashInstalled = false;
+        }*/
 
         // TODO: move this to "first time installation", and keep values in shared preferences
 //        Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
@@ -434,6 +458,8 @@ public class MainActivity extends AppCompatActivity {
             // TODO this should only be done once a day, afterwards info is available in local json
             // TODO make config option, if connection should be done if not connected in Wifi
             new apodTask().execute(nS());
+            // need to change to httpurlconnection in code for the following
+            //new apodTask().execute("http://192.168.1.33/vimeo-apod-test.json");
         }
     }
 
@@ -653,6 +679,7 @@ public class MainActivity extends AppCompatActivity {
             Uri resource_uri = null;
             if(s != null) {
                 if (s.equals("FILENOTFOUND")) {
+                    // TODO: this is not necessarily the case...
                     Log.e("HFCM", "FILENOTFOUND - API RATE LIMIT EXCEEDED ??");
                     new dialogDisplay(MainActivity.this, getString(R.string.rate_limit_exceeded),
                             getString(R.string.no_apod));
@@ -742,11 +769,18 @@ public class MainActivity extends AppCompatActivity {
                             imgUrl = "https://img.youtube.com/vi/" + path.get(1) + "/0.jpg";
                             apodItem.setLowres(imgUrl);
                         } else if (host.endsWith("vimeo.com")) { // vimeo.com vs. player.vimeo.com
+                            // see example file from 11.09.2017: link is in url, NOT hdurl
                             sMediaType = M_VIMEO;
                             // analyze path and prepare logic for thumbnail/lowres
-                            apodItem.setThumb("th_VIMEO_TODO.jpg");
-                            sHiresUrl = imgUrl;     // see 11.09.2017 json example - has no hires
-                            apodItem.setLowres("");
+                            apodItem.setThumb("th_VIMEO_unknown.jpg");
+                            sHiresUrl = imgUrl;     // see 11.09.2017 json example. Actually, this
+                            // URL is the link that can be played in a WebView, just not using
+                            // iframe embed at all... think of this
+                            // TODO: extract video ID and thumbnail url from given video url
+                            // thumbnail image name: th_<video-id>.jpg
+                            // Note: this needs a REST API call to gather the required infos..
+                            //ArrayList<String> vimeo = new vimeoWorker(getApplicationContext()).getVimeoInfos(sHiresUrl);
+                            apodItem.setLowres("");     // needs to be filled with thumbnail url
                         } else {
                             sMediaType = M_VIDEO_UNKNOWN;
                             // hmmm, many more possibilities might exist, depending on NASA content
@@ -794,8 +828,119 @@ public class MainActivity extends AppCompatActivity {
             } catch (JSONException e) {
                 e.printStackTrace();
             }
+            // New: for Vimeo, we need to kick of a separate thread using oembed API to determine
+            // infos about the thumbnail image URL, before calling the imgLowResTask thread for
+            // loading thumbnail bitmap data.
+            if (sMediaType == M_VIMEO) {
+                // this one will trigger ImgLowresTask(), once finished getting missing data
+                new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
 
-            new ImgLowresTask().execute(imgUrl);
+            } else {
+                // for image and youtube, we already have our url
+                new ImgLowresTask().execute(imgUrl);
+            }
+        }
+    }
+
+    // Get vimeo infos about thumbnail picture URL first, before calling imgLowResTask to load
+    // this thumbnail image.
+    private class vimeoInfoTask extends AsyncTask<String, String, String> {
+
+        @Override
+        protected String doInBackground(String... params) {
+            HttpsURLConnection vimeo_conn = null;
+            BufferedReader reader = null;
+
+            try {
+                URL url = new URL(params[0]);
+                vimeo_conn = (HttpsURLConnection) url.openConnection();
+                vimeo_conn.connect();
+                // We now read data from this connection into an input stream
+                InputStream jsonstream = vimeo_conn.getInputStream();
+                reader = new BufferedReader(new InputStreamReader(jsonstream));
+                StringBuffer jsonbuffer = new StringBuffer();
+                String jsonstring;
+
+                while((jsonstring = reader.readLine()) != null) {
+                    jsonbuffer.append(jsonstring);
+                }
+                return jsonbuffer.toString();
+
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+                return "FILENOTFOUND";
+            } catch (IOException e) {
+                e.printStackTrace();
+                return e.getMessage();
+            } finally {
+                if(vimeo_conn != null) {
+                    try {
+                        vimeo_conn.disconnect();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                try {
+                    if(reader != null) {
+                        reader.close();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            JSONObject parent = null;
+            Uri resource_uri = null;
+            String uri = null;
+            String thumbUrl = "n/a";
+            String videoIid = null;
+            if(s != null) {
+                if (s.equals("FILENOTFOUND")) {
+                    return;
+                }
+            }
+            try {
+                parent = new JSONObject(s);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            if(parent == null) {
+                return;
+            }
+            // We are interested in video ID and thumbnail_url
+            if(parent.has("video_id")) {
+                try {
+                    videoIid = parent.getString("video_id");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+            if(parent.has("thumbnail_url")) {
+                try {
+                    thumbUrl = parent.getString("thumbnail_url");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+            /*if(parent.has("uri")) {
+                try {
+                    uri = parent.getString("uri");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }*/
+            if (videoIid != null) {
+                apodItem.setThumb("th_" + videoIid + ".jpg");   // as with youtube
+            }
+            apodItem.setLowres(thumbUrl);
+            super.onPostExecute(s);
+            new ImgLowresTask().execute(thumbUrl);
         }
     }
 
@@ -917,7 +1062,6 @@ public class MainActivity extends AppCompatActivity {
                 myList.add(apodItem);
             }
             adp.notifyDataSetChanged();
-            // Write a toast
             Toast.makeText(MainActivity.this, R.string.apod_load,
                     Toast.LENGTH_LONG).show();
 
@@ -999,7 +1143,7 @@ public class MainActivity extends AppCompatActivity {
                     }*/
             } else if (media.equals(M_YOUTUBE)) {
                 String thumb = myList.get(idx).getThumb();
-                // We get the ID from thumb name
+                // We get the ID from thumb name - hmmm, somewhat dirty ?
                 playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
             } else {
                 playVimeo(hiresUrl);
@@ -1012,7 +1156,6 @@ public class MainActivity extends AppCompatActivity {
         // TODO - check other options - only first test with StandalonePlayer in lightbox mode
         // fullscreen: only in landscape, no rotate, mainactivity is recreated ... bad
         // lightbox_: better, but also recreates mainactivity
-        // but that's my fault, mainactivity does not yet handle this... :(
         Intent youtube_intent = YouTubeStandalonePlayer.createVideoIntent(MainActivity.this,
                 yT(),
                 id,
@@ -1028,39 +1171,80 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Play a vimeo video identified by the url string
-    // hmmm, check this, which works: http://vimeo.com/api/v2/video/11386048.json
-    // - this allows for thumbnails...
+    // Play a vimeo video for given URL in a WebView
     private void playVimeo(String url) {
+        // Play a vimeo video identified by the url string
+        // hmmm, check this, which works: http://vimeo.com/api/v2/video/11386048.json
+        // - this allows for thumbnails...
+        // hmm, this looks not so good: no native play without "pro"
+        // https://vimeo.com/forums/help/topic:280621
+        // Available infos for testing:
+        // String uri = "/videos/11386048";   // 11.09.2017
+        // String uri = "/videos/53641212";   // 20.08.2017
+        /* possible valid vimeo links, from which we might need to extract the id
+        http://vimeo.com/<id>
+        http://player.vimeo.com/video/<id>
+        http://player.vimeo.com/video/<id>?title=0&byline=0&portrait=0
+        http://player.vimeo.com/video/<id>#t=0m58s?color=8BA0FF&portrait=0
+        http://vimeo.com/channels/staffpicks/67019026 */
+        // Check this: https://stackoverflow.com/questions/10488943/easy-way-to-get-vimeo-id-from-a-vimeo-url
+        // need to answer to this post, because newer version does not work as good, while oEmbed  (https://oembed.com) works
+        // we can ask vimeo for the id!!
+        // -> https://developer.vimeo.com/api/endpoints/videos#GET/videos
+        // playground shows, that this cannot resolve "player.vimeo.com" based urls
+        // using the oembed endpoint: even works with full string, e.g.
+        // https://vimeo.com/api/oembed.json?url=https://player.vimeo.com/video/11386048#t=0m58s?color=8BA0FF&portrait=0
         /*new dialogDisplay(MainActivity.this,
                 getString(R.string.no_video_yet, "vimeo", url),
                 getString(R.string.no_support_yet));*/
 
-        // TODO Finish vimeo code
+        Intent vimeoIntent = new Intent(this, VideoActivity.class);
+        vimeoIntent.putExtra("vimeourl", url);
+        startActivity(vimeoIntent);
+
+        /*
+         * My code for testing with Vimeo API video objects. Actually, this has been abandoned,
+         * because embedding iframes in WebView caused quite some trouble.. to be checked again,
+         * but for now we are just using the NASA link in a webview.
+         */
+        /*
         Configuration.Builder b = new Configuration.Builder(vA());
+        b.setApiVersionString("3.2");       // need 3.3 for the Play object to avoid deprecated video.embed
+        // but 3.3 fails - see below in failure() function. Looks like for public, 3.2 is the
+        // currently supported version, see https://vimeo.com/forums/api/topic:289338, June 2017
         VimeoClient.initialize(b.build());
-        //Configuration cfg = VimeoClient.getInstance().getConfiguration();
-        String uri = "/videos/11386048";
+        Configuration cfg = VimeoClient.getInstance().getConfiguration();
         VimeoClient.getInstance().fetchNetworkContent(uri, new ModelCallback<Video>(Video.class) {
             @Override
             public void success(Video video) {
-                int dur;
-                dur = video.duration;
+                int dur = video.duration;
                 String des = video.description;
                 String trail = video.getTrailerUri();
+
                 PictureCollection pc = video.pictures;
                 String pcuri = pc.uri;
-                //Picture pic = pc.
-                new dialogDisplay(MainActivity.this, trail + "\n" + pcuri + "\n" + des, "vimeotest");
-            }
 
+                Play pl1 = video.getPlay();  // returns null
+                Play pl = video.play;        // also null, although should be preferred...
+                Embed emb = pl.mEmbed;
+                String sss = emb.toString();
+
+                // hmm, only the deprecated way is working with 3.2 and 3.3 cannot be used.... :(
+                String html = video.embed != null ? video.embed.html : null;
+                if(html != null) {
+                    new dialogDisplay(MainActivity.this, html, "vimeo-embed");
+                    // html is in the form "<iframe .... ></iframe>"
+                    // display the html however you wish
+                }
+            }
+            // with 3.3 set, we get error:
+            // Unsupported response format provided via the accept header. We expected [application/vnd.vimeo.video;version=3.2].
             @Override
             public void failure(VimeoError error) {
-
+                String tt = error.toString();
+                new dialogDisplay(MainActivity.this, tt, "vimeo problem");
             }
-        });
-
-        //Video video = VideoList.
+        });*/
     }
 
     // add via alt-insert - For getting result from image Activity for hires size and for GL
@@ -1140,9 +1324,7 @@ public class MainActivity extends AppCompatActivity {
                 SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
                 SharedPreferences.Editor editor = shPref.edit();
                 editor.putInt("maxtexsize", maxTextureSize);
-                //editor.commit();  // apply is recommended by inspection instead
-                editor.apply();
-                //Log.i("HFCM", "New Install - MAX_TEXTURE_SIZE written to shared prefs: " + maxTextureSize);
+                editor.apply(); // apply is recommended by inspection instead of commit()
             }
         } else if (requestCode == SETTINGS_REQUEST) {
             if (resultCode == RESULT_OK) {
@@ -1344,7 +1526,6 @@ public class MainActivity extends AppCompatActivity {
                 strMedia = content.getString("Media");
                 strHiSize = content.getString("HiSize");
                 strLowSize = content.getString("LowSize");
-
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -1362,6 +1543,11 @@ public class MainActivity extends AppCompatActivity {
             newitem.setMedia(strMedia);
             newitem.setHiSize(strHiSize);
             newitem.setLowSize(strLowSize);
+
+
+            //newitem.setUri("/videos/11386048");     // TODO BAD HACK!!!
+
+
             newitem.setMaxLines(MAX_ELLIPSED_LINES); // # of explanation lines in ellipsized view
             // Load the corresponding bitmap for thumbail from th_xxx.jpg and set into
             // the list item. If the file is not found, set bitmap to null.
@@ -1385,13 +1571,12 @@ public class MainActivity extends AppCompatActivity {
         ArrayList<Integer> missing = new ArrayList<Integer>();
         for(int i=0; i<myList.size(); i++) {
             //if (myList.get(i).getBmpThumb() == null) {
+            String tt = myList.get(i).getMedia();
             // TODO recheck no lowres key handling - here checked to avoid crash 11.09.2017
             if (myList.get(i).getBmpThumb() == null && !myList.get(i).getLowres().equals("")) {
                 // TODO: this is temporary only: vimeo videos do not have a thumb yet, so skip
                 // unknown not yet checked...
-                if(!myList.get(i).getMedia().equals(M_VIMEO)) {
-                    missing.add(i);
-                }
+                missing.add(i);
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
             }
         }
