@@ -87,19 +87,10 @@ import de.herb64.funinspace.helpers.dialogDisplay;
 import de.herb64.funinspace.helpers.helpers;
 import de.herb64.funinspace.models.spaceItem;
 
-
-// TODO ITEMS
-// Splash screen / Launch screen
-// https://www.bignerdranch.com/blog/splash-screens-the-right-way/
-// https://android.jlelse.eu/right-way-to-create-splash-screen-on-android-e7f1709ba154
-// main issue: do not waste time of users
-
 // TODO Log statements: Log.d etc.. should not be contained in final release, but how to do this?
 // see https://stackoverflow.com/questions/2446248/remove-all-debug-logging-calls-before-publishing-are-there-tools-to-do-this
-// checkout "ProGuard", which is mentioned here...
 
-
-// TODO: handle possible errors returned: found on 02.08.2017 - leads to null bitmap returned
+// TODO: handle possible errors returned: found on 02.08.2017 - led to null bitmap returned
 // so the http return code seems to be passed in json...
 /*
 {
@@ -108,13 +99,13 @@ import de.herb64.funinspace.models.spaceItem;
         "service_version": "v1"
         }*/
 
-// TODO: if missing or bad hires url, we need to handle this: fall back to lowres
-//       but: on 10.10.2017, it failed, although link was ok - network issue most likely, CHECK!!!
+// TODO: if missing or bad hires image url for an image, we need to handle this: fall back to lowres
+//       might be an option. But take care, because
+//       on 10.10.2017, it failed, although link was ok - network issue most likely, CHECK!!!
 
 public class MainActivity extends AppCompatActivity {
 
     private spaceItem apodItem;                     // the latest item to be fetched
-    //private List<spaceItem> myList;
     private ArrayList<spaceItem> myList;
     private myAdapter adp;
     private JSONArray parent;
@@ -130,12 +121,9 @@ public class MainActivity extends AppCompatActivity {
     private String lastImage;           // for log dialog title
     private Locale loc;
     //private Button test1 = null;
-    private Drawable d;
+    private Drawable expl_points;
     private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
-
-    // vimeo
-    //private vimeoWorker vimeo = null;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
@@ -192,10 +180,17 @@ public class MainActivity extends AppCompatActivity {
         //newestFirst = order.equals("newest_first");
         newestFirst = sharedPref.getString("item_order", "newest_first").equals("newest_first");
 
+        // TODO solve issue with vector on 4.1 (4.x?) - for now, go to fallback having the
+        // arrow_down_float image only - don't like that, but do it now
         // Drawable for textview - use builtin in "android.R...." - now use SVG graphic via xml
         // https://stackoverflow.com/questions/29041027/android-getresources-getdrawable-deprecated-api-22
-        //d = ContextCompat.getDrawable(this, android.R.drawable.arrow_down_float);
-        d = ContextCompat.getDrawable(this, R.drawable.hfcm);
+        expl_points = ContextCompat.getDrawable(this, android.R.drawable.arrow_down_float);
+        //expl_points = ContextCompat.getDrawable(this, R.drawable.hfcm);
+        //expl_points = getResources().getDrawable(R.drawable.hfcm);
+        // android.content.res.Resources$NotFoundException: File res/drawable/hfcm.xml from drawable resource ID #0x7f02005b
+        // on 4.1 AVD....
+        // https://stackoverflow.com/questions/39091521/vector-drawables-flag-doesnt-work-on-support-library-24
+        // https://developer.android.com/topic/libraries/support-library/features.html
 
         /*FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -595,7 +590,7 @@ public class MainActivity extends AppCompatActivity {
             // we click on the text view content - We reuse the existing listener for the thumbs
             // and distinguish views by ID ranges
             tvExplanation.setOnClickListener(myThumbClickListener);
-            tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, d);
+            tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
 
             // TODO DOCU: setText and concat is bad! use resources and format string!!!
             // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
@@ -1107,7 +1102,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     v.setEllipsize(TextUtils.TruncateAt.END);
                     v.setMaxLines(MAX_ELLIPSED_LINES);
-                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,d);
+                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
                 }
                 myItemsLV.setSelection(idx-10000);
                 return;
