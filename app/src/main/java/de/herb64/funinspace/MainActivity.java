@@ -72,6 +72,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -81,6 +83,8 @@ import java.util.List;
 import java.util.Locale;
 
 import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 
 import de.herb64.funinspace.helpers.deviceInfo;
 import de.herb64.funinspace.helpers.dialogDisplay;
@@ -180,13 +184,18 @@ public class MainActivity extends AppCompatActivity {
         //newestFirst = order.equals("newest_first");
         newestFirst = sharedPref.getString("item_order", "newest_first").equals("newest_first");
 
-        // TODO solve issue with vector on 4.1 (4.x?) - for now, go to fallback having the
+        // TODO solve issue with vector on 4.1 (4.x?) - for now, just dirty workaround...
         // arrow_down_float image only - don't like that, but do it now
         // Drawable for textview - use builtin in "android.R...." - now use SVG graphic via xml
         // https://stackoverflow.com/questions/29041027/android-getresources-getdrawable-deprecated-api-22
-        expl_points = ContextCompat.getDrawable(this, android.R.drawable.arrow_down_float);
-        //expl_points = ContextCompat.getDrawable(this, R.drawable.hfcm);
-        //expl_points = getResources().getDrawable(R.drawable.hfcm);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            expl_points = ContextCompat.getDrawable(this, R.drawable.hfcm);
+        } else {
+            expl_points = ContextCompat.getDrawable(this, android.R.drawable.arrow_down_float);
+        }
+        // https://medium.com/@chrisbanes/appcompat-v23-2-age-of-the-vectors-91cbafa87c88
+        // - vectorDrawables.useSupportLibrary = true >> already in build.gradle
+        // - setting "app:srcCompat="@drawable/hfcm" in spaceitem textview xml also does not help
         // android.content.res.Resources$NotFoundException: File res/drawable/hfcm.xml from drawable resource ID #0x7f02005b
         // on 4.1 AVD....
         // https://stackoverflow.com/questions/39091521/vector-drawables-flag-doesnt-work-on-support-library-24
@@ -518,7 +527,6 @@ public class MainActivity extends AppCompatActivity {
             if (convertView == null) {
                 convertView = inflater.inflate(R.layout.space_item, null);
             }
-            //Log.i("HFCM", "Adapter called");
 
             if (iList.get(position).isSelected()) {
                 convertView.setBackgroundColor(Color.LTGRAY);
@@ -608,11 +616,25 @@ public class MainActivity extends AppCompatActivity {
         private String imgUrl;
         @Override
         protected String doInBackground(String... params) {
-            Log.i("HFCM", "APOD Loader task started");
+            //Log.i("HFCM", "APOD Loader task started");
             apodItem = new spaceItem();
+
+            // Add code to enable TLSv1 on Android below 5.0 (Lollipop)
+            // https://blog.dev-area.net/2015/08/13/android-4-1-enable-tls-1-1-and-tls-1-2/
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", false)) {
+                SSLContext sslcontext = null;
+                try {
+                    sslcontext = SSLContext.getInstance("TLSv1");
+                    sslcontext.init(null, null, null);
+                    SSLSocketFactory noSSLv3Factory = new TLSSocketFactory();
+                    HttpsURLConnection.setDefaultSSLSocketFactory(noSSLv3Factory);
+                } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                    e.printStackTrace();
+                }
+            }
             HttpsURLConnection nasa_conn = null;
             BufferedReader reader = null;
-
             try {
                 URL url = new URL(params[0]);
                 nasa_conn = (HttpsURLConnection) url.openConnection();
@@ -640,6 +662,7 @@ public class MainActivity extends AppCompatActivity {
             } catch (IOException e) {
                 // running into this because of DNS problems in AVD device. Seems to be because
                 // of LAN card and Wifi present in host - Problem on my Windows Studio installation
+                // And on 14.10.2017 on AVD Android 4.1...
                 e.printStackTrace();
                 //String ttt = e.getMessage();
                 return e.getMessage();
@@ -678,6 +701,9 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("HFCM", "FILENOTFOUND - API RATE LIMIT EXCEEDED ??");
                     new dialogDisplay(MainActivity.this, getString(R.string.rate_limit_exceeded),
                             getString(R.string.no_apod));
+                    return;
+                } else if (s.startsWith("Connection")) {
+                    new dialogDisplay(MainActivity.this, s, "NASA API Connect");
                     return;
                 }
                 //JSONObject parent = null;
@@ -742,11 +768,7 @@ public class MainActivity extends AppCompatActivity {
                         e.printStackTrace();
                     }
                 }
-                // For media_type 'video', a youtube embed link was returned (17.07.2017)
-                // https://www.youtube.com/embed/9Vp2jUQ4rNM?rel=0
-                // TIP: a thumbnail image for a given youtube ID can be retrieved by
-                // https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
-                // TODO - handle potential case, where no youtube link like that is returned
+
                 if (resource_uri != null) {
                     if (sMediaType.equals("video")) {
                         // note, that this rewrites mediatype!!
@@ -754,28 +776,26 @@ public class MainActivity extends AppCompatActivity {
                         List<String> path = resource_uri.getPathSegments();
                         apodItem.setHires(resource_uri.toString());
                         if (host.equals("www.youtube.com")) {
-                            // TODO: now we just assume embed link - might not be true always ??
-                            // hires: video embed URL, lowres: thumbnail from youtube (0.jpg)
+                            // TODO: now we just assume 'embed' link - might not be true always ??
                             // https://www.youtube.com/embed/" + path.get(1) + "?rel=0
+                            // corresponding image link can be found on
+                            // https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
                             sMediaType = M_YOUTUBE;
-                            // thumbnail name: youtube video ID with prefix 'th_'
                             apodItem.setThumb("th_" + path.get(1) + ".jpg");
                             sHiresUrl = imgUrl;
                             imgUrl = "https://img.youtube.com/vi/" + path.get(1) + "/0.jpg";
                             apodItem.setLowres(imgUrl);
-                        } else if (host.endsWith("vimeo.com")) { // vimeo.com vs. player.vimeo.com
+                        } else if (host.endsWith("vimeo.com")) { // vimeo.com / player.vimeo.com
                             // see example file from 11.09.2017: link is in url, NOT hdurl
                             sMediaType = M_VIMEO;
-                            // analyze path and prepare logic for thumbnail/lowres
                             apodItem.setThumb("th_VIMEO_unknown.jpg");
-                            sHiresUrl = imgUrl;     // see 11.09.2017 json example. Actually, this
+                            sHiresUrl = imgUrl;
                             // URL is the link that can be played in a WebView, just not using
-                            // iframe embed at all... think of this
+                            // iframe embed at all... doing it like this for now
                             // TODO: extract video ID and thumbnail url from given video url
                             // thumbnail image name: th_<video-id>.jpg
                             // Note: this needs a REST API call to gather the required infos..
-                            //ArrayList<String> vimeo = new vimeoWorker(getApplicationContext()).getVimeoInfos(sHiresUrl);
-                            apodItem.setLowres("");     // needs to be filled with thumbnail url
+                            apodItem.setLowres("");     // will hold thumbnail url
                         } else {
                             sMediaType = M_VIDEO_UNKNOWN;
                             // hmmm, many more possibilities might exist, depending on NASA content
@@ -824,14 +844,13 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             // New: for Vimeo, we need to kick of a separate thread using oembed API to determine
-            // infos about the thumbnail image URL, before calling the imgLowResTask thread for
-            // loading thumbnail bitmap data.
+            // infos about the thumbnail image URL, before calling the imgLowResTask thread to
+            // load thumbnail bitmap data.
             if (sMediaType == M_VIMEO) {
                 // this one will trigger ImgLowresTask(), once finished getting missing data
                 new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
-
             } else {
-                // for image and youtube, we already have our url
+                // for image and youtube, we already have our thumbnail url, just proceed...
                 new ImgLowresTask().execute(imgUrl);
             }
         }
@@ -891,8 +910,6 @@ public class MainActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(String s) {
             JSONObject parent = null;
-            Uri resource_uri = null;
-            String uri = null;
             String thumbUrl = "n/a";
             String videoIid = null;
             if(s != null) {
@@ -923,15 +940,8 @@ public class MainActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
             }
-            /*if(parent.has("uri")) {
-                try {
-                    uri = parent.getString("uri");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }*/
             if (videoIid != null) {
-                apodItem.setThumb("th_" + videoIid + ".jpg");   // as with youtube
+                apodItem.setThumb("th_" + videoIid + ".jpg");   // thumb filename
             }
             apodItem.setLowres(thumbUrl);
             super.onPostExecute(s);
@@ -1048,9 +1058,6 @@ public class MainActivity extends AppCompatActivity {
             h.writef(localJson, outString);
 
             // add our new entry to the spaceItem list and notify the Adapter
-            // myList.add(apodItem);
-            // REVERSE
-            // myList.add(0, apodItem);
             if (newestFirst) {
                 myList.add(0, apodItem);
             } else {
@@ -1059,11 +1066,7 @@ public class MainActivity extends AppCompatActivity {
             adp.notifyDataSetChanged();
             Toast.makeText(MainActivity.this, R.string.apod_load,
                     Toast.LENGTH_LONG).show();
-
             // scroll to the new space Item in the list, that has been loaded
-            //myItemsLV.setSelection(adp.getCount() -1);
-            // REVERSE
-            //myItemsLV.setSelection(0);
             if (newestFirst) {
                 myItemsLV.setSelection(0);
             } else {
@@ -1259,8 +1262,6 @@ public class MainActivity extends AppCompatActivity {
                 int listidx = data.getIntExtra("lstIdx",0);
                 String logString = data.getStringExtra("logString");
                 new dialogDisplay(this, logString, lastImage);
-                //String toaster = "<" + String.valueOf(listidx) + "> " + testsize;
-                //Toast.makeText(MainActivity.this, toaster, Toast.LENGTH_LONG).show();
                 // we now have the index into our list, so set the field
                 myList.get(listidx).setHiSize(testsize);
 

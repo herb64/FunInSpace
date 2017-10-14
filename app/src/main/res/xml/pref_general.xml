@@ -21,6 +21,12 @@
         android:summary="Keep hires images on SD Card"
         android:title="Hires Images" />
 
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="enable_tls_pre_lollipop"
+        android:summary="Enable TLS v1 on Android below 5.0"
+        android:title="TLS v1 Security" />
+
     <!--
     <SwitchPreference
         android:defaultValue="true"
