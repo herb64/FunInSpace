@@ -25,6 +25,7 @@
 
     <string name="item_order">Sortierung</string>
     <string name="newest_first">newest_first</string>
+    <string name="enable_tls"><![CDATA[Bitte schalte TLS v1 in Settings > General ein]]></string>
     <string-array name="order_titles">
         <item>Neueste zuerst</item>
         <item>Älteste zuerst</item>

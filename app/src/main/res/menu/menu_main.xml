@@ -26,4 +26,13 @@
         android:title="About"
         android:icon="@android:drawable/ic_menu_help"
         app:showAsAction="ifRoom" />
+
+    <!-- This is for resync with dropbox metadata json. Most likely not part of final version
+         but useful to resync stuff without new installation -->
+    <item
+        android:id="@+id/dropbox_sync"
+        android:orderInCategory="92"
+        android:title="Refresh content"
+        app:showAsAction="ifRoom"
+        android:icon="@android:drawable/ic_popup_sync" />
 </menu>

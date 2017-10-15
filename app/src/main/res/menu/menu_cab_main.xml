@@ -8,9 +8,9 @@
     expected. Seems that the tools are not available...-->
     <item
         android:id="@+id/cab_delete"
+        android:icon="@android:drawable/ic_menu_delete"
         android:title="Delete"
-        app:showAsAction="ifRoom"
-        android:icon="@android:drawable/ic_menu_delete"/>
+        app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/cab_share"

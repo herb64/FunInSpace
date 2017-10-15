@@ -42,6 +42,7 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.RatingBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -118,6 +119,7 @@ public class MainActivity extends AppCompatActivity {
     private String localJson = "nasatest.json";
     //private String testJson = "herbtest.json";
     private thumbClickListener myThumbClickListener;
+    private ratingChangeListener myRatingChangeListener;
     private Intent hiresIntent;
     private ListView myItemsLV;
     private deviceInfo devInfo;
@@ -161,6 +163,7 @@ public class MainActivity extends AppCompatActivity {
     // dealing with the number of displayed lines in the Explanation text view
     private static final int MAX_ELLIPSED_LINES = 2;
     private static final int MAX_LINES = 1000;      // hmm, ridiculous, but safe // TODO think
+    private static final int MAX_ITEMS = 10000;     // limit of items - for id handling
 
 
     @Override
@@ -179,6 +182,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
+        // TODO check, if this is rotation proof, or if we bettger should get prefs each time
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
         //String order = sharedPref.getString("item_order", "newest_first");
         //newestFirst = order.equals("newest_first");
@@ -348,6 +352,8 @@ public class MainActivity extends AppCompatActivity {
                         new dialogDisplay(MainActivity.this, "(Multi) Sharing not yet possible", "Info");
                         actionMode.finish();
                         return true;
+                    case R.id.cab_rating:
+                        new dialogDisplay(MainActivity.this, "Interaction with 'small' bar below thumbnail is not possible, need extra dialog with default rating bar? This is a very ugly solution...", "Herbert - THINK ABOUT");
                     default:
                         return false;
                 }
@@ -364,8 +370,9 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        // Create a listener for handling clicks on the thumbnail image
+        // Create a listeners for handling clicks on the thumbnail image and for rating changes
         myThumbClickListener = new thumbClickListener();
+        myRatingChangeListener = new ratingChangeListener();
 
         // Prepare an intent for starting the hires image load in ImageActivity
         hiresIntent = new Intent(this, ImageActivity.class);
@@ -461,9 +468,11 @@ public class MainActivity extends AppCompatActivity {
             // now go for the latest APOD item to append - call NASA and get infos
             // TODO this should only be done once a day, afterwards info is available in local json
             // TODO make config option, if connection should be done if not connected in Wifi
-            new apodTask().execute(nS());
-            // need to change to httpurlconnection in code for the following
-            //new apodTask().execute("http://192.168.1.33/vimeo-apod-test.json");
+            // we can disable this for debugging purposes to avoid unnecessary calls to NASA
+            if (sharedPref.getBoolean("get_apod", true)) {
+                new apodTask().execute(nS());
+                // or some local URL using python simplehttpserver (change to httpurlconnection)
+            }
         }
     }
 
@@ -479,8 +488,8 @@ public class MainActivity extends AppCompatActivity {
         // see also
         // https://stackoverflow.com/questions/33182309/passing-bitmap-to-another-activity-ends-in-runtimeexception
 
-        // unfortunately, JSONarray does not implement Parcelable, so we cannot put it. But we
-        // add the jsonData String, from which we then need to regenerate the JSONArray parent
+        // unfortunately, JSONarray does not implement Parcelable, so we cannot put this. But we
+        // add the jsonData String, from which we then regenerate the JSONArray parent object
         outState.putString("jsonData",jsonData);
         outState.putInt("maxtexsize", maxTextureSize);
     }
@@ -535,14 +544,23 @@ public class MainActivity extends AppCompatActivity {
             }
             // important: call findViewByID for convertView!!! - otherwise null pointer!
             ImageView ivThumb = convertView.findViewById(R.id.iv_thumb);
-            ImageView ivYoutube = convertView.findViewById(R.id.iv_youtube);
-
+            ImageView ivYoutube = convertView.findViewById(R.id.iv_youtube);    // TODO rename!!
             // getView() is called often during scroll, take care of the overhead
             // We use a listener created ONCE in the activity instead of creating a new one on
             // each call of getView(). The Tag is by the listener.
             //ivThumb.setOnClickListener(new thumbClickListener());   // BAD
             ivThumb.setOnClickListener(myThumbClickListener);         // BETTER
             ivThumb.setTag(position);
+
+            // Rating bar - note, that the "small" versions do not support interaction
+            // https://developer.android.com/reference/android/widget/RatingBar.html
+            // The overview uses small ones, so I need to start an extra dialog to set the
+            // rating.
+            //RatingBar rbRating = convertView.findViewById(R.id.id_rating);
+            //rbRating.setTag(2*MAX_ITEMS + position);
+            //rbRating.setOnClickListener(myThumbClickListener);
+            //rbRating.setRating(iList.get(position).getRating());
+            //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
 
             TextView tvTitle = convertView.findViewById(R.id.tv_title);
             final TextView tvExplanation = convertView.findViewById(R.id.tv_explanation);
@@ -587,7 +605,7 @@ public class MainActivity extends AppCompatActivity {
 
             tvExplanation.setText(iList.get(position).getExplanation());
             iList.get(position).setMaxLines(tvExplanation.getLineCount());
-            tvExplanation.setTag(10000 + position);
+            tvExplanation.setTag(MAX_ITEMS + position);
             // order of maxlines / ellipse statements might be answer to
             // https://stackoverflow.com/questions/8087555/programmatically-create-textview-with-ellipsis
             // NO, it is not! OR: there has not yet been set any text before
@@ -703,7 +721,7 @@ public class MainActivity extends AppCompatActivity {
                             getString(R.string.no_apod));
                     return;
                 } else if (s.startsWith("Connection")) {
-                    new dialogDisplay(MainActivity.this, s, "NASA API Connect");
+                    new dialogDisplay(MainActivity.this, s + "\n" + getString(R.string.enable_tls), "NASA Connect");
                     return;
                 }
                 //JSONObject parent = null;
@@ -1075,6 +1093,20 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Listen to any rating bar changes
+    // Strange: does not get called at all, but works, if changing in xml
+    // style="@style/Widget.AppCompat.RatingBar" - works
+    // from
+    // style="@style/Widget.AppCompat.RatingBar.Small" - fails
+    // same with device default bars: small versions do not call the listener!!
+    private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
+        @Override
+        public void onRatingChanged(RatingBar ratingBar, float v, boolean b) {
+            float hugo = v;
+            Toast.makeText(MainActivity.this, "Have rating" + hugo, Toast.LENGTH_LONG).show();
+        }
+    }
+
     // just as a first test: we create a listener class for onclick events on our
     // thumbnail images. The adapter sets a Tag, which can be read here and used
     // for further actions. NEW: this listener now also runs for the explanation textviews!!!
@@ -1090,8 +1122,16 @@ public class MainActivity extends AppCompatActivity {
         public void onClick(View view) {
             int idx = (int) view.getTag();
 
-            // bad hack: index i+10000 is corresponding textview for thumbnail on index i
-            if (idx >= 10000) {
+            // 20000+ - rating bars, but this actually does not work, because the small versions
+            // do not support interaction. See links at other places in this code
+            /*if (idx >= 2*MAX_ITEMS) {
+                RatingBar rb = (RatingBar) view;
+                Toast.makeText(MainActivity.this, "Rating value is " + rb.getRating(),
+                        Toast.LENGTH_LONG).show();
+            }*/
+
+            // bad hack: index i+MAX_ITEMS is corresponding textview for thumbnail on index i
+            if (idx >= MAX_ITEMS) {
                 // we just reset the maxlines to a larger limit and remove the ellipse stuff. This
                 // is only temporarily and automatically disappears when scrolling or when clicking
                 // again.
@@ -1107,7 +1147,7 @@ public class MainActivity extends AppCompatActivity {
                     v.setMaxLines(MAX_ELLIPSED_LINES);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
                 }
-                myItemsLV.setSelection(idx-10000);
+                myItemsLV.setSelection(idx-MAX_ITEMS);
                 return;
             }
 
@@ -1245,9 +1285,10 @@ public class MainActivity extends AppCompatActivity {
         });*/
     }
 
-    // add via alt-insert - For getting result from image Activity for hires size and for GL
-    // maximum texture size query at first application start after installation
-    // used with startActivityForResult()
+    // Get results from Activities started with startActivityForResult()
+    // 1. image Activity for hires size
+    // 2. GL max texture size query at very first run
+    // 3. Settings dialog
     // Returned resultCode = 0 (RESULT_CANCELED) after having rotated the phone while
     // displaying the image in hires ImageActivity
     // https://stackoverflow.com/questions/32803497/incorrect-activity-result-code-after-rotating-activity
@@ -1344,6 +1385,9 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
+    /*
+     * This code handles selections from the menu bar
+     */
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle action bar item clicks here. The action bar will
@@ -1365,13 +1409,20 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         if (id == R.id.action_xfer) {
-            // File Transfer: do not open socket in main thread!!
+            // File Transfer: do not open socket in main thread :)
             FragmentManager fm = getSupportFragmentManager();
             fileTransferDialog dlg = new fileTransferDialog();
             dlg.show(fm, "XFERTAG");
             return true;
         }
         if (id == R.id.action_help) {
+            return true;
+        }
+        // Sync metatata with dropbox. For now: just overwrite everything, This allows to refresh
+        // without a new installation.
+        // might be a merge, keeping local infos about ratings ... if not dropping this at all
+        if (id == R.id.dropbox_sync) {
+            new dialogDisplay(MainActivity.this, "Sync from dropbox", "Not yet implemented");
             return true;
         }
         return super.onOptionsItemSelected(item);

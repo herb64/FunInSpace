@@ -27,6 +27,12 @@
         android:summary="Enable TLS v1 on Android below 5.0"
         android:title="TLS v1 Security" />
 
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="get_apod"
+        android:summary="Get APOD on each start of app"
+        android:title="APOD Loader" />
+
     <!--
     <SwitchPreference
         android:defaultValue="true"

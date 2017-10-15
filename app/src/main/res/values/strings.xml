@@ -104,4 +104,5 @@
     <string name="pref_description_wifi_required"> Hires images only load if Wifi connection is available </string>
     <string name="pref_title_wifi_required"> Load Hires with Wifi only</string>
     <string name="newest_first">newest_first</string>
+    <string name="enable_tls"><![CDATA[Please enable TLS v1 in Settings > General]]></string>
 </resources>

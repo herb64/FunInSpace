@@ -117,12 +117,14 @@
         android:layout_marginStart="8dp"
         android:layout_marginTop="8dp"
         android:numStars="5"
-        android:rating="5"
+        android:rating="0"
         android:stepSize="1"
         android:visibility="visible"
         app:layout_constraintLeft_toLeftOf="@+id/fl_thumb"
         app:layout_constraintRight_toRightOf="@+id/fl_thumb"
-        app:layout_constraintTop_toBottomOf="@+id/fl_thumb" />
+        app:layout_constraintTop_toBottomOf="@+id/fl_thumb"
+        tools:clickable="true"
+        tools:isIndicator="false" />
 
     <TextView
         android:id="@+id/tv_lowsize"
