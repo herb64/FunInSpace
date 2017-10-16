@@ -4,7 +4,7 @@
 
     <string name="lowres">Lowres: %s</string>
     <string name="hires">Hires: %s</string>
-    <string name="already_loaded">Image of today has already been loaded</string>
+    <string name="already_loaded">Latest available image of the day has already been loaded</string>
     <string name="apod_load">New Image of the day has been loaded</string>
     <string name="no_video_yet" formatted="false">Sorry, but %s cannot be displayed yet\nURL = %s</string>
     <string name="load_miss_thumbs">Loading %1$d missing thumbnails in background&#8230;</string>

@@ -5,7 +5,7 @@
     <string name="lowres">Lowres: %s</string>
     <string name="hires">Hires: %s</string>
     <string name="already_loaded">Bild des Tages ist bereits geladen</string>
-    <string name="apod_load">Neues Bild des Tages wurde geladen</string>
+    <string name="apod_load">Das letzte verfügbare Bild des Tages wurde bereits geladen</string>
     <string name="no_video_yet">Leider kann %1$s zur Zeit noch nicht angezeigt werden\nURL = %2$s</string>
     <string name="load_miss_thumbs">Lade %1$d fehlende Thumbnails im Hintergrund&#8230;</string>
 

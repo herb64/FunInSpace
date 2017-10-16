@@ -1,5 +1,6 @@
 package de.herb64.funinspace;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -353,7 +354,13 @@ public class MainActivity extends AppCompatActivity {
                         actionMode.finish();
                         return true;
                     case R.id.cab_rating:
-                        new dialogDisplay(MainActivity.this, "Interaction with 'small' bar below thumbnail is not possible, need extra dialog with default rating bar? This is a very ugly solution...", "Herbert - THINK ABOUT");
+                        //new dialogDisplay(MainActivity.this, "Interaction with 'small' bar below thumbnail is not possible, need extra dialog with default rating bar? This is a very ugly solution...", "Herbert - THINK ABOUT");
+                        Dialog ratingDlg = new Dialog(MainActivity.this);
+                        ratingDlg.setContentView(R.layout.rating_dialog);
+                        ratingDlg.setCancelable(true);
+                        RatingBar rb = ratingDlg.findViewById(R.id.rb_rating);
+                        rb.setOnRatingBarChangeListener(myRatingChangeListener);
+                        ratingDlg.show();
                     default:
                         return false;
                 }

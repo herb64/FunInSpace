@@ -85,6 +85,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
 
     private static final String TAG_TASK_FRAGMENT = "img_hires_task_fragment";
     private static final String TAG = "HFCM";
+    private static final float DOUBLE_TAP_ZOOMFACTOR = 2.0f;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -317,7 +318,10 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         @Override
         public boolean onDoubleTap(MotionEvent e) {
             //return super.onDoubleTap(e);
-            initializeMatrix();
+            //initializeMatrix();
+            adjustMatrixForScaling(e.getAxisValue(MotionEvent.AXIS_X),
+                    e.getAxisValue(MotionEvent.AXIS_Y),
+                    DOUBLE_TAP_ZOOMFACTOR);
             ivHires.setImageMatrix(imgMatrix);
             return true;
         }
@@ -342,79 +346,80 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
             //return super.onScale(detector);
-            float focX = detector.getFocusX();
-            float focY = detector.getFocusY();
-            float factor = detector.getScaleFactor();
-            float originalfactor = factor;
-            // TODO: factor sometimes < 1.0 during scaleup - possible bug?
+            adjustMatrixForScaling(detector.getFocusX(),
+                    detector.getFocusY(),
+                    detector.getScaleFactor());
+            // Apply the matrix to the image view
+            ivHires.setImageMatrix(imgMatrix);
+            return true;
+        }
+    }
+
+    // Helper function to calculate scaling matrix. Used by pinch zoom and doubletap zoom
+    private void adjustMatrixForScaling(float focX, float focY, float factor) {
+        float originalfactor = factor;
+        // TODO: factor sometimes < 1.0 during scaleup - possible bug?
 
             /*float cSpan = detector.getCurrentSpan();  // just some test to verify
             float pSpan = detector.getPreviousSpan();   // factor calculation
             float testFactor = cSpan / pSpan;           // yes, this is same factor*/
 
-            // Calculate the new scale using the factor from detector and limit to our bounds
-            // TODO rethink upper factor - should depend on image size and screen resolution
-            float imgScaleNew = imgScale * factor;
-            imgScale = Math.max(minImgScale, Math.min(imgScaleNew, 5.0f));
+        // Calculate the new scale using the factor from detector and limit to our bounds
+        // TODO rethink upper factor - should depend on image size and screen resolution
+        float imgScaleNew = imgScale * factor;
+        imgScale = Math.max(minImgScale, Math.min(imgScaleNew, 5.0f));
 
-            // adjust original factor returned by detector if scale limits have been reached
-            if (imgScale != imgScaleNew) {
-                if ( (factor < 1.0f) && (imgScale == minImgScale) ) {  // lower scale limit reached
-                    factor *= minImgScale / imgScaleNew;
-                } else if ((factor > 1.0f) && (imgScale == 5.0f)) {    // upper scale limit reached
-                    factor *= 5.0f / imgScaleNew;
+        // adjust original factor returned by detector if scale limits have been reached
+        if (imgScale != imgScaleNew) {
+            if ( (factor < 1.0f) && (imgScale == minImgScale) ) {  // lower scale limit reached
+                factor *= minImgScale / imgScaleNew;
+            } else if ((factor > 1.0f) && (imgScale == 5.0f)) {    // upper scale limit reached
+                factor *= 5.0f / imgScaleNew;
+            }
+        }
+
+        // Apply the scaling to the matrix and update matrix values array
+        imgMatrix.postScale(factor, factor, focX, focY);
+        imgMatrix.getValues(mValues);
+        scaledWidth = imgWidth * imgScale;
+        scaledHeight = imgHeight * imgScale;
+
+        // Adjust translation for downscaling, so that image remains within view and gets
+        // centered, if one edge is getting smaller than corresponding view size
+        if (originalfactor < 1.0f) {
+            float transY = mValues[Matrix.MTRANS_Y];
+            float transX = mValues[Matrix.MTRANS_X];
+            float xoff;
+            float yoff;
+            if (scaledHeight < viewHeight) {
+                float lower = viewHeight - transY - scaledHeight;
+                yoff = -(transY - lower) / 2;
+            } else {
+                float lower = scaledHeight - viewHeight + transY;
+                yoff = 0.0f;
+                if (transY > 0.0f) {
+                    yoff = -transY;
+                } else if (lower < 0.0f) {
+                    yoff = -lower;
                 }
             }
-
-            // Apply the scaling to the matrix and update matrix values array
-            imgMatrix.postScale(factor, factor, focX, focY);
-            imgMatrix.getValues(mValues);
-            scaledWidth = imgWidth * imgScale;
-            scaledHeight = imgHeight * imgScale;
-
-            // Adjust translation for downscaling, so that image remains within view and gets
-            // centered, if one edge is getting smaller than corresponding view size
-            if (originalfactor < 1.0f) {
-                float transY = mValues[Matrix.MTRANS_Y];
-                float transX = mValues[Matrix.MTRANS_X];
-                float xoff;
-                float yoff;
-                if (scaledHeight < viewHeight) {
-                    float lower = viewHeight - transY - scaledHeight;
-                    yoff = -(transY - lower) / 2;
-                } else {
-                    float lower = scaledHeight - viewHeight + transY;
-                    yoff = 0.0f;
-                    if (transY > 0.0f) {
-                        yoff = -transY;
-                    } else if (lower < 0.0f) {
-                        yoff = -lower;
-                    }
+            if (scaledWidth < viewWidth) {
+                float right = viewWidth - transX - scaledWidth;
+                xoff = -(transX - right) / 2;
+            } else {
+                float right = scaledWidth - viewWidth + transX;
+                xoff = 0.0f;
+                if (transX > 0.0f) {
+                    xoff = -transX;
+                } else if (right < 0.0f) {
+                    xoff = -right;
                 }
-                if (scaledWidth < viewWidth) {
-                    float right = viewWidth - transX - scaledWidth;
-                    xoff = -(transX - right) / 2;
-                } else {
-                    float right = scaledWidth - viewWidth + transX;
-                    xoff = 0.0f;
-                    if (transX > 0.0f) {
-                        xoff = -transX;
-                    } else if (right < 0.0f) {
-                        xoff = -right;
-                    }
-                }
-                // Apply the corrective translation to the matrix
-                imgMatrix.postTranslate(xoff, yoff);
             }
-
-            // Apply the matrix to the image view
-            ivHires.setImageMatrix(imgMatrix);
-            //imgMatrix.getValues(mValues);
-
-            // We just return true -> TODO: verify, if this is ok
-            return true;
+            // Apply the corrective translation to the matrix
+            imgMatrix.postTranslate(xoff, yoff);
         }
     }
+
     // =============== END gesture detection stuff
 
     // MATRIX restriction stuff - removed, see 02.08.2017 tarball !!
