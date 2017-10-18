@@ -48,17 +48,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.youtube.player.YouTubeStandalonePlayer;
-import com.vimeo.networking.Configuration;
-import com.vimeo.networking.VimeoClient;
-import com.vimeo.networking.callbacks.ModelCallback;
-import com.vimeo.networking.callbacks.VimeoCallback;
-import com.vimeo.networking.model.Picture;
-import com.vimeo.networking.model.PictureCollection;
-import com.vimeo.networking.model.Video;
-import com.vimeo.networking.model.VideoList;
-import com.vimeo.networking.model.error.VimeoError;
-import com.vimeo.networking.model.playback.Play;
-import com.vimeo.networking.model.playback.embed.Embed;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -90,7 +79,7 @@ import javax.net.ssl.SSLSocketFactory;
 
 import de.herb64.funinspace.helpers.deviceInfo;
 import de.herb64.funinspace.helpers.dialogDisplay;
-import de.herb64.funinspace.helpers.helpers;
+import de.herb64.funinspace.helpers.utils;
 import de.herb64.funinspace.models.spaceItem;
 
 // TODO Log statements: Log.d etc.. should not be contained in final release, but how to do this?
@@ -116,9 +105,7 @@ public class MainActivity extends AppCompatActivity {
     private myAdapter adp;
     private JSONArray parent;
     private String jsonData;
-    private helpers h;
     private String localJson = "nasatest.json";
-    //private String testJson = "herbtest.json";
     private thumbClickListener myThumbClickListener;
     private ratingChangeListener myRatingChangeListener;
     private Intent hiresIntent;
@@ -127,7 +114,6 @@ public class MainActivity extends AppCompatActivity {
     private int maxTextureSize = 999; // TODO clean this, just to check the 999 was ok
     private String lastImage;           // for log dialog title
     private Locale loc;
-    //private Button test1 = null;
     private Drawable expl_points;
     private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
@@ -149,7 +135,6 @@ public class MainActivity extends AppCompatActivity {
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
-    //private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/j77ttfcjn4zonpi/nasatest.json";
     // changed to other location on 13.10.2017 into testing folder
     private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
     //private static final int KIB = 1024;
@@ -237,9 +222,6 @@ public class MainActivity extends AppCompatActivity {
 //        Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
 //        startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
 
-        // get some helper stuff from helpers package - just need to pass our context
-        // TODO helpers might fail after rotating the phone - context lost??
-        h = new helpers(getApplicationContext());
 
         // ------ REMINDER ONLY for docu
         // Just ugly code to get some test data to the real phone
@@ -427,7 +409,7 @@ public class MainActivity extends AppCompatActivity {
             jsonData = null;
             File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
             if (jsonFile.exists()) {
-                jsonData = h.readf(localJson);
+                jsonData = utils.readf(getApplicationContext(), localJson);
             }
 
             if (jsonData != null) {
@@ -580,7 +562,6 @@ public class MainActivity extends AppCompatActivity {
             // TODO ivYoutube - bad, better ivVideoTag, so that the marker is set dynamically
             if (iList.get(position).getMedia().equals("youtube")) {
                 // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
-                //ivYoutube.setImageResource(R.drawable.youtube_social_icon_red); - done in xml
                 ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
                 ivYoutube.setVisibility(View.VISIBLE);
             } else if(iList.get(position).getMedia().equals("vimeo")) {
@@ -629,8 +610,6 @@ public class MainActivity extends AppCompatActivity {
             // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
             tvLowSize.setText(getString(R.string.lowres, iList.get(position).getLowSize()));
             tvHiSize.setText(getString(R.string.hires, iList.get(position).getHiSize()));
-            //Log.i("HFCM","Title: " + iList.get(position).getTitle() + ">> " + position + " - " + iList.get(position).getBmpThumb());
-            //Log.i("HFCM","Title: " + iList.get(position).getTitle() + ">> " + position + " - " + maxTextureSize + " lines");
             return convertView;
         }
     }
@@ -863,7 +842,8 @@ public class MainActivity extends AppCompatActivity {
             // 20.09.2017 - keep a local copy of the nasa json file returned by api for reference
             try {
                 if (parent != null) {
-                    h.writef(String.valueOf(epoch) + ".json", parent.toString(2));
+                    utils.writef(getApplicationContext(),
+                            String.valueOf(epoch) + ".json", parent.toString(2));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -975,7 +955,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // TODO - about returning values from asynctask !!!
-    // TODO - seems to work with execute().get()  but it most likely blocks!!! - search topic: wait for asynctask to complete
+    // TODO - seems to work with execute().get()  but it blocks!!! - search topic: wait for asynctask to complete
     // ++++   >>>  https://stackoverflow.com/questions/12575068/how-to-get-the-result-of-onpostexecute-to-main-activity-because-asynctask-is-a
     private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
         @Override
@@ -1080,7 +1060,7 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
             // next, this needs to be rewritten to internal storage
-            h.writef(localJson, outString);
+            utils.writef(getApplicationContext(), localJson, outString);
 
             // add our new entry to the spaceItem list and notify the Adapter
             if (newestFirst) {
@@ -1109,8 +1089,7 @@ public class MainActivity extends AppCompatActivity {
     private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
         @Override
         public void onRatingChanged(RatingBar ratingBar, float v, boolean b) {
-            float hugo = v;
-            Toast.makeText(MainActivity.this, "Have rating" + hugo, Toast.LENGTH_LONG).show();
+            Toast.makeText(MainActivity.this, "Have rating" + v, Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1356,7 +1335,7 @@ public class MainActivity extends AppCompatActivity {
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
-                        h.writef(localJson, outString);
+                        utils.writef(getApplicationContext(), localJson, outString);
                         break;
                     }
                 }
@@ -1510,7 +1489,7 @@ public class MainActivity extends AppCompatActivity {
                 // 19.09.2017 - new code to write json file.. not yet understood, how it could
                 // work before at all, cause there was no write...
                 try {
-                    h.writef(localJson, parent.toString(2));
+                    utils.writef(getApplicationContext(), localJson, parent.toString(2));
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
