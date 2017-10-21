@@ -1,7 +1,6 @@
 package de.herb64.funinspace.helpers;
 
 import android.content.Context;
-import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;

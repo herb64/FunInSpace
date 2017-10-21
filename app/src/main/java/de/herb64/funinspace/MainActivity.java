@@ -1,11 +1,10 @@
 package de.herb64.funinspace;
 
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -15,21 +14,16 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-import android.preference.Preference;
 import android.preference.PreferenceManager;
 import android.support.annotation.LayoutRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.view.ActionMode;
 import android.support.v7.widget.Toolbar;
-import android.text.Editable;
 import android.text.TextUtils;
-import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -37,9 +31,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.AbsListView;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.ProgressBar;
@@ -60,7 +52,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.KeyManagementException;
@@ -70,6 +61,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 
@@ -98,11 +91,14 @@ import de.herb64.funinspace.models.spaceItem;
 //       might be an option. But take care, because
 //       on 10.10.2017, it failed, although link was ok - network issue most likely, CHECK!!!
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener {
 
     private spaceItem apodItem;                     // the latest item to be fetched
-    private ArrayList<spaceItem> myList;
+    private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
+    private HashSet<String> itemTitles;             // just containing title strings of items - not used yet
+    private LinkedHashMap<String, spaceItem> myMap; // replacement for myList - abandoned
     private myAdapter adp;
+    private myHashAdapter hashadp;                  // testing with LinkedHashMap - abandoned
     private JSONArray parent;
     private String jsonData;
     private String localJson = "nasatest.json";
@@ -111,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
     private Intent hiresIntent;
     private ListView myItemsLV;
     private deviceInfo devInfo;
-    private int maxTextureSize = 999; // TODO clean this, just to check the 999 was ok
+    private int maxTextureSize = 999;   // TODO clean this, just to check the 999 was ok - still seems to be found, see Nathan
     private String lastImage;           // for log dialog title
     private Locale loc;
     private Drawable expl_points;
@@ -170,9 +166,8 @@ public class MainActivity extends AppCompatActivity {
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // TODO check, if this is rotation proof, or if we bettger should get prefs each time
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-        //String order = sharedPref.getString("item_order", "newest_first");
-        //newestFirst = order.equals("newest_first");
-        newestFirst = sharedPref.getString("item_order", "newest_first").equals("newest_first");
+        //newestFirst = sharedPref.getString("item_order", "newest_first").equals("newest_first");
+        newestFirst = true; // we go and remove that, newest always on top!!!
 
         // TODO solve issue with vector on 4.1 (4.x?) - for now, just dirty workaround...
         // arrow_down_float image only - don't like that, but do it now
@@ -277,34 +272,33 @@ public class MainActivity extends AppCompatActivity {
         myItemsLV.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE_MODAL);
         //myItemsLV.setSelector(android.R.color.darker_gray);
         myItemsLV.setMultiChoiceModeListener(new AbsListView.MultiChoiceModeListener() {
-
-            // we keep an arraylist of selected position values
+            // keep track of selected position values
             private ArrayList<Integer> selected;
+            private HashSet<String> selected3;
 
             @Override
             public void onItemCheckedStateChanged(android.view.ActionMode actionMode, int position, long id, boolean checked) {
                 if (checked) {
                     selected.add(position);
+                    selected3.add((String) hashadp.getItem(position).getKey());
                 } else {
-                    // hey, either object or postion as parameter? here, both are of type int...
+                    // Either object or postion as parameter? here, both are of type int :)
                     // https://stackoverflow.com/questions/4534146/properly-removing-an-integer-from-a-listinteger
                     selected.remove(Integer.valueOf(position));
+                    selected3.remove((String) hashadp.getItem(position).getKey());
                 }
                 myList.get(position).setSelected(checked);
                 adp.notifyDataSetChanged();
-                //myItemsLV.setBackgroundColor(Color.BLUE);
-                /*String title = myList.get(position).getTitle();
-                String toaster = String.format("State Change on %d, id %d, state %b: %s, now have %d selected elements", position, id, checked, title, selected.size());
-                Toast.makeText(MainActivity.this, toaster, Toast.LENGTH_SHORT).show();*/
-
+                myMap.get((String) hashadp.getItem(position).getKey()).setSelected(checked);
+                hashadp.notifyDataSetChanged();
             }
 
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
                 selected = new ArrayList<>();
+                selected3 = new HashSet<>();
                 return true;
-                //return false;
             }
 
             @Override
@@ -322,27 +316,42 @@ public class MainActivity extends AppCompatActivity {
                         // TODO need to remove from json as well to make it permanent... undo???
                         new dialogDisplay(MainActivity.this, "This currently only deletes items for testing from the shown list. " +
                                 "This is not yet persistent, and restart of the App loads all deleted items again.", "Don't panic...");
-                        // Remove from back to front !!!
+
+                        // Within ArrayList - removal from back to front is essential!!
                         Collections.sort(selected, Collections.<Integer>reverseOrder());
                         for (int idx : selected) {
-                            Log.i("HFCM", "Deleting now: %d" + idx);
                             adp.remove(myList.get(idx));
-                            adp.notifyDataSetChanged();
+                            adp.notifyDataSetChanged();     // TODO set notifychanged automatically
+                        }
+                        // LinkedHashMap version of main data structure as replacement for ArrayList
+                        for (String str : selected3) {
+                            hashadp.remove(str);
+                            // TODO: looking at google source: why not notify automatically in adp?
+                            hashadp.notifyDataSetChanged();
                         }
                         actionMode.finish();
                         return true;
                     case R.id.cab_share:
-                        new dialogDisplay(MainActivity.this, "(Multi) Sharing not yet possible", "Info");
+                        new dialogDisplay(MainActivity.this, "Sharing not yet possible", "Herbert TODO");
                         actionMode.finish();
                         return true;
                     case R.id.cab_rating:
-                        //new dialogDisplay(MainActivity.this, "Interaction with 'small' bar below thumbnail is not possible, need extra dialog with default rating bar? This is a very ugly solution...", "Herbert - THINK ABOUT");
-                        Dialog ratingDlg = new Dialog(MainActivity.this);
-                        ratingDlg.setContentView(R.layout.rating_dialog);
-                        ratingDlg.setCancelable(true);
-                        RatingBar rb = ratingDlg.findViewById(R.id.rb_rating);
-                        rb.setOnRatingBarChangeListener(myRatingChangeListener);
-                        ratingDlg.show();
+                        // AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                        // builder.setView(R.layout.rating_dialog);  // REQUIRES 21 minimum :(
+                        // We use a DialogFragment that displays the Rating dialog and our main
+                        // activity implements
+                        FragmentManager fm = getSupportFragmentManager();
+                        ratingDialog dlg = new ratingDialog();
+                        // hmm, we just pass the indices to the fragment, so that they get returned
+                        // by our interface implementation. This avoids a global def. of "selected"
+                        // and possible problems with phone rotation
+                        Bundle fragArguments = new Bundle();    // do NOT use non default constructor with fragments!
+                        fragArguments.putIntegerArrayList("indices", selected);
+                        dlg.setArguments(fragArguments);
+                        // dlg.setTargetFragment(); // this only works when calling from fragment, not from activity as here
+                        dlg.show(fm, "RATINGTAG");
+                        actionMode.finish();
+                        return true;
                     default:
                         return false;
                 }
@@ -357,7 +366,6 @@ public class MainActivity extends AppCompatActivity {
                 mActionMode = null;
             }
         });
-
 
         // Create a listeners for handling clicks on the thumbnail image and for rating changes
         myThumbClickListener = new thumbClickListener();
@@ -376,15 +384,20 @@ public class MainActivity extends AppCompatActivity {
         });*/
 
 
-        // Check, if phone has been rotated and restore saved instance state
+        // TODO: 2 data structure/adapter versions, a) ArrayList myList, b) LinkedHashMap myMap
+        myList = new ArrayList<> ();
+        itemTitles = new HashSet<>();
+        myMap = new LinkedHashMap<>();
+        adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
+        hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
+        myItemsLV.setAdapter(adp);              // the "good old" arrayadapter
+        //myItemsLV.setAdapter(hashadp);        // the linkedhashmap version - currenty abandoned
+
         if (savedInstanceState != null) {
-            // the spaceItem arraylist and the json data string are restored
+            // The spaceItem internal structure and the json data string are restored
             // on Android 8.0 this fails with Transaction Too Large error, so we do not put this
-            // list onto the saved instance state and instead recreate using addITems()
+            // structure onto the saved instance state and instead recreate it using addItems()
             //myList = savedInstanceState.getParcelableArrayList("myList");
-            myList = new ArrayList<>();
-            adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
-            myItemsLV.setAdapter(adp);
             jsonData = savedInstanceState.getString("jsonData");
             if (jsonData != null) {
                 try {
@@ -397,15 +410,9 @@ public class MainActivity extends AppCompatActivity {
             maxTextureSize = savedInstanceState.getInt("maxtexsize");
             devInfo.setGlMaxTextureSize(maxTextureSize);
         } else {
-            // create the list object to store our space items
-            myList = new ArrayList<>();     // <> is sufficient, no <spaceItem> needed
-            // create the adapter and associate with the listview of space items
-            adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
-            myItemsLV.setAdapter(adp);
-
-            // If local history json file does not exist, this is a newly installed app and we
-            // might get some basic json data from dropbox for testing.
-            // TODO: or restore from backup
+            // If local history json file does not exist, this is assumed to be a newly installed
+            // app and we get some basic json data from dropbox for testing for now...
+            // TODO: backup and restore...
             jsonData = null;
             File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
             if (jsonFile.exists()) {
@@ -438,7 +445,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 // jsonData is empty. It looks like we did not have a local json file yet, or it
                 // is not a valid one. So we create a new empty parent array and attempt to load a
-                // prefilled json file from a hardcoded dropbox link.
+                // prefilled json file from our (hardcoded) testing dropbox link.
 
                 // GL TEXTURE check is only run at first time after installation and result is
                 // written to shared preferences
@@ -468,15 +475,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        // added 18.09.2017 TODO; important for docu, but code had to be removed
+        // 18.09.2017 TODO important for docu, but code had to be removed
         // https://stackoverflow.com/questions/12503836/how-to-save-custom-arraylist-on-android-screen-rotate
-//        outState.putParcelableArrayList("myList", myList);
+        // outState.putParcelableArrayList("myList", myList);
         // 03.10.2017 - remove that, because it causes Transaction too large error. Why this only
         // happens on Android 8.0 (Markus Hilger) is not clear, because there seems to be a limit
-        // on 1MB in general.
+        // on 1 MB in general.
         // see also
         // https://stackoverflow.com/questions/33182309/passing-bitmap-to-another-activity-ends-in-runtimeexception
-
         // unfortunately, JSONarray does not implement Parcelable, so we cannot put this. But we
         // add the jsonData String, from which we then regenerate the JSONArray parent object
         outState.putString("jsonData",jsonData);
@@ -497,7 +503,177 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
     }
 
-    // Add the adapter by typing in the new class
+    // Interface implementation for Rating Dialog result: return from DialogFragment to Activity
+    // This is called, if Rating Dialog OK button has been pressed
+    @Override
+    public void updateRating(int rating, ArrayList<Integer> selected) {
+        //ArrayList<String> titles = new ArrayList<>();
+        HashSet<String> titles = new HashSet<>();
+
+        for (int idx : selected) {
+            myList.get(idx).setRating(rating);
+            titles.add(myList.get(idx).getTitle());
+        }
+        adp.notifyDataSetChanged();
+        // TODO make persistent in JSON file as well
+        JSONObject obj = null;
+        JSONObject content = null;
+        for (int i = 0; i < parent.length(); i++) {
+            try {
+                obj = parent.getJSONObject(i);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            // get the "Content" object, not yet checking type, currently only "APOD" is expected
+            try {
+                content = obj.getJSONObject("Content");
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            // get the fields - we know, that the keys exist, because we have written this ourselves
+            // ha, not always :( bad with 11.09.2017 - no lowres key present, because "url" missing
+            // in json from NASA TODO 11.09.2017
+            try {
+                String strTitle = content.getString("Title");
+                if (titles.contains(strTitle)) {
+                    content.put("Rating", rating);
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+        // Rewrite local json
+        String outString = null;
+        try {
+            outString = parent.toString(2);     // spacing of 2
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        utils.writef(getApplicationContext(), localJson, outString);
+    }
+
+    // TODO: finish this adapter to work with LinkedHashMap - this was experimental but not useful
+    private class myHashAdapter extends HfcmMapAdapter {
+        private LayoutInflater inflater;
+
+        public myHashAdapter(@NonNull Context context, @LayoutRes int resource, @NonNull LinkedHashMap obj) {
+            super(context, resource, obj);
+            inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            //return super.getView(position, convertView, parent);
+            if (convertView == null) {
+                convertView = inflater.inflate(R.layout.space_item, null);
+            }
+            spaceItem item = (spaceItem) this.getItem(position).getValue();
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////
+            if (item.isSelected()) {
+                convertView.setBackgroundColor(Color.RED);
+            } else {
+                convertView.setBackgroundColor(Color.TRANSPARENT);
+            }
+
+            // important: call findViewByID for convertView!!! - otherwise null pointer!
+            ImageView ivThumb = convertView.findViewById(R.id.iv_thumb);
+            ImageView ivYoutube = convertView.findViewById(R.id.iv_youtube);    // TODO rename!!
+            // getView() is called often during scroll, take care of the overhead
+            // We use a listener created ONCE in the activity instead of creating a new one on
+            // each call of getView(). The Tag is by the listener.
+            //ivThumb.setOnClickListener(new thumbClickListener());   // BAD
+            ivThumb.setOnClickListener(myThumbClickListener);         // BETTER
+            ivThumb.setTag(position);
+
+            // Rating bar - note, that the "small" versions do not support interaction
+            // https://developer.android.com/reference/android/widget/RatingBar.html
+            // The overview uses small ones, so I need to start an extra dialog to set the
+            // rating.
+            //RatingBar rbRating = convertView.findViewById(R.id.id_rating);
+            //rbRating.setTag(2*MAX_ITEMS + position);
+            //rbRating.setOnClickListener(myThumbClickListener);
+            //rbRating.setRating(iList.get(position).getRating());
+            //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
+
+            TextView tvTitle = convertView.findViewById(R.id.tv_title);
+            final TextView tvExplanation = convertView.findViewById(R.id.tv_explanation);
+            TextView tvDate = convertView.findViewById(R.id.tv_date);
+            final TextView tvCopyright = convertView.findViewById(R.id.tv_copyright);
+            TextView tvLowSize = convertView.findViewById(R.id.tv_lowsize);
+            TextView tvHiSize = convertView.findViewById(R.id.tv_hisize);
+            ivThumb.setImageBitmap(item.getBmpThumb());
+            ivThumb.setVisibility(View.VISIBLE);
+            // TODO ivYoutube - bad, better ivVideoTag, so that the marker is set dynamically
+            if (item.getMedia().equals("youtube")) {
+                // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
+                ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
+                ivYoutube.setVisibility(View.VISIBLE);
+            } else if(item.getMedia().equals("vimeo")) {
+                ivYoutube.setImageResource(R.drawable.vimeo_icon);
+                ivYoutube.setVisibility(View.VISIBLE);
+            } else {
+                ivYoutube.setVisibility(View.INVISIBLE);
+            }
+            ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
+            //noinspection ResourceType
+            lbThumb.setVisibility(item.getThumbLoadingState());
+            tvTitle.setText(item.getTitle());
+            Date iDate = new Date(item.getDateTime());
+            // TODO - make display format of date configurable in settings
+            String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);
+            tvDate.setText(formattedDate);
+            tvCopyright.setText(item.getCopyright());
+
+            // just keep that for reference in documentation - about textwatchers...
+            /*final int pos = position;
+            tvExplanation.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
+                @Override
+                public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
+                @Override
+                public void afterTextChanged(Editable editable) {}
+            });*/
+
+            tvExplanation.setText(item.getExplanation());
+            item.setMaxLines(tvExplanation.getLineCount());
+            tvExplanation.setTag(MAX_ITEMS + position);
+            // order of maxlines / ellipse statements might be answer to
+            // https://stackoverflow.com/questions/8087555/programmatically-create-textview-with-ellipsis
+            // NO, it is not! OR: there has not yet been set any text before
+            //tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
+            tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
+            tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
+            // and here, we have a friendly listener, which temporarily overwrites that stuff, when
+            // we click on the text view content - We reuse the existing listener for the thumbs
+            // and distinguish views by ID ranges
+            tvExplanation.setOnClickListener(myThumbClickListener);
+            tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
+
+            // TODO DOCU: setText and concat is bad! use resources and format string!!!
+            // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
+            tvLowSize.setText(getString(R.string.lowres, item.getLowSize()));
+            tvHiSize.setText(getString(R.string.hires, item.getHiSize()));
+            //////////////////////////////////////////////////////////////////////////////////////////////////////7
+
+
+            return convertView;
+        }
+
+        /*@NonNull
+        @Override
+        public View getView(String title, @Nullable View convertView, @NonNull ViewGroup parent) {
+
+            if (convertView == null) {
+                convertView = inflater.inflate(R.layout.space_item, null);
+            }
+
+            return convertView;
+        }*/
+    }
+
+    // This is the adapter working on ArrayList type object myList...
     private class myAdapter extends ArrayAdapter {
         private List<spaceItem> iList;
         int resource;
@@ -545,10 +721,10 @@ public class MainActivity extends AppCompatActivity {
             // https://developer.android.com/reference/android/widget/RatingBar.html
             // The overview uses small ones, so I need to start an extra dialog to set the
             // rating.
-            //RatingBar rbRating = convertView.findViewById(R.id.id_rating);
+            RatingBar rbRating = convertView.findViewById(R.id.id_rating);
             //rbRating.setTag(2*MAX_ITEMS + position);
             //rbRating.setOnClickListener(myThumbClickListener);
-            //rbRating.setRating(iList.get(position).getRating());
+            rbRating.setRating(iList.get(position).getRating());
             //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
 
             TextView tvTitle = convertView.findViewById(R.id.tv_title);
@@ -580,17 +756,6 @@ public class MainActivity extends AppCompatActivity {
             tvDate.setText(formattedDate);
             tvCopyright.setText(iList.get(position).getCopyright());
 
-            // just keep that for reference in documentation - about textwatchers...
-            /*final int pos = position;
-            tvExplanation.addTextChangedListener(new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
-                @Override
-                public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
-                @Override
-                public void afterTextChanged(Editable editable) {}
-            });*/
-
             tvExplanation.setText(iList.get(position).getExplanation());
             iList.get(position).setMaxLines(tvExplanation.getLineCount());
             tvExplanation.setTag(MAX_ITEMS + position);
@@ -616,17 +781,16 @@ public class MainActivity extends AppCompatActivity {
 
     // GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
     private class apodTask extends AsyncTask<String, String, String> {
-        // this one get's added by alt + insert keys
         private String imgUrl;
         @Override
         protected String doInBackground(String... params) {
-            //Log.i("HFCM", "APOD Loader task started");
             apodItem = new spaceItem();
 
-            // Add code to enable TLSv1 on Android below 5.0 (Lollipop)
+            // Enable TLSv1 on Android below 5.0 (Lollipop) TODO TLS higher versions?
             // https://blog.dev-area.net/2015/08/13/android-4-1-enable-tls-1-1-and-tls-1-2/
+            // could we move that code to "onCreate?"
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
-                    sharedPref.getBoolean("enable_tls_pre_lollipop", false)) {
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)) {
                 SSLContext sslcontext = null;
                 try {
                     sslcontext = SSLContext.getInstance("TLSv1");
@@ -637,13 +801,13 @@ public class MainActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
             }
+
             HttpsURLConnection nasa_conn = null;
             BufferedReader reader = null;
             try {
                 URL url = new URL(params[0]);
                 nasa_conn = (HttpsURLConnection) url.openConnection();
                 nasa_conn.connect();
-                // We now read data from this connection into an input stream
                 InputStream jsonstream = nasa_conn.getInputStream();
                 reader = new BufferedReader(new InputStreamReader(jsonstream));
                 StringBuffer jsonbuffer = new StringBuffer();
@@ -702,7 +866,7 @@ public class MainActivity extends AppCompatActivity {
             if(s != null) {
                 if (s.equals("FILENOTFOUND")) {
                     // TODO: this is not necessarily the case...
-                    Log.e("HFCM", "FILENOTFOUND - API RATE LIMIT EXCEEDED ??");
+                    Log.e("HFCM", "FILENOTFOUND - MAYBE API RATE LIMIT EXCEEDED ??");
                     new dialogDisplay(MainActivity.this, getString(R.string.rate_limit_exceeded),
                             getString(R.string.no_apod));
                     return;
@@ -848,14 +1012,12 @@ public class MainActivity extends AppCompatActivity {
             } catch (JSONException e) {
                 e.printStackTrace();
             }
-            // New: for Vimeo, we need to kick of a separate thread using oembed API to determine
-            // infos about the thumbnail image URL, before calling the imgLowResTask thread to
+            // For Vimeo, we need to "insert" an extra thread using oembed API to determine
+            // infos about the thumbnail image URL before calling the imgLowResTask thread to
             // load thumbnail bitmap data.
             if (sMediaType == M_VIMEO) {
-                // this one will trigger ImgLowresTask(), once finished getting missing data
                 new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
             } else {
-                // for image and youtube, we already have our thumbnail url, just proceed...
                 new ImgLowresTask().execute(imgUrl);
             }
         }
@@ -864,7 +1026,6 @@ public class MainActivity extends AppCompatActivity {
     // Get vimeo infos about thumbnail picture URL first, before calling imgLowResTask to load
     // this thumbnail image.
     private class vimeoInfoTask extends AsyncTask<String, String, String> {
-
         @Override
         protected String doInBackground(String... params) {
             HttpsURLConnection vimeo_conn = null;
@@ -984,14 +1145,26 @@ public class MainActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(Bitmap bitmap) {
             super.onPostExecute(bitmap);
+            // Check, if title string is already present - we rely on unique title strings provided
+            // by NASA for each new image!
 
-            // just in case - check for double title
-            // TODO - this is just dirty code for comparison - improve for large lists
-            // For example: go from last to first item or even only check last item!!!!!!!!!!!!!!!!!
+            // Code using key finding in HashMap...
+            /*if (myMap.containsKey(apodItem.getTitle())) {
+                Toast.makeText(MainActivity.this, R.string.already_loaded,
+                        Toast.LENGTH_LONG).show();
+                return;
+            }*/
+
+            // "Good old ugly?" version just iterating all items in ArrayList. This is ok, because
+            // first item should match, because latest image is on top of the list.
+            // already been loaded before. In our case, it just depends on the order of search :)
+            // TODO: why not skip that and allow for duplicate title strings?
             for(int i=0; i<myList.size();i++) {
                 if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
                     // TODO here's the point to check, if the thumbnail file exists, and if not
-                    // it was lost. so load the image and create thumb again...
+                    // it was lost. so load the image and create thumb again... but this is unlikely
+                    // to happen, unless the app was uninstalled (already handled) or some hardware
+                    // defects are present...
                     Toast.makeText(MainActivity.this, R.string.already_loaded,
                             Toast.LENGTH_LONG).show();
                     return;
@@ -1001,7 +1174,6 @@ public class MainActivity extends AppCompatActivity {
             // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
             // TODO 20.08.2017 - null bitmap was passed by doInBackground() - crashed here
             // have a prepared "not found image thumbnail" for these cases...
-            // TODO - VIMEO Video!!!
             if (bitmap != null) {
                 File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
                 // TODO: make it RGB565 to save memory and work on not loading all images permanently into memory
@@ -1023,7 +1195,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 apodItem.setBmpThumb(thumbnail);
             } else {
-                apodItem.setBmpThumb(null);
+                apodItem.setBmpThumb(null);     // just have a black image here
             }
 
             // JSON is an array of objects, which have a "Type" and a "Content". Type is just
@@ -1063,19 +1235,23 @@ public class MainActivity extends AppCompatActivity {
             utils.writef(getApplicationContext(), localJson, outString);
 
             // add our new entry to the spaceItem list and notify the Adapter
+            myMap.put(apodItem.getTitle(), apodItem);
+            hashadp.notifyDataSetChanged();
+
             if (newestFirst) {
                 myList.add(0, apodItem);
             } else {
                 myList.add(apodItem);
             }
             adp.notifyDataSetChanged();
+
             Toast.makeText(MainActivity.this, R.string.apod_load,
                     Toast.LENGTH_LONG).show();
             // scroll to the new space Item in the list, that has been loaded
             if (newestFirst) {
                 myItemsLV.setSelection(0);
             } else {
-                myItemsLV.setSelection(adp.getCount() -1);
+                myItemsLV.setSelection(hashadp.getCount() -1);
             }
         }
     }
@@ -1086,6 +1262,7 @@ public class MainActivity extends AppCompatActivity {
     // from
     // style="@style/Widget.AppCompat.RatingBar.Small" - fails
     // same with device default bars: small versions do not call the listener!!
+    // YEAH, the "small" versions are designed to ignore any interaction - hmmmm, very bad for me
     private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
         @Override
         public void onRatingChanged(RatingBar ratingBar, float v, boolean b) {
@@ -1340,6 +1517,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 adp.notifyDataSetChanged();
+                hashadp.notifyDataSetChanged();
             }
         } else if (requestCode == GL_MAX_TEX_SIZE_QUERY) {
             if (resultCode == RESULT_OK) {
@@ -1351,15 +1529,18 @@ public class MainActivity extends AppCompatActivity {
             }
         } else if (requestCode == SETTINGS_REQUEST) {
             if (resultCode == RESULT_OK) {
+                // HERE: do any actions that need immediate reaction on changed settings, e.g.
+                //       e.g. ordering of elements in list...
                 // dirty test - we should check if order has been changed before recreating the list
                 SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
                 String order = shPref.getString("item_order", "newest_first");
                 String returnedorder = data.getStringExtra("order");    // TODO
-                newestFirst = order.equals("newest_first");
-                Log.i("HFCM", "Refreshing list");
+                //newestFirst = order.equals("newest_first");
+                newestFirst = true;
                 myList.clear();
                 addItems();
                 adp.notifyDataSetChanged();
+                hashadp.notifyDataSetChanged();
             }
         }
     }
@@ -1408,7 +1589,7 @@ public class MainActivity extends AppCompatActivity {
         // without a new installation.
         // might be a merge, keeping local infos about ratings ... if not dropping this at all
         if (id == R.id.dropbox_sync) {
-            new dialogDisplay(MainActivity.this, "Sync from dropbox", "Not yet implemented");
+            new dialogDisplay(MainActivity.this, "Sync from dropbox without reinstallation of the App", "To be implemented");
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -1495,12 +1676,13 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 addItems();
-                // note: we cannot run network operations directly in the checkMissingThumbs()
-                // function, because code in onPostExecute() does belong to the main thread
+                // Note: we cannot run network operations directly in the checkMissingThumbs()
+                // function. Because code in onPostExecute() does belong to the main thread
                 // for the same reason: do not block during checkMissingThumbs!!!
                 // https://stackoverflow.com/questions/10686107/what-does-runs-on-ui-thread-for-onpostexecute-really-mean
                 checkMissingThumbs();
                 adp.notifyDataSetChanged();
+                hashadp.notifyDataSetChanged();
             }
         }
     }
@@ -1520,15 +1702,16 @@ public class MainActivity extends AppCompatActivity {
         String strMedia = "";
         String strHiSize = "";
         String strLowSize = "";
-        int i;
-        for (int k = 0; k < parent.length(); k++) {
-        // REVERSE
-        //for (int i = parent.length()-1; i >=0; i--) {
-            if (newestFirst) {
+        // The newest first option has been disabled, we now always display the newest item first!
+        //int i;
+        //for (int k = 0; k < parent.length(); k++) {
+        for (int i = parent.length()-1; i >=0 ; i--)
+        {
+            /*if (newestFirst) {
                 i = parent.length() - 1 -k;
             } else {
                 i = k;
-            }
+            }*/
             try {
                 obj = parent.getJSONObject(i);
             } catch (JSONException e) {
@@ -1576,11 +1759,6 @@ public class MainActivity extends AppCompatActivity {
             newitem.setMedia(strMedia);
             newitem.setHiSize(strHiSize);
             newitem.setLowSize(strLowSize);
-
-
-            //newitem.setUri("/videos/11386048");     // TODO BAD HACK!!!
-
-
             newitem.setMaxLines(MAX_ELLIPSED_LINES); // # of explanation lines in ellipsized view
             // Load the corresponding bitmap for thumbail from th_xxx.jpg and set into
             // the list item. If the file is not found, set bitmap to null.
@@ -1592,9 +1770,9 @@ public class MainActivity extends AppCompatActivity {
                 newitem.setBmpThumb(null);
             }
             myList.add(newitem);
+            myMap.put(strTitle, newitem);
         }
     }
-
 
     // Check for any missing thumb images. We iterate all items and for those with no bitmap
     // contained, we kick of a loader thread, which gets the image file from the given lowres
@@ -1602,9 +1780,10 @@ public class MainActivity extends AppCompatActivity {
     public void checkMissingThumbs() {
         //spaceItem wkItem = null;
         ArrayList<Integer> missing = new ArrayList<Integer>();
+        ArrayList<String> missing2 = new ArrayList<String>();
         for(int i=0; i<myList.size(); i++) {
             //if (myList.get(i).getBmpThumb() == null) {
-            String tt = myList.get(i).getMedia();
+            //String tt = myList.get(i).getMedia();
             // TODO recheck no lowres key handling - here checked to avoid crash 11.09.2017
             if (myList.get(i).getBmpThumb() == null && !myList.get(i).getLowres().equals("")) {
                 // TODO: this is temporary only: vimeo videos do not have a thumb yet, so skip
@@ -1613,6 +1792,17 @@ public class MainActivity extends AppCompatActivity {
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
             }
         }
+        // map version: arraylist of title strings
+        for (String key : myMap.keySet()) {
+            if (myMap.get(key).getBmpThumb() == null &&
+                    !myMap.get(key).getLowres().equals("")) {
+                missing2.add(key);
+                myMap.get(key).setThumbLoadingState(View.VISIBLE);
+            }
+        }
+
+        // we might change this to missing2 if using map based version - needs also quite some
+        // changes in thumbLoaderTask() code
         if (missing.size() > 0) {
             Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, missing.size()),
                     Toast.LENGTH_LONG).show();
@@ -1622,11 +1812,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Load all missing image thumbnails from lowres URL information. A list of indices into the
-    // list is passed and images are loaded one after the other.
+    // Load all missing image thumbnails URL contained in "lowres". A list of indices into the
+    // list is passed and images are loaded one after the other. TODO - maybe parallel load?
     // https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
     private class thumbLoaderTask extends AsyncTask<ArrayList<Integer>, Integer, Void> {
+    //private class thumbLoaderTask extends AsyncTask<ArrayList<String>, String, Void> {
         private ArrayList<Integer> missing;
+        //private ArrayList<String> missing2;
+        //@Override
+        //protected Void doInBackground(ArrayList<String>... params) {
         @Override
         protected Void doInBackground(ArrayList<Integer>... params) {
             // url for image is found in params[0]...
@@ -1634,8 +1828,10 @@ public class MainActivity extends AppCompatActivity {
             Bitmap thumbnail = null;
             File thumbFile = null;
             spaceItem wkItem;
+            //missing2 = params[0];
+            //for (String str : missing2) {
+            //    wkItem = myMap.get(str);
             missing = params[0];
-
             for (int i=0; i < missing.size(); i++) {
                 wkItem = myList.get(missing.get(i));
                 String lowresurl = wkItem.getLowres();
@@ -1666,6 +1862,7 @@ public class MainActivity extends AppCompatActivity {
                 // NO, just use the progress update mechanism for this
                 // https://stackoverflow.com/questions/6450275/android-how-to-work-with-asynctasks-progressdialog
                 publishProgress(missing.get(i));
+                //publishProgress(str);
 
                 // And write the thumbnail to internal storage
                 FileOutputStream outstream = null;
@@ -1690,12 +1887,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // For each loaded thumbnail, we receive a progress update and notify the adapter to update
-        // the view
-         @Override
+        // the view, if the image has been loaded. We might run this in parallel for multiple images
+        //@Override
+        //protected void onProgressUpdate(String... values) {
+        @Override
         protected void onProgressUpdate(Integer... values) {
             super.onProgressUpdate(values);
             myList.get(values[0]).setThumbLoadingState(View.INVISIBLE);
             adp.notifyDataSetChanged();
+            /*myMap.get(values[0]).setThumbLoadingState(View.INVISIBLE);
+            hashadp.notifyDataSetChanged();*/
         }
     }
 

@@ -20,7 +20,7 @@
     <string name="title_activity_settings">Settings</string>
 
     <!-- Strings related to Settings -->
-    <string name="item_order">Item order</string>
+    <string name="item_order">Item order (inactive)</string>
     <string-array name="order_titles">
         <item>Newest first</item>
         <item>Oldest first</item>
