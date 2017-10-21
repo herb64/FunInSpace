@@ -274,30 +274,30 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         myItemsLV.setMultiChoiceModeListener(new AbsListView.MultiChoiceModeListener() {
             // keep track of selected position values
             private ArrayList<Integer> selected;
-            private HashSet<String> selected3;
+            //private HashSet<String> selected3;
 
             @Override
             public void onItemCheckedStateChanged(android.view.ActionMode actionMode, int position, long id, boolean checked) {
                 if (checked) {
                     selected.add(position);
-                    selected3.add((String) hashadp.getItem(position).getKey());
+                    //selected3.add((String) hashadp.getItem(position).getKey());
                 } else {
                     // Either object or postion as parameter? here, both are of type int :)
                     // https://stackoverflow.com/questions/4534146/properly-removing-an-integer-from-a-listinteger
                     selected.remove(Integer.valueOf(position));
-                    selected3.remove((String) hashadp.getItem(position).getKey());
+                    //selected3.remove((String) hashadp.getItem(position).getKey());
                 }
                 myList.get(position).setSelected(checked);
                 adp.notifyDataSetChanged();
-                myMap.get((String) hashadp.getItem(position).getKey()).setSelected(checked);
-                hashadp.notifyDataSetChanged();
+                //myMap.get((String) hashadp.getItem(position).getKey()).setSelected(checked);
+                //hashadp.notifyDataSetChanged();
             }
 
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
                 selected = new ArrayList<>();
-                selected3 = new HashSet<>();
+                //selected3 = new HashSet<>();
                 return true;
             }
 
@@ -324,11 +324,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                             adp.notifyDataSetChanged();     // TODO set notifychanged automatically
                         }
                         // LinkedHashMap version of main data structure as replacement for ArrayList
-                        for (String str : selected3) {
+                        /*for (String str : selected3) {
                             hashadp.remove(str);
                             // TODO: looking at google source: why not notify automatically in adp?
                             hashadp.notifyDataSetChanged();
-                        }
+                        }*/
                         actionMode.finish();
                         return true;
                     case R.id.cab_share:
@@ -389,7 +389,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         itemTitles = new HashSet<>();
         myMap = new LinkedHashMap<>();
         adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
-        hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
+        //hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
         myItemsLV.setAdapter(adp);              // the "good old" arrayadapter
         //myItemsLV.setAdapter(hashadp);        // the linkedhashmap version - currenty abandoned
 
@@ -1235,8 +1235,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             utils.writef(getApplicationContext(), localJson, outString);
 
             // add our new entry to the spaceItem list and notify the Adapter
-            myMap.put(apodItem.getTitle(), apodItem);
-            hashadp.notifyDataSetChanged();
+            //myMap.put(apodItem.getTitle(), apodItem);
+            //hashadp.notifyDataSetChanged();
 
             if (newestFirst) {
                 myList.add(0, apodItem);
@@ -1251,7 +1251,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             if (newestFirst) {
                 myItemsLV.setSelection(0);
             } else {
-                myItemsLV.setSelection(hashadp.getCount() -1);
+                myItemsLV.setSelection(adp.getCount() -1);
             }
         }
     }
@@ -1352,7 +1352,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // Play a youtube video by id  - first quick shot for basic test
+    /**
+     * Play a youtube video by id  - first quick shot for basic test, which uses the autoplay in
+     * lightbox mode.
+     * @param id The String containing the YouTube Video ID
+     */
     private void playYouTube(String id) {
         // TODO - check other options - only first test with StandalonePlayer in lightbox mode
         // fullscreen: only in landscape, no rotate, mainactivity is recreated ... bad
@@ -1517,7 +1521,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     }
                 }
                 adp.notifyDataSetChanged();
-                hashadp.notifyDataSetChanged();
+                //hashadp.notifyDataSetChanged();
             }
         } else if (requestCode == GL_MAX_TEX_SIZE_QUERY) {
             if (resultCode == RESULT_OK) {
@@ -1540,7 +1544,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 myList.clear();
                 addItems();
                 adp.notifyDataSetChanged();
-                hashadp.notifyDataSetChanged();
+                //hashadp.notifyDataSetChanged();
             }
         }
     }
@@ -1682,12 +1686,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // https://stackoverflow.com/questions/10686107/what-does-runs-on-ui-thread-for-onpostexecute-really-mean
                 checkMissingThumbs();
                 adp.notifyDataSetChanged();
-                hashadp.notifyDataSetChanged();
+                //hashadp.notifyDataSetChanged();
             }
         }
     }
 
-    // this function is used on multiple occasions... TODO check
+    /**
+     * Add all items currently defined within the local JSON to the ArrayList of space items.
+     */
     public void addItems() {
         JSONObject obj = null;
         JSONObject content = null;
