@@ -22,6 +22,7 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.view.ActionMode;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
@@ -322,6 +323,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         for (int idx : selected) {
                             adp.remove(myList.get(idx));
                             adp.notifyDataSetChanged();     // TODO set notifychanged automatically
+                            // TODO: remove from json and rewrite
                         }
                         // LinkedHashMap version of main data structure as replacement for ArrayList
                         /*for (String str : selected3) {
@@ -345,6 +347,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         // hmm, we just pass the indices to the fragment, so that they get returned
                         // by our interface implementation. This avoids a global def. of "selected"
                         // and possible problems with phone rotation
+                        // TODO Also pass the current rating information
+                        // For a single selection: unique
+                        // for multiple items: if these have different ratings, what should be show?
                         Bundle fragArguments = new Bundle();    // do NOT use non default constructor with fragments!
                         fragArguments.putIntegerArrayList("indices", selected);
                         dlg.setArguments(fragArguments);
@@ -690,91 +695,100 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
 
         // adding getView() by alt-insert - override methods - the "NonNull" stuff seems to be new
-        // TODO strange, but getView() gets called many more times than rows exist
-        // document this behaviour because of bad layout..
-        // TODO change getView() for ViewHolder!! - getView called often, findViewById is expensive
-        //      and is called quite often in every getView() call - this is still BAAAAAAAD.... (:
+        // Document: strange, but getView() gets called many more times than rows exist if layout
+        //           is bad. I had this effect and did only notice this by chance, while the app
+        //           looked fine. Check getView() calls from time to time to see, if it's fine.
         @NonNull
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
             //return super.getView(position, convertView, parent)
+            // Finally going for ViewHolder after having this on my list since beginning :)
+            // Never create a new view on each call!! see "the world of listview - google io 2010"
+            // https://www.youtube.com/watch?v=wDBM6wVEO70&feature=youtu.be&t=7m
+            ViewHolder holder;
+            // We should checkout RecyclerView as a more sophisticated replacement for ListView
+            // https://stackoverflow.com/questions/21501316/what-is-the-benefit-of-viewholder
+            // https://developer.android.com/training/improving-layouts/smooth-scrolling.html
+            // RecyclerView.ViewHolder holder;
+
             if (convertView == null) {
                 convertView = inflater.inflate(R.layout.space_item, null);
+                holder = new ViewHolder();
+                holder.ivThumb = convertView.findViewById(R.id.iv_thumb);
+                holder.ivYoutube = convertView.findViewById(R.id.iv_youtube);   // TODO: rename
+                holder.rbRating = convertView.findViewById(R.id.id_rating);
+                holder.tvTitle = convertView.findViewById(R.id.tv_title);
+                holder.tvExplanation = convertView.findViewById(R.id.tv_explanation);
+                holder.tvDate = convertView.findViewById(R.id.tv_date);
+                holder.tvCopyright = convertView.findViewById(R.id.tv_copyright);
+                holder.tvLowSize = convertView.findViewById(R.id.tv_lowsize);
+                holder.tvHiSize = convertView.findViewById(R.id.tv_hisize);
+                holder.lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
+                convertView.setTag(holder);
+            } else {
+                holder = (ViewHolder) convertView.getTag();
             }
 
+            // handle highlighting by contextual action mode
             if (iList.get(position).isSelected()) {
                 convertView.setBackgroundColor(Color.LTGRAY);
             } else {
                 convertView.setBackgroundColor(Color.TRANSPARENT);
             }
-            // important: call findViewByID for convertView!!! - otherwise null pointer!
-            ImageView ivThumb = convertView.findViewById(R.id.iv_thumb);
-            ImageView ivYoutube = convertView.findViewById(R.id.iv_youtube);    // TODO rename!!
             // getView() is called often during scroll, take care of the overhead
             // We use a listener created ONCE in the activity instead of creating a new one on
-            // each call of getView(). The Tag is by the listener.
-            //ivThumb.setOnClickListener(new thumbClickListener());   // BAD
-            ivThumb.setOnClickListener(myThumbClickListener);         // BETTER
-            ivThumb.setTag(position);
+            // each call of getView().
+            //ivThumb.setOnClickListener(new thumbClickListener());         // BAD
+            holder.ivThumb.setOnClickListener(myThumbClickListener);        // BETTER
+            holder.ivThumb.setTag(position);
+            holder.ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
+            holder.ivThumb.setVisibility(View.VISIBLE);
 
-            // Rating bar - note, that the "small" versions do not support interaction
+            // Rating bar - unfortunately, the "small" versions do not support interaction
             // https://developer.android.com/reference/android/widget/RatingBar.html
-            // The overview uses small ones, so I need to start an extra dialog to set the
-            // rating.
-            RatingBar rbRating = convertView.findViewById(R.id.id_rating);
+            // My initial idea was to make the stars below the thumbnail clickable directly within
+            // the list, but the ratingbar evend does not respond do a simple onClick()
+            holder.rbRating.setRating(iList.get(position).getRating());
             //rbRating.setTag(2*MAX_ITEMS + position);
             //rbRating.setOnClickListener(myThumbClickListener);
-            rbRating.setRating(iList.get(position).getRating());
             //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
 
-            TextView tvTitle = convertView.findViewById(R.id.tv_title);
-            final TextView tvExplanation = convertView.findViewById(R.id.tv_explanation);
-            TextView tvDate = convertView.findViewById(R.id.tv_date);
-            final TextView tvCopyright = convertView.findViewById(R.id.tv_copyright);
-            TextView tvLowSize = convertView.findViewById(R.id.tv_lowsize);
-            TextView tvHiSize = convertView.findViewById(R.id.tv_hisize);
-            ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
-            ivThumb.setVisibility(View.VISIBLE);
             // TODO ivYoutube - bad, better ivVideoTag, so that the marker is set dynamically
             if (iList.get(position).getMedia().equals("youtube")) {
                 // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
-                ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
-                ivYoutube.setVisibility(View.VISIBLE);
+                holder.ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
+                holder.ivYoutube.setVisibility(View.VISIBLE);
             } else if(iList.get(position).getMedia().equals("vimeo")) {
-                ivYoutube.setImageResource(R.drawable.vimeo_icon);
-                ivYoutube.setVisibility(View.VISIBLE);
+                holder.ivYoutube.setImageResource(R.drawable.vimeo_icon);
+                holder.ivYoutube.setVisibility(View.VISIBLE);
             } else {
-                ivYoutube.setVisibility(View.INVISIBLE);
+                holder.ivYoutube.setVisibility(View.INVISIBLE);
             }
-            ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
+            //ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
             //noinspection ResourceType
-            lbThumb.setVisibility(iList.get(position).getThumbLoadingState());
-            tvTitle.setText(iList.get(position).getTitle());
+            holder.lbThumb.setVisibility(iList.get(position).getThumbLoadingState());
+            holder.tvTitle.setText(iList.get(position).getTitle());
             Date iDate = new Date(iList.get(position).getDateTime());
             // TODO - make display format of date configurable in settings
             String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);
-            tvDate.setText(formattedDate);
-            tvCopyright.setText(iList.get(position).getCopyright());
+            holder.tvDate.setText(formattedDate);
+            holder.tvCopyright.setText(iList.get(position).getCopyright());
 
-            tvExplanation.setText(iList.get(position).getExplanation());
-            iList.get(position).setMaxLines(tvExplanation.getLineCount());
-            tvExplanation.setTag(MAX_ITEMS + position);
-            // order of maxlines / ellipse statements might be answer to
-            // https://stackoverflow.com/questions/8087555/programmatically-create-textview-with-ellipsis
-            // NO, it is not! OR: there has not yet been set any text before
-            //tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
-            tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
-            tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
+            holder.tvExplanation.setText(iList.get(position).getExplanation());
+            iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
+            holder.tvExplanation.setTag(MAX_ITEMS + position);
+            holder.tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
+            holder.tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
             // and here, we have a friendly listener, which temporarily overwrites that stuff, when
             // we click on the text view content - We reuse the existing listener for the thumbs
             // and distinguish views by ID ranges
-            tvExplanation.setOnClickListener(myThumbClickListener);
-            tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
+            holder.tvExplanation.setOnClickListener(myThumbClickListener);
+            holder.tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
 
-            // TODO DOCU: setText and concat is bad! use resources and format string!!!
+            // Note: setText and concat is bad, use resources and format string instead!
             // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
-            tvLowSize.setText(getString(R.string.lowres, iList.get(position).getLowSize()));
-            tvHiSize.setText(getString(R.string.hires, iList.get(position).getHiSize()));
+            holder.tvLowSize.setText(getString(R.string.lowres, iList.get(position).getLowSize()));
+            holder.tvHiSize.setText(getString(R.string.hires, iList.get(position).getHiSize()));
             return convertView;
         }
     }
