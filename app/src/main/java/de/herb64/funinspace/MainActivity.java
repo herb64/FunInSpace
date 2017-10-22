@@ -1,7 +1,5 @@
 package de.herb64.funinspace;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -20,9 +18,9 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.view.ActionMode;
-import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
@@ -33,10 +31,12 @@ import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.AbsListView;
 import android.widget.ArrayAdapter;
+import android.widget.Filterable;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.RatingBar;
+import android.support.v7.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -98,20 +98,22 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
     private HashSet<String> itemTitles;             // just containing title strings of items - not used yet
     private LinkedHashMap<String, spaceItem> myMap; // replacement for myList - abandoned
-    private myAdapter adp;
-    private myHashAdapter hashadp;                  // testing with LinkedHashMap - abandoned
+    //private myAdapter adp;
+    private spaceAdapter adp;
+    //private myHashAdapter hashadp;                  // testing with LinkedHashMap - abandoned
     private JSONArray parent;
     private String jsonData;
     private String localJson = "nasatest.json";
-    private thumbClickListener myThumbClickListener;
+    protected thumbClickListener myThumbClickListener;
     private ratingChangeListener myRatingChangeListener;
     private Intent hiresIntent;
     private ListView myItemsLV;
+    private SearchView mySearch;
     private deviceInfo devInfo;
     private int maxTextureSize = 999;   // TODO clean this, just to check the 999 was ok - still seems to be found, see Nathan
     private String lastImage;           // for log dialog title
     private Locale loc;
-    private Drawable expl_points;
+    protected Drawable expl_points;
     private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
     private boolean thumbQualityChanged = false;    // indicate preference setting change
@@ -145,9 +147,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     private static final String M_VIDEO_UNKNOWN = "unknown-video";
 
     // dealing with the number of displayed lines in the Explanation text view
-    private static final int MAX_ELLIPSED_LINES = 2;
+    protected static final int MAX_ELLIPSED_LINES = 2;
     private static final int MAX_LINES = 1000;      // hmm, ridiculous, but safe // TODO think
-    private static final int MAX_ITEMS = 10000;     // limit of items - for id handling
+    protected static final int MAX_ITEMS = 10000;     // limit of items - for id handling
 
 
     @Override
@@ -219,13 +221,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // TODO: move this to "first time installation", and keep values in shared preferences
 //        Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
 //        startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
-
-
-        // ------ REMINDER ONLY for docu
-        // Just ugly code to get some test data to the real phone
-        // 1. run python -m SimpleHTTPServer on host in test directory
-        // 2. Temporarily sudo systemctl stop firewalld.service
-        // -----------------------------------------------------------
 
         // Prepare the main ListView containing all our Space Items
         myItemsLV = (ListView) findViewById(R.id.lv_content);
@@ -394,11 +389,40 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // TODO: 2 data structure/adapter versions, a) ArrayList myList, b) LinkedHashMap myMap
         myList = new ArrayList<> ();
         itemTitles = new HashSet<>();
-        //myMap = new LinkedHashMap<>();
-        adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
-        //hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
+        //adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
+        // The spaceAdapter changes text colors to white, and rating stars are black only..
+        adp = new spaceAdapter(getApplicationContext(), MainActivity.this, R.layout.space_item, myList);
         myItemsLV.setAdapter(adp);              // the "good old" arrayadapter
+
+        //myMap = new LinkedHashMap<>();
+        //hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
         //myItemsLV.setAdapter(hashadp);        // the linkedhashmap version - currenty abandoned
+
+        // TODO  - cleanup all the search/filtering stuff....
+        // SearchView - this is defined in XML, but set to "GONE" by default. When search is
+        // requested, this is shown above the listview.
+        // https://www.youtube.com/watch?v=c9yC8XGaSv4
+        // custom filters etc.. this one seems to be for us
+        // https://www.youtube.com/watch?v=YnNpwk_Q9d0
+        // See also
+        // https://www.youtube.com/watch?v=9OWmnYPX1uc
+        // Search View as a menu item.. See code in onCreateOptionsMenu() below...
+        //mySearch = (SearchView) findViewById(R.id.sv_search);   // remove from the layout!!!
+        //mySearch.setVisibility(View.GONE);
+        /*mySearch.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String s) {
+                adp.getFilter().filter(s);
+                mySearch.clearFocus();
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String s) {
+                adp.getFilter().filter(s);
+                return false;
+            }
+        });*/
 
         if (savedInstanceState != null) {
             // The spaceItem internal structure and the json data string are restored
@@ -559,243 +583,16 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         utils.writef(getApplicationContext(), localJson, outString);
     }
 
-    // TODO: finish this adapter to work with LinkedHashMap - this was experimental but not useful
-    private class myHashAdapter extends HfcmMapAdapter {
-        private LayoutInflater inflater;
-
-        public myHashAdapter(@NonNull Context context, @LayoutRes int resource, @NonNull LinkedHashMap obj) {
-            super(context, resource, obj);
-            inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            //return super.getView(position, convertView, parent);
-            if (convertView == null) {
-                convertView = inflater.inflate(R.layout.space_item, null);
-            }
-            spaceItem item = (spaceItem) this.getItem(position).getValue();
-
-            ////////////////////////////////////////////////////////////////////////////////////////////////
-            if (item.isSelected()) {
-                convertView.setBackgroundColor(Color.RED);
-            } else {
-                convertView.setBackgroundColor(Color.TRANSPARENT);
-            }
-
-            // important: call findViewByID for convertView!!! - otherwise null pointer!
-            ImageView ivThumb = convertView.findViewById(R.id.iv_thumb);
-            ImageView ivYoutube = convertView.findViewById(R.id.iv_youtube);    // TODO rename!!
-            // getView() is called often during scroll, take care of the overhead
-            // We use a listener created ONCE in the activity instead of creating a new one on
-            // each call of getView(). The Tag is by the listener.
-            //ivThumb.setOnClickListener(new thumbClickListener());   // BAD
-            ivThumb.setOnClickListener(myThumbClickListener);         // BETTER
-            ivThumb.setTag(position);
-
-            // Rating bar - note, that the "small" versions do not support interaction
-            // https://developer.android.com/reference/android/widget/RatingBar.html
-            // The overview uses small ones, so I need to start an extra dialog to set the
-            // rating.
-            //RatingBar rbRating = convertView.findViewById(R.id.id_rating);
-            //rbRating.setTag(2*MAX_ITEMS + position);
-            //rbRating.setOnClickListener(myThumbClickListener);
-            //rbRating.setRating(iList.get(position).getRating());
-            //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
-
-            TextView tvTitle = convertView.findViewById(R.id.tv_title);
-            final TextView tvExplanation = convertView.findViewById(R.id.tv_explanation);
-            TextView tvDate = convertView.findViewById(R.id.tv_date);
-            final TextView tvCopyright = convertView.findViewById(R.id.tv_copyright);
-            TextView tvLowSize = convertView.findViewById(R.id.tv_lowsize);
-            TextView tvHiSize = convertView.findViewById(R.id.tv_hisize);
-            ivThumb.setImageBitmap(item.getBmpThumb());
-            ivThumb.setVisibility(View.VISIBLE);
-            // TODO ivYoutube - bad, better ivVideoTag, so that the marker is set dynamically
-            if (item.getMedia().equals("youtube")) {
-                // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
-                ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
-                ivYoutube.setVisibility(View.VISIBLE);
-            } else if(item.getMedia().equals("vimeo")) {
-                ivYoutube.setImageResource(R.drawable.vimeo_icon);
-                ivYoutube.setVisibility(View.VISIBLE);
-            } else {
-                ivYoutube.setVisibility(View.INVISIBLE);
-            }
-            ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
-            //noinspection ResourceType
-            lbThumb.setVisibility(item.getThumbLoadingState());
-            tvTitle.setText(item.getTitle());
-            Date iDate = new Date(item.getDateTime());
-            // TODO - make display format of date configurable in settings
-            String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);
-            tvDate.setText(formattedDate);
-            tvCopyright.setText(item.getCopyright());
-
-            // just keep that for reference in documentation - about textwatchers...
-            /*final int pos = position;
-            tvExplanation.addTextChangedListener(new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
-                @Override
-                public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
-                @Override
-                public void afterTextChanged(Editable editable) {}
-            });*/
-
-            tvExplanation.setText(item.getExplanation());
-            item.setMaxLines(tvExplanation.getLineCount());
-            tvExplanation.setTag(MAX_ITEMS + position);
-            // order of maxlines / ellipse statements might be answer to
-            // https://stackoverflow.com/questions/8087555/programmatically-create-textview-with-ellipsis
-            // NO, it is not! OR: there has not yet been set any text before
-            //tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
-            tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
-            tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
-            // and here, we have a friendly listener, which temporarily overwrites that stuff, when
-            // we click on the text view content - We reuse the existing listener for the thumbs
-            // and distinguish views by ID ranges
-            tvExplanation.setOnClickListener(myThumbClickListener);
-            tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
-
-            // TODO DOCU: setText and concat is bad! use resources and format string!!!
-            // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
-            tvLowSize.setText(getString(R.string.lowres, item.getLowSize()));
-            tvHiSize.setText(getString(R.string.hires, item.getHiSize()));
-            //////////////////////////////////////////////////////////////////////////////////////////////////////7
-
-
-            return convertView;
-        }
-
-        /*@NonNull
-        @Override
-        public View getView(String title, @Nullable View convertView, @NonNull ViewGroup parent) {
-
-            if (convertView == null) {
-                convertView = inflater.inflate(R.layout.space_item, null);
-            }
-
-            return convertView;
-        }*/
-    }
-
-    // This is the adapter working on ArrayList type object myList...
-    private class myAdapter extends ArrayAdapter {
-        private List<spaceItem> iList;
-        int resource;
-        private LayoutInflater inflater;
-
-        // Constructor (add via alt+insert) and adjust to our list of type spaceItem
-        private myAdapter(@NonNull Context context,
-                          @LayoutRes int resource,
-                          @NonNull List<spaceItem> objects) {
-            super(context, resource, objects);
-            iList = objects;
-            this.resource = resource;
-            inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
-        }
-
-        // adding getView() by alt-insert - override methods - the "NonNull" stuff seems to be new
-        // Document: strange, but getView() gets called many more times than rows exist if layout
-        //           is bad. I had this effect and did only notice this by chance, while the app
-        //           looked fine. Check getView() calls from time to time to see, if it's fine.
-        @NonNull
-        @Override
-        public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
-            //return super.getView(position, convertView, parent)
-            // Finally going for ViewHolder after having this on my list since beginning :)
-            // Never create a new view on each call!! see "the world of listview - google io 2010"
-            // https://www.youtube.com/watch?v=wDBM6wVEO70&feature=youtu.be&t=7m
-            ViewHolder holder;
-            // We should checkout RecyclerView as a more sophisticated replacement for ListView
-            // https://stackoverflow.com/questions/21501316/what-is-the-benefit-of-viewholder
-            // https://developer.android.com/training/improving-layouts/smooth-scrolling.html
-            // RecyclerView.ViewHolder holder;
-
-            if (convertView == null) {
-                convertView = inflater.inflate(R.layout.space_item, null);
-                holder = new ViewHolder();
-                holder.ivThumb = convertView.findViewById(R.id.iv_thumb);
-                holder.ivYoutube = convertView.findViewById(R.id.iv_youtube);   // TODO: rename
-                holder.rbRating = convertView.findViewById(R.id.id_rating);
-                holder.tvTitle = convertView.findViewById(R.id.tv_title);
-                holder.tvExplanation = convertView.findViewById(R.id.tv_explanation);
-                holder.tvDate = convertView.findViewById(R.id.tv_date);
-                holder.tvCopyright = convertView.findViewById(R.id.tv_copyright);
-                holder.tvLowSize = convertView.findViewById(R.id.tv_lowsize);
-                holder.tvHiSize = convertView.findViewById(R.id.tv_hisize);
-                holder.lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
-                convertView.setTag(holder);
-            } else {
-                holder = (ViewHolder) convertView.getTag();
-            }
-
-            // handle highlighting by contextual action mode
-            if (iList.get(position).isSelected()) {
-                convertView.setBackgroundColor(Color.LTGRAY);
-            } else {
-                convertView.setBackgroundColor(Color.TRANSPARENT);
-            }
-            // getView() is called often during scroll, take care of the overhead
-            // We use a listener created ONCE in the activity instead of creating a new one on
-            // each call of getView().
-            //ivThumb.setOnClickListener(new thumbClickListener());         // BAD
-            holder.ivThumb.setOnClickListener(myThumbClickListener);        // BETTER
-            holder.ivThumb.setTag(position);
-            holder.ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
-            holder.ivThumb.setVisibility(View.VISIBLE);
-
-            // Rating bar - unfortunately, the "small" versions do not support interaction
-            // https://developer.android.com/reference/android/widget/RatingBar.html
-            // My initial idea was to make the stars below the thumbnail clickable directly within
-            // the list, but the ratingbar evend does not respond do a simple onClick()
-            holder.rbRating.setRating(iList.get(position).getRating());
-            //rbRating.setTag(2*MAX_ITEMS + position);
-            //rbRating.setOnClickListener(myThumbClickListener);
-            //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
-
-            // TODO ivYoutube - bad, better ivVideoTag, so that the marker is set dynamically
-            if (iList.get(position).getMedia().equals("youtube")) {
-                // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
-                holder.ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
-                holder.ivYoutube.setVisibility(View.VISIBLE);
-            } else if(iList.get(position).getMedia().equals("vimeo")) {
-                holder.ivYoutube.setImageResource(R.drawable.vimeo_icon);
-                holder.ivYoutube.setVisibility(View.VISIBLE);
-            } else {
-                holder.ivYoutube.setVisibility(View.INVISIBLE);
-            }
-            //ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
-            //noinspection ResourceType
-            holder.lbThumb.setVisibility(iList.get(position).getThumbLoadingState());
-            holder.tvTitle.setText(iList.get(position).getTitle());
-            Date iDate = new Date(iList.get(position).getDateTime());
-            // TODO - make display format of date configurable in settings
-            String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);
-            holder.tvDate.setText(formattedDate);
-            holder.tvCopyright.setText(iList.get(position).getCopyright());
-
-            holder.tvExplanation.setText(iList.get(position).getExplanation());
-            iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
-            holder.tvExplanation.setTag(MAX_ITEMS + position);
-            holder.tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
-            holder.tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
-            // and here, we have a friendly listener, which temporarily overwrites that stuff, when
-            // we click on the text view content - We reuse the existing listener for the thumbs
-            // and distinguish views by ID ranges
-            holder.tvExplanation.setOnClickListener(myThumbClickListener);
-            holder.tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
-
-            // Note: setText and concat is bad, use resources and format string instead!
-            // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
-            holder.tvLowSize.setText(getString(R.string.lowres, iList.get(position).getLowSize()));
-            holder.tvHiSize.setText(getString(R.string.hires, iList.get(position).getHiSize()));
-            return convertView;
-        }
-    }
+    // old code of myHashAdapter derived from HfcmMapAdapter is moved to bottom as comment
+    // old code of myAdapter using ArrayList also moved to bottom as comment
 
     // GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
+    /*
+     * TODO: recheck again, VERY IMPORTANT!!!, also in terms of splitting large code with inner classes into smaller segments, as with my spaceItemFilter (22.10.2017)
+     * https://medium.com/freenet-engineering/memory-leaks-in-android-identify-treat-and-avoid-d0b1233acc8
+     * making apodTask static to eliminate implicit reference does not allow access to apodItem
+     * any more. So we need a constructor
+     */
     private class apodTask extends AsyncTask<String, String, String> {
         private String imgUrl;
         @Override
@@ -1598,6 +1395,22 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
+        // 22.10.2017 - search
+        MenuItem searchItem = menu.findItem(R.id.action_search);
+        SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem);
+        sv.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String s) {
+                adp.getFilter().filter(s);
+                return false;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String s) {
+                adp.getFilter().filter(s);
+                return false;
+            }
+        });
         return true;
     }
 
@@ -1986,7 +1799,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         @Override
         public boolean onCreateActionMode(ActionMode mode, Menu menu) {
             return false;
-            //mode.getMenuInflater().inflate(R.menu.menu_cab_main, menu); // TODO own menu
+            //mode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
             //return true;
         }
 
@@ -2019,4 +1832,194 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             mActionMode = null;
         }
     };*/
+
+    //////////////////// OLD CODE //////////////////////////////////////////////////
+
+
+    // This is the adapter working on ArrayList type object myList...
+    /* This one has been also abandoned and replaced by spaceAdapter, which also contains filtering
+    private class myAdapter extends ArrayAdapter {
+        private List<spaceItem> iList;
+        int resource;
+        private LayoutInflater inflater;
+
+        // Constructor (add via alt+insert) and adjust to our list of type spaceItem
+        private myAdapter(@NonNull Context context,
+                          @LayoutRes int resource,
+                          @NonNull List<spaceItem> objects) {
+            super(context, resource, objects);
+            iList = objects;
+            this.resource = resource;
+            inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
+        }
+
+        // adding getView() by alt-insert - override methods - the "NonNull" stuff seems to be new
+        // Document: strange, but getView() gets called many more times than rows exist if layout
+        //           is bad. I had this effect and did only notice this by chance, while the app
+        //           looked fine. Check getView() calls from time to time to see, if it's fine.
+        @NonNull
+        @Override
+        public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+            //return super.getView(position, convertView, parent)
+            // Finally going for ViewHolder after having this on my list since beginning :)
+            // Never create a new view on each call!! see "the world of listview - google io 2010"
+            // https://www.youtube.com/watch?v=wDBM6wVEO70&feature=youtu.be&t=7m
+            ViewHolder holder;
+            // We should checkout RecyclerView as a more sophisticated replacement for ListView
+            // https://stackoverflow.com/questions/21501316/what-is-the-benefit-of-viewholder
+            // https://developer.android.com/training/improving-layouts/smooth-scrolling.html
+            // RecyclerView.ViewHolder holder;
+
+            if (convertView == null) {
+                convertView = inflater.inflate(R.layout.space_item, null);
+                holder = new ViewHolder();
+                holder.ivThumb = convertView.findViewById(R.id.iv_thumb);
+                holder.ivYoutube = convertView.findViewById(R.id.iv_youtube);
+                holder.rbRating = convertView.findViewById(R.id.id_rating);
+                holder.tvTitle = convertView.findViewById(R.id.tv_title);
+                holder.tvExplanation = convertView.findViewById(R.id.tv_explanation);
+                holder.tvDate = convertView.findViewById(R.id.tv_date);
+                holder.tvCopyright = convertView.findViewById(R.id.tv_copyright);
+                holder.tvLowSize = convertView.findViewById(R.id.tv_lowsize);
+                holder.tvHiSize = convertView.findViewById(R.id.tv_hisize);
+                holder.lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
+                convertView.setTag(holder);
+            } else {
+                holder = (ViewHolder) convertView.getTag();
+            }
+
+            // handle highlighting by contextual action mode
+            if (iList.get(position).isSelected()) {
+                convertView.setBackgroundColor(Color.LTGRAY);
+            } else {
+                convertView.setBackgroundColor(Color.TRANSPARENT);
+            }
+            // getView() is called often during scroll, take care of the overhead
+            // We use a listener created ONCE in the activity instead of creating a new one on
+            // each call of getView().
+            //ivThumb.setOnClickListener(new thumbClickListener());         // BAD
+            holder.ivThumb.setOnClickListener(myThumbClickListener);        // BETTER
+            holder.ivThumb.setTag(position);
+            holder.ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
+            holder.ivThumb.setVisibility(View.VISIBLE);
+
+            // Rating bar - unfortunately, the "small" versions do not support interaction
+            // https://developer.android.com/reference/android/widget/RatingBar.html
+            // My initial idea was to make the stars below the thumbnail clickable directly within
+            // the list, but the ratingbar evend does not respond do a simple onClick()
+            holder.rbRating.setRating(iList.get(position).getRating());
+            //rbRating.setTag(2*MAX_ITEMS + position);
+            //rbRating.setOnClickListener(myThumbClickListener);
+            //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
+
+            if (iList.get(position).getMedia().equals("youtube")) {
+                // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
+                holder.ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
+                holder.ivYoutube.setVisibility(View.VISIBLE);
+            } else if(iList.get(position).getMedia().equals("vimeo")) {
+                holder.ivYoutube.setImageResource(R.drawable.vimeo_icon);
+                holder.ivYoutube.setVisibility(View.VISIBLE);
+            } else {
+                holder.ivYoutube.setVisibility(View.INVISIBLE);
+            }
+            //ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
+            //noinspection ResourceType
+            holder.lbThumb.setVisibility(iList.get(position).getThumbLoadingState());
+            holder.tvTitle.setText(iList.get(position).getTitle());
+            Date iDate = new Date(iList.get(position).getDateTime());
+            String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);
+            holder.tvDate.setText(formattedDate);
+            holder.tvCopyright.setText(iList.get(position).getCopyright());
+
+            holder.tvExplanation.setText(iList.get(position).getExplanation());
+            iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
+            holder.tvExplanation.setTag(MAX_ITEMS + position);
+            holder.tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
+            holder.tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
+            // and here, we have a friendly listener, which temporarily overwrites that stuff, when
+            // we click on the text view content - We reuse the existing listener for the thumbs
+            // and distinguish views by ID ranges
+            holder.tvExplanation.setOnClickListener(myThumbClickListener);
+            holder.tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
+
+            // Note: setText and concat is bad, use resources and format string instead!
+            // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
+            holder.tvLowSize.setText(getString(R.string.lowres, iList.get(position).getLowSize()));
+            holder.tvHiSize.setText(getString(R.string.hires, iList.get(position).getHiSize()));
+            return convertView;
+        }
+    }*/
+
+    /*
+    private class myHashAdapter extends HfcmMapAdapter {
+        private LayoutInflater inflater;
+
+        public myHashAdapter(@NonNull Context context, @LayoutRes int resource, @NonNull LinkedHashMap obj) {
+            super(context, resource, obj);
+            inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            if (convertView == null) {
+                convertView = inflater.inflate(R.layout.space_item, null);
+            }
+            spaceItem item = (spaceItem) this.getItem(position).getValue();
+            if (item.isSelected()) {
+                convertView.setBackgroundColor(Color.RED);
+            } else {
+                convertView.setBackgroundColor(Color.TRANSPARENT);
+            }
+            ImageView ivThumb = convertView.findViewById(R.id.iv_thumb);
+            ImageView ivYoutube = convertView.findViewById(R.id.iv_youtube);
+            ivThumb.setOnClickListener(myThumbClickListener);         // BETTER
+            ivThumb.setTag(position);
+            TextView tvTitle = convertView.findViewById(R.id.tv_title);
+            final TextView tvExplanation = convertView.findViewById(R.id.tv_explanation);
+            TextView tvDate = convertView.findViewById(R.id.tv_date);
+            final TextView tvCopyright = convertView.findViewById(R.id.tv_copyright);
+            TextView tvLowSize = convertView.findViewById(R.id.tv_lowsize);
+            TextView tvHiSize = convertView.findViewById(R.id.tv_hisize);
+            ivThumb.setImageBitmap(item.getBmpThumb());
+            ivThumb.setVisibility(View.VISIBLE);
+            if (item.getMedia().equals("youtube")) {
+                // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
+                ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
+                ivYoutube.setVisibility(View.VISIBLE);
+            } else if(item.getMedia().equals("vimeo")) {
+                ivYoutube.setImageResource(R.drawable.vimeo_icon);
+                ivYoutube.setVisibility(View.VISIBLE);
+            } else {
+                ivYoutube.setVisibility(View.INVISIBLE);
+            }
+            ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
+            //noinspection ResourceType
+            lbThumb.setVisibility(item.getThumbLoadingState());
+            tvTitle.setText(item.getTitle());
+            Date iDate = new Date(item.getDateTime());
+            String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);
+            tvDate.setText(formattedDate);
+            tvCopyright.setText(item.getCopyright());
+            tvExplanation.setText(item.getExplanation());
+            item.setMaxLines(tvExplanation.getLineCount());
+            tvExplanation.setTag(MAX_ITEMS + position);
+            tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
+            tvExplanation.setMaxLines(MAX_ELLIPSED_LINES);
+            tvExplanation.setOnClickListener(myThumbClickListener);
+            tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, expl_points);
+            tvLowSize.setText(getString(R.string.lowres, item.getLowSize()));
+            tvHiSize.setText(getString(R.string.hires, item.getHiSize()));
+            return convertView;
+        }
+
+        //@NonNull
+        //@Override
+        //public View getView(String title, @Nullable View convertView, @NonNull ViewGroup parent) {
+        //
+        //    if (convertView == null) {
+        //        convertView = inflater.inflate(R.layout.space_item, null);
+        //    }
+        //    return convertView;
+        //}
+    }*/
 }

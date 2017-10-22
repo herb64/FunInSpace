@@ -27,6 +27,16 @@
         android:icon="@android:drawable/ic_menu_help"
         app:showAsAction="ifRoom" />
 
+    <!-- Some code to make searchview appear as menu item
+         I did remove android:orderInCategory statement
+         see https://www.youtube.com/watch?v=9OWmnYPX1uc -->
+    <item
+        android:id="@+id/action_search"
+        android:title="Search"
+        android:icon="@android:drawable/ic_menu_search"
+        app:showAsAction="ifRoom|collapseActionView"
+        app:actionViewClass="android.support.v7.widget.SearchView"/>
+
     <!-- This is for resync with dropbox metadata json. Most likely not part of final version
          but useful to resync stuff without new installation -->
     <item
