@@ -326,6 +326,7 @@ public class ImgHiresFragment extends Fragment {
 
 
                     InputStream iStream = (InputStream) imgurl.getContent();
+                    // TODO possible performance improvement? 8k is default buffer
                     BufferedInputStream bStream = new BufferedInputStream(iStream, 10240);
                     bmp = BitmapFactory.decodeStream(bStream, null, options);
                     //bmp = BitmapFactory.decodeStream((InputStream) imgurl.getContent(), null, options);

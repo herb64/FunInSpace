@@ -114,6 +114,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     private Drawable expl_points;
     private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
+    private boolean thumbQualityChanged = false;    // indicate preference setting change
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
@@ -167,6 +168,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // TODO check, if this is rotation proof, or if we bettger should get prefs each time
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+        sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
         //newestFirst = sharedPref.getString("item_order", "newest_first").equals("newest_first");
         newestFirst = true; // we go and remove that, newest always on top!!!
 
@@ -392,7 +394,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // TODO: 2 data structure/adapter versions, a) ArrayList myList, b) LinkedHashMap myMap
         myList = new ArrayList<> ();
         itemTitles = new HashSet<>();
-        myMap = new LinkedHashMap<>();
+        //myMap = new LinkedHashMap<>();
         adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
         //hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
         myItemsLV.setAdapter(adp);              // the "good old" arrayadapter
@@ -803,6 +805,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // Enable TLSv1 on Android below 5.0 (Lollipop) TODO TLS higher versions?
             // https://blog.dev-area.net/2015/08/13/android-4-1-enable-tls-1-1-and-tls-1-2/
             // could we move that code to "onCreate?"
+            // see also android 7 changes, might be of interest at a later point
+            // https://developer.android.com/about/versions/nougat/android-7.0-changes.html#tls-ssl
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
                     sharedPref.getBoolean("enable_tls_pre_lollipop", true)) {
                 SSLContext sslcontext = null;
@@ -1547,21 +1551,48 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             }
         } else if (requestCode == SETTINGS_REQUEST) {
             if (resultCode == RESULT_OK) {
+                // This gets called after the preferences Activity has been closed. While the
+                // onSharedPreferenceChangeListener immediately gets called when a switch is changed
+                // this one allows to react after user has closed the dialog. Toggling of a switch
+                // might result in trouble, if that switch would trigger long run tasks in bg.
+                // BASIC IDEA: have the change listener just keep a HashSet of preference
                 // HERE: do any actions that need immediate reaction on changed settings, e.g.
                 //       e.g. ordering of elements in list...
-                // dirty test - we should check if order has been changed before recreating the list
-                SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
-                String order = shPref.getString("item_order", "newest_first");
-                String returnedorder = data.getStringExtra("order");    // TODO
+                // Check for any changed preference items, which have been marked by the listener.
+                if (thumbQualityChanged) {
+                    SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
+                    //shPref.getBoolean("rgb565_thumbs", false);
+                    Log.i("HFCM", "Low quality thumbs enable, now: " + shPref.getBoolean("rgb565_thumbs", false));
+                    thumbQualityChanged = false;
+                    myList.clear();
+                    addItems();
+                    adp.notifyDataSetChanged();
+                }
+                //SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
+                //String order = shPref.getString("item_order", "newest_first");
+                //String returnedorder = data.getStringExtra("order");    // TODO
                 //newestFirst = order.equals("newest_first");
                 newestFirst = true;
-                myList.clear();
-                addItems();
-                adp.notifyDataSetChanged();
-                //hashadp.notifyDataSetChanged();
             }
         }
     }
+
+    // Try to listen for changed preferences here. Important: this one reacts IMMEDIATELY!!!
+    // This means, if changing a preference and this might trigger a longer action, it could
+    // get bad if user toggles that switch. The onActivityResult() method reacting on SETTINGS_REQUEST
+    // is called AFTER the settings dialog activity is closed.
+    SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener = new
+            SharedPreferences.OnSharedPreferenceChangeListener() {
+                @Override
+                public void onSharedPreferenceChanged(SharedPreferences sharedPreferences,
+                                                      String changed) {
+                    if (changed.equals("rgb565_thumbs")) {
+                        // on each switch toggle, we invert the value. Final value is checked in
+                        // onActivityResult() to determine, if an action is needed
+                        thumbQualityChanged ^= true;
+                    }
+                }
+            };
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -1766,7 +1797,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 e.printStackTrace();
             }
             // add info to our list of spaceItems
-            Log.i("HFCM", "Add Items " + strTitle + " > " + strThumb);
+            //Log.i("HFCM", "Add Items " + strTitle + " > " + strThumb);
             spaceItem newitem = new spaceItem();
             newitem.setTitle(strTitle);
             newitem.setDateTime(dateTime);
@@ -1784,13 +1815,29 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // the list item. If the file is not found, set bitmap to null.
             File thumbFile = new File(getApplicationContext().getFilesDir(), strThumb);
             if (thumbFile.exists()) {
-                Bitmap thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
+                Bitmap thumb = null;
+                // we use this option to save some memory - experimental
+                if (sharedPref.getBoolean("rgb565_thumbs", false)) {
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inPreferredConfig = Bitmap.Config.RGB_565;
+                    thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath(), options);
+                } else {
+                    thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
+                }
+                //Bitmap thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
                 newitem.setBmpThumb(thumb);
+                int allocByteCount;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                    allocByteCount = thumb.getAllocationByteCount();
+                } else {
+                    allocByteCount = thumb.getByteCount();
+                }
+                Log.i("HFCM", "Thumbnail size: " + strThumb + " = " + allocByteCount);
             } else {
                 newitem.setBmpThumb(null);
             }
             myList.add(newitem);
-            myMap.put(strTitle, newitem);
+            //myMap.put(strTitle, newitem);
         }
     }
 
@@ -1798,9 +1845,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // contained, we kick of a loader thread, which gets the image file from the given lowres
     // URL and saves a thumbnail file.
     public void checkMissingThumbs() {
-        //spaceItem wkItem = null;
         ArrayList<Integer> missing = new ArrayList<Integer>();
-        ArrayList<String> missing2 = new ArrayList<String>();
+        //ArrayList<String> missing2 = new ArrayList<String>();
         for(int i=0; i<myList.size(); i++) {
             //if (myList.get(i).getBmpThumb() == null) {
             //String tt = myList.get(i).getMedia();
@@ -1813,13 +1859,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             }
         }
         // map version: arraylist of title strings
-        for (String key : myMap.keySet()) {
+        /*for (String key : myMap.keySet()) {
             if (myMap.get(key).getBmpThumb() == null &&
                     !myMap.get(key).getLowres().equals("")) {
                 missing2.add(key);
                 myMap.get(key).setThumbLoadingState(View.VISIBLE);
             }
-        }
+        }*/
 
         // we might change this to missing2 if using map based version - needs also quite some
         // changes in thumbLoaderTask() code
@@ -1835,6 +1881,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // Load all missing image thumbnails URL contained in "lowres". A list of indices into the
     // list is passed and images are loaded one after the other. TODO - maybe parallel load?
     // https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
+    // new: also called for all images, if thumb quality is changed between rgb565 and argb8888
     private class thumbLoaderTask extends AsyncTask<ArrayList<Integer>, Integer, Void> {
     //private class thumbLoaderTask extends AsyncTask<ArrayList<String>, String, Void> {
         private ArrayList<Integer> missing;
@@ -1858,6 +1905,16 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 try {
                     URL imgurl = new URL(lowresurl);
                     try {
+                        // we use this option to save some memory - experimental
+                        // but not here, because it could cause the saved file to be of low quality
+                        // do it in addItems().
+                        /*if (sharedPref.getBoolean("rgb565_thumbs", false)) {
+                            BitmapFactory.Options options = new BitmapFactory.Options();
+                            options.inPreferredConfig = Bitmap.Config.RGB_565;
+                            bitmap = BitmapFactory.decodeStream((InputStream) imgurl.getContent(), null, options);
+                        } else {
+                            bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
+                        }*/
                         bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
                     } catch (IOException e) {
                         e.printStackTrace();

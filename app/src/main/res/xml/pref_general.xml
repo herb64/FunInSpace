@@ -33,6 +33,12 @@
         android:summary="Get APOD on each start of app"
         android:title="APOD Loader" />
 
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="rgb565_thumbs"
+        android:summary="Use lower color resolution Thumbnail pictures to save memory"
+        android:title="Thumbnail color quality" />
+
     <!--
     <SwitchPreference
         android:defaultValue="true"
