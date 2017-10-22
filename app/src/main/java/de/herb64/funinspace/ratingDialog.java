@@ -27,6 +27,8 @@ public class ratingDialog extends AppCompatDialogFragment {
         View v = LayoutInflater.from(getActivity()).inflate(R.layout.rating_dialog, null);
         final RatingBar rb = v.findViewById(R.id.rb_rating);
         final ArrayList<Integer> mIndices = getArguments().getIntegerArrayList("indices");
+        final int currentrating = getArguments().getInt("current_rating");
+        rb.setRating(currentrating);
 
         // Create listener for button clicks
         // https://developer.android.com/reference/android/content/DialogInterface.OnClickListener.html

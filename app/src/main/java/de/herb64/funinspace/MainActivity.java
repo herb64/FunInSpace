@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
@@ -13,9 +12,6 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.support.annotation.LayoutRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.view.MenuItemCompat;
@@ -24,17 +20,11 @@ import android.support.v7.view.ActionMode;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.ViewGroup;
 import android.widget.AbsListView;
-import android.widget.ArrayAdapter;
-import android.widget.Filterable;
-import android.widget.ImageView;
 import android.widget.ListView;
-import android.widget.ProgressBar;
 import android.widget.RatingBar;
 import android.support.v7.widget.SearchView;
 import android.widget.TextView;
@@ -61,7 +51,6 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,7 +65,7 @@ import de.herb64.funinspace.helpers.dialogDisplay;
 import de.herb64.funinspace.helpers.utils;
 import de.herb64.funinspace.models.spaceItem;
 
-// TODO Log statements: Log.d etc.. should not be contained in final release, but how to do this?
+// TODO Log statements: Log.d etc.. should not be contained in final release - how to automate?
 // see https://stackoverflow.com/questions/2446248/remove-all-debug-logging-calls-before-publishing-are-there-tools-to-do-this
 
 // TODO: handle possible errors returned: found on 02.08.2017 - led to null bitmap returned
@@ -100,13 +89,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     private LinkedHashMap<String, spaceItem> myMap; // replacement for myList - abandoned
     //private myAdapter adp;
     private spaceAdapter adp;
-    //private myHashAdapter hashadp;                  // testing with LinkedHashMap - abandoned
     private JSONArray parent;
     private String jsonData;
     private String localJson = "nasatest.json";
     protected thumbClickListener myThumbClickListener;
     private ratingChangeListener myRatingChangeListener;
-    private Intent hiresIntent;
     private ListView myItemsLV;
     private SearchView mySearch;
     private deviceInfo devInfo;
@@ -127,8 +114,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public native String vA();
 
     // App settings variables from preferences dialog
-    private boolean newestFirst = true;         // sort order for list of space items
-    private boolean needWifi = false;           // hires loading - only with wifi?
+    private boolean newestFirst = true;             // sort order for list of space items
+    private boolean needWifi = false;               // hires loading - only with wifi?
 
     // We go for our CONSTANTS here, this is similar to #define in C for a constant
     //public static String TAG = MainActivity.class.getSimpleName();
@@ -218,10 +205,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             flashInstalled = false;
         }*/
 
-        // TODO: move this to "first time installation", and keep values in shared preferences
-//        Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
-//        startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
-
         // Prepare the main ListView containing all our Space Items
         myItemsLV = (ListView) findViewById(R.id.lv_content);
 
@@ -264,38 +247,34 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
         // --------  Option 2 for  contextual action mode with multiple selections ---------
 
-        // Handling multiple choices - add another listener. Note, that this also repsonds to
+        // Handling multiple choices - add another listener. Note, that this also responds to
         // long clicks without using the longclick listener explicitly...
         // https://www.youtube.com/watch?v=kyErynku-BM  (Prabeesh R K)
         myItemsLV.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE_MODAL);
-        //myItemsLV.setSelector(android.R.color.darker_gray);
         myItemsLV.setMultiChoiceModeListener(new AbsListView.MultiChoiceModeListener() {
             // keep track of selected position values
             private ArrayList<Integer> selected;
-            //private HashSet<String> selected3;
 
             @Override
-            public void onItemCheckedStateChanged(android.view.ActionMode actionMode, int position, long id, boolean checked) {
+            public void onItemCheckedStateChanged(android.view.ActionMode actionMode,
+                                                  int position,
+                                                  long id,
+                                                  boolean checked) {
                 if (checked) {
                     selected.add(position);
-                    //selected3.add((String) hashadp.getItem(position).getKey());
                 } else {
                     // Either object or postion as parameter? here, both are of type int :)
                     // https://stackoverflow.com/questions/4534146/properly-removing-an-integer-from-a-listinteger
                     selected.remove(Integer.valueOf(position));
-                    //selected3.remove((String) hashadp.getItem(position).getKey());
                 }
                 myList.get(position).setSelected(checked);
                 adp.notifyDataSetChanged();
-                //myMap.get((String) hashadp.getItem(position).getKey()).setSelected(checked);
-                //hashadp.notifyDataSetChanged();
             }
 
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
                 selected = new ArrayList<>();
-                //selected3 = new HashSet<>();
                 return true;
             }
 
@@ -322,12 +301,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                             adp.notifyDataSetChanged();     // TODO set notifychanged automatically
                             // TODO: remove from json and rewrite
                         }
-                        // LinkedHashMap version of main data structure as replacement for ArrayList
-                        /*for (String str : selected3) {
-                            hashadp.remove(str);
-                            // TODO: looking at google source: why not notify automatically in adp?
-                            hashadp.notifyDataSetChanged();
-                        }*/
                         actionMode.finish();
                         return true;
                     case R.id.cab_share:
@@ -341,16 +314,21 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         // activity implements
                         FragmentManager fm = getSupportFragmentManager();
                         ratingDialog dlg = new ratingDialog();
-                        // hmm, we just pass the indices to the fragment, so that they get returned
+                        // Just pass the indices to the rating fragment, so that they get returned
                         // by our interface implementation. This avoids a global def. of "selected"
-                        // and possible problems with phone rotation
-                        // TODO Also pass the current rating information
-                        // For a single selection: unique
-                        // for multiple items: if these have different ratings, what should be show?
-                        Bundle fragArguments = new Bundle();    // do NOT use non default constructor with fragments!
+                        // and potential problems with phone rotation
+                        Bundle fragArguments = new Bundle();    // AGAIN: do NOT use non default constructor with fragments!
                         fragArguments.putIntegerArrayList("indices", selected);
+                        int current = 0;
+                        for (int i=0; i<selected.size();i++) {
+                            if (myList.get(selected.get(i)).getRating() > current) {
+                                current = myList.get(selected.get(i)).getRating();
+                            }
+                        }
+                        fragArguments.putInt("current_rating", current);
                         dlg.setArguments(fragArguments);
-                        // dlg.setTargetFragment(); // this only works when calling from fragment, not from activity as here
+                        // dlg.setTargetFragment(); // this only works when calling from fragment,
+                        // not from activity as here
                         dlg.show(fm, "RATINGTAG");
                         actionMode.finish();
                         return true;
@@ -373,27 +351,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         myThumbClickListener = new thumbClickListener();
         myRatingChangeListener = new ratingChangeListener();
 
-        // Prepare an intent for starting the hires image load in ImageActivity
-        hiresIntent = new Intent(this, ImageActivity.class);
-
-        // Test button: not of any function except doing tests - remove in later code
-        /*test1 = (Button) findViewById(R.id.bTest1);
-        test1.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                //test1.setText(new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z", loc).format(new Date()));
-            }
-        });*/
-
-
-        // TODO: 2 data structure/adapter versions, a) ArrayList myList, b) LinkedHashMap myMap
         myList = new ArrayList<> ();
         itemTitles = new HashSet<>();
         //adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
-        // The spaceAdapter changes text colors to white, and rating stars are black only..
         adp = new spaceAdapter(getApplicationContext(), MainActivity.this, R.layout.space_item, myList);
         myItemsLV.setAdapter(adp);              // the "good old" arrayadapter
-
+        // old stuff from trying Adapter to work with LinkedHashMap
         //myMap = new LinkedHashMap<>();
         //hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
         //myItemsLV.setAdapter(hashadp);        // the linkedhashmap version - currenty abandoned
@@ -1140,6 +1103,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             int maxAlloc = devInfo.getMaxAllocatable();
             Log.i("HFCM", "maximum alloc:" + String.valueOf(maxAlloc));
             if (media.equals(M_IMAGE)) {
+                    Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
                     hiresIntent.putExtra("hiresurl", hiresUrl);
                     hiresIntent.putExtra("listIdx", idx);
                     hiresIntent.putExtra("maxAlloc", maxAlloc);

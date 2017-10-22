@@ -1,16 +1,12 @@
 package de.herb64.funinspace;
 
-import android.content.Context;
-
 import android.widget.Filter;
-
-
 import java.util.ArrayList;
-
 import de.herb64.funinspace.models.spaceItem;
 
 /**
  * Created by herbert on 10/22/17.
+ * This is used for filtering for our search implementation
  */
 
 public class spaceItemFilter extends Filter {

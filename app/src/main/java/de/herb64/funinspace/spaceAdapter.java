@@ -29,6 +29,7 @@ import de.herb64.funinspace.models.spaceItem;
  * Strange effect: theme seems to be changed, text is just white, stars just black...
  * Root cause: inflater = (LayoutInflater) ctx.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
  *                                         ---
+ * need to use the activity instead, see
  * https://stackoverflow.com/questions/28817716/recyclerview-textview-color-of-text-changed
  *
  * This adapter works in combination with filtering for Search as of 22.10.2017.
