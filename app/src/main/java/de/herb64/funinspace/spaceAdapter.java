@@ -7,6 +7,8 @@ import android.support.annotation.LayoutRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
+import android.util.Log;
+import android.util.SparseIntArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,6 +51,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     private Context ctx;
     private MainActivity act;
     spaceItemFilter filter;
+    private SparseIntArray idxMap;
 
     // Constructor (add via alt+insert) and adjust to our list of type spaceItem
     spaceAdapter(@NonNull Context context,
@@ -65,6 +68,9 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         //       activity, the Textviews all appear white and rating starts are black, regardless
         //       of their selection state...
         inflater = (LayoutInflater) act.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        //filter = new spaceItemFilter(filterList, this);
+        idxMap = new SparseIntArray();
+        idxMap.clear();
     }
 
     // adding getView() by alt-insert - override methods - the "NonNull" stuff seems to be new
@@ -77,9 +83,18 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     @Override
     public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
         //return super.getView(position, convertView, parent)
-        // Finally going for ViewHolder after having this on my list since beginning :)
+        // Finally gone for ViewHolder after having this on my list since beginning :)
         // Never create a new view on each call!! see "the world of listview - google io 2010"
         // https://www.youtube.com/watch?v=wDBM6wVEO70&feature=youtu.be&t=7m
+
+        // get corresponding ID as index into full array from position depending on search filter
+        int id;
+        if (idxMap.size() > 0) {
+            id = idxMap.get(position);
+        } else {
+            id = position;
+        }
+
         ViewHolder holder;
         // We should checkout RecyclerView as a more sophisticated replacement for ListView
         // https://stackoverflow.com/questions/21501316/what-is-the-benefit-of-viewholder
@@ -104,31 +119,30 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
             holder = (ViewHolder) convertView.getTag();
         }
 
-        // handle highlighting by contextual action mode
+        // handle highlighting by contextual action mode TODO: do we really need to do it our own?
         if (iList.get(position).isSelected()) {
             convertView.setBackgroundColor(Color.LTGRAY);
         } else {
             convertView.setBackgroundColor(Color.TRANSPARENT);
         }
-        // getView() is called often during scroll, take care of the overhead
+        // getView() is called often during scroll, take care about any overhead
         // We use a listener created ONCE in the activity instead of creating a new one on
         // each call of getView().
-        //ivThumb.setOnClickListener(new thumbClickListener());         // BAD
+        //ivThumb.setOnClickListener(new thumbClickListener());             // BAD
         holder.ivThumb.setOnClickListener(act.myThumbClickListener);        // BETTER
-        holder.ivThumb.setTag(position);
+        holder.ivThumb.setTag(id);                                          // important!
         holder.ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
         holder.ivThumb.setVisibility(View.VISIBLE);
 
         // Rating bar - unfortunately, the "small" versions do not support interaction
         // https://developer.android.com/reference/android/widget/RatingBar.html
         // My initial idea was to make the stars below the thumbnail clickable directly within
-        // the list, but the ratingbar evend does not respond do a simple onClick()
+        // the list, but these ratingbars even do not respond do a simple onClick()
         holder.rbRating.setRating(iList.get(position).getRating());
         //rbRating.setTag(2*MAX_ITEMS + position);
         //rbRating.setOnClickListener(myThumbClickListener);
         //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
 
-        // TODO ivYoutube - bad, better ivVideoTag, so that the marker is set dynamically
         if (iList.get(position).getMedia().equals("youtube")) {
             // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
             holder.ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
@@ -151,7 +165,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
 
         holder.tvExplanation.setText(iList.get(position).getExplanation());
         iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
-        holder.tvExplanation.setTag(act.MAX_ITEMS + position);
+        holder.tvExplanation.setTag(act.MAX_ITEMS + id);                                              //
         holder.tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
         holder.tvExplanation.setMaxLines(act.MAX_ELLIPSED_LINES);
         // and here, we have a friendly listener, which temporarily overwrites that stuff, when
@@ -173,6 +187,8 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         // for some reason, inspection did not warn of this missing interface implementation
         if (filter == null) {
             filter = new spaceItemFilter(filterList, this);
+            //idxMap = filter.getIdxMap();
+            idxMap = filter.idxMap;
         }
         return filter;
     }
@@ -182,5 +198,31 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     public int getCount() {
         return iList.size();
         //return super.getCount();
+    }
+
+    // this might be helpful to get the "original" index from filtered view. That's our way
+    // to work with the idxmap. But this is only useful for listeners, which get passed the ID,
+    // which is not the case for our thumbclicklistener
+    @Override
+    public long getItemId(int position) {
+        if (idxMap.size() > 0) {
+            return idxMap.get(position);
+        } else {
+            return position;
+        }
+        //return super.getItemId(position);
+    }
+
+    /*@Nullable
+    @Override
+    public Object getItem(int position) {
+        return super.getItem(position);
+    }*/
+
+    // some ugly hack to reset the index map, if no filtering is present. This is called
+    // onQueryTextSubmit / onQueryTextChange, if search string is empty. The onClose() listener
+    // for the searc view does not work.
+    public void cleanMap() {
+        idxMap.clear();
     }
 }

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:tools="http://schemas.android.com/tools"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:android="http://schemas.android.com/apk/res/android">
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    tools:context="de.herb64.funinspace.MainActivity">
+    <!-- 23.10.2017 - manually added the tools:context line as in menu_main. The inspection did
+    warn about unused tools namespace... -->
 
     <!-- Strange: the GUI constructs icon as tools:icon which just
     displays uppercase title in the bar as text, while android:icon works as
@@ -19,6 +22,11 @@
         android:icon="@android:drawable/ic_menu_share" />
         <!-- tools:icon="@android:drawable/ic_menu_share" -->
 
+    <!-- Try to make ratingbar appear in contextual action bar, similar
+    to the search view in main bar. See also
+    https://developer.android.com/training/appbar/action-views.html
+    -> giving up on this for now, see code in MainActivity.java
+    app:showAsAction="ifRoom|collapseActionView"-->
     <item
         android:id="@+id/cab_rating"
         android:title="Rating"

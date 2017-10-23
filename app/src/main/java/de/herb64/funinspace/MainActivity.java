@@ -24,6 +24,7 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.AbsListView;
+import android.widget.AdapterView;
 import android.widget.ListView;
 import android.widget.RatingBar;
 import android.support.v7.widget.SearchView;
@@ -85,7 +86,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
     private spaceItem apodItem;                     // the latest item to be fetched
     private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
-    private HashSet<String> itemTitles;             // just containing title strings of items - not used yet
+    //private HashSet<String> itemTitles;             // just containing title strings of items - not used yet
     private LinkedHashMap<String, spaceItem> myMap; // replacement for myList - abandoned
     //private myAdapter adp;
     private spaceAdapter adp;
@@ -114,7 +115,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public native String vA();
 
     // App settings variables from preferences dialog
-    private boolean newestFirst = true;             // sort order for list of space items
+    //private boolean newestFirst = true;             // sort order for list of space items
     private boolean needWifi = false;               // hires loading - only with wifi?
 
     // We go for our CONSTANTS here, this is similar to #define in C for a constant
@@ -159,7 +160,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
         sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
         //newestFirst = sharedPref.getString("item_order", "newest_first").equals("newest_first");
-        newestFirst = true; // we go and remove that, newest always on top!!!
+        //newestFirst = true; // we go and remove that, newest always on top!!!
 
         // TODO solve issue with vector on 4.1 (4.x?) - for now, just dirty workaround...
         // arrow_down_float image only - don't like that, but do it now
@@ -191,10 +192,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // Query GL_MAX_TEXTURE_SIZE by creating an OpenGL context within a separate Activity.
         // Important: returned value maxTextureSize not yet available at onCreate(), although
         // onActivityResult is called and values are correct at later times after finishing
-        // onCreate() and even the Toast wihing onActivityResult shows the correct value.
+        // onCreate() and even the Toast within onActivityResult shows the correct value.
         devInfo = new deviceInfo(getApplicationContext());
 
-        /* hmmm, strange behaviour
+        /* hmmm, strange behaviour when checking for installed packages
         boolean flashInstalled = false;
         try {
             PackageManager pm = getPackageManager();
@@ -208,14 +209,21 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // Prepare the main ListView containing all our Space Items
         myItemsLV = (ListView) findViewById(R.id.lv_content);
 
+        // 23.10.2017 - add another listener to the view which gets passed the ID as long as well
+        // try to get the clicks within filtered view solved without the own mapping of indices
+        // https://developer.android.com/reference/android/widget/AdapterView.OnItemClickListener.html
+        /*myItemsLV.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+                Log.i("HFCM", "onItemClick: pos=" + i + " ID=" + l);
+            }
+        });*/
+
         // --------  Option 1 for  contextual action mode (non multi select) ---------
 
         // LONG CLICK MENU - Option 1 for "non multi select"...
         // needs ActionMode.Callback as well, see code at end of this listing...
         //myItemsLV.setLongClickable(true);
-        // hmmm, it did not work, then setting in layout via xml - worked. removed again, still
-        // works. and above setLongClickable also does not have influence... not sure, why it
-        // now works
         // We also need an action bar
         // https://developer.android.com/design/patterns/actionbar.html
         // https://material.io/guidelines/patterns/selection.html
@@ -225,14 +233,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             public boolean onItemLongClick(AdapterView<?> parent, View v,
                                            int position, long id) {
 
-                // Just for testing and debugging: write a toast
-                //parent.getItemAtPosition(position)
-                String title = myList.get(position).getTitle();
-                String toaster = String.format("Long click on %d, id %d: %s", position, id, title);
-                Toast.makeText(MainActivity.this, toaster, Toast.LENGTH_LONG).show();
-
-                // We like to use "contextual action mode" to be able to select multiple items
-                // https://developer.android.com/guide/topics/ui/menus.html#CAB
                 if (mActionMode != null) {      // avoid unnecessary recreation...
                     return false;
                 }
@@ -241,14 +241,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // better do not cast but use "Support" version of the function
                 mActionMode = MainActivity.this.startSupportActionMode(mActionModeCallback);
                 v.setSelected(true);
-
                 return true;
             }});*/
 
         // --------  Option 2 for  contextual action mode with multiple selections ---------
 
-        // Handling multiple choices - add another listener. Note, that this also responds to
-        // long clicks without using the longclick listener explicitly...
+        // Handling multiple choices - add another listener. Note, that this responds to long clicks
+        // without using the longclick listener explicitly...
         // https://www.youtube.com/watch?v=kyErynku-BM  (Prabeesh R K)
         myItemsLV.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE_MODAL);
         myItemsLV.setMultiChoiceModeListener(new AbsListView.MultiChoiceModeListener() {
@@ -258,28 +257,55 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             @Override
             public void onItemCheckedStateChanged(android.view.ActionMode actionMode,
                                                   int position,
-                                                  long id,
+                                                  long id,      // important!!
                                                   boolean checked) {
+                // the idea: id contains position, if not filtered, else the adapter delivers the
+                // translated position from adapter view into the overall dataset array
                 if (checked) {
-                    selected.add(position);
+                    selected.add((int) id); // position
+                    Log.i("HFCM", "Adding position " + position + " to selected list, id is " + id);
                 } else {
                     // Either object or postion as parameter? here, both are of type int :)
                     // https://stackoverflow.com/questions/4534146/properly-removing-an-integer-from-a-listinteger
-                    selected.remove(Integer.valueOf(position));
+                    selected.remove(Integer.valueOf((int) id));  //position
+                    Log.i("HFCM", "Removing position " + position + " from selected list, id is " + id);
                 }
-                myList.get(position).setSelected(checked);
+                // index correction - how bad is this... we should not have selected state stored
+                // within the spaceitem structure!!!
+                //myList.get(adp.getIdx(position)).setSelected(checked);
+                myList.get((int) id).setSelected(checked);
                 adp.notifyDataSetChanged();
             }
 
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
+                Log.i("HFCM", "onCreateActionMode() called");
                 selected = new ArrayList<>();
-                return true;
+
+                // Trying to display the RatingBar within CAB, similar to search in main bar
+                // https://developer.android.com/training/appbar/action-views.html
+                // https://stackoverflow.com/questions/26415468/how-do-i-create-a-search-field-in-a-contextual-action-bar
+
+                // Problems with this, so compare with onCreateOptionsMenu - even that code does
+                // not work in this context. The MenuItem structure looks completely different
+                // to the one in onCreateOptionsMenu - looks like here another MenuItem interface
+                // is used...
+                //MenuItem searchItem = menu.findItem(R.id.action_search);
+                //SearchView sv = (SearchView) searchItem.getActionView();   // returns null always
+
+                // onCreateOptionsMenu code comparison here
+                //getMenuInflater().inflate(R.menu.menu_main, menu);
+                //MenuItem searchItem = menu.findItem(R.id.action_search);
+                //SearchView sv = (SearchView) searchItem.getActionView();
+
+                return true;        // important, otherwise no selection of items!
             }
 
             @Override
             public boolean onPrepareActionMode(android.view.ActionMode actionMode, Menu menu) {
+                //rb.requestFocus();
+                //return true;
                 return false;
             }
 
@@ -297,6 +323,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         // Within ArrayList - removal from back to front is essential!!
                         Collections.sort(selected, Collections.<Integer>reverseOrder());
                         for (int idx : selected) {
+                            // TODO: does not yet remove from filtered view from search. After
+                            // closing search view, the elements are gone. So here, we need the
+                            // indices into the filtered view as well :)
                             adp.remove(myList.get(idx));
                             adp.notifyDataSetChanged();     // TODO set notifychanged automatically
                             // TODO: remove from json and rewrite
@@ -339,7 +368,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
             @Override
             public void onDestroyActionMode(android.view.ActionMode actionMode) {
-                // make sure to reset all selected items
+                // make sure to reset all selected items - I do not think it is good to have
+                // an extra field in the spaceItem structure to reflect the status, as done now
                 for (int idx = 0; idx < myList.size(); idx++) {
                     myList.get(idx).setSelected(false);
                 }
@@ -352,27 +382,29 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         myRatingChangeListener = new ratingChangeListener();
 
         myList = new ArrayList<> ();
-        itemTitles = new HashSet<>();
+        //itemTitles = new HashSet<>();
         //adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
         adp = new spaceAdapter(getApplicationContext(), MainActivity.this, R.layout.space_item, myList);
-        myItemsLV.setAdapter(adp);              // the "good old" arrayadapter
-        // old stuff from trying Adapter to work with LinkedHashMap
-        //myMap = new LinkedHashMap<>();
-        //hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
-        //myItemsLV.setAdapter(hashadp);        // the linkedhashmap version - currenty abandoned
+        myItemsLV.setAdapter(adp);
+
+        /*old stuff from trying Adapter to work with LinkedHashMap
+        myMap = new LinkedHashMap<>();
+        hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
+        myItemsLV.setAdapter(hashadp);        // linkedhashmap version - now abandoned*/
 
         // TODO  - cleanup all the search/filtering stuff....
-        // SearchView - this is defined in XML, but set to "GONE" by default. When search is
-        // requested, this is shown above the listview.
+        // SearchView - this had been in XML, but set to "GONE" by default. When search is
+        // requested, this was originally shown above the listview. This has been changed to show
+        // the SearchView within the App Bar. See about custom filters etc..
+        // Search View as a menu item.. See code in onCreateOptionsMenu()
         // https://www.youtube.com/watch?v=c9yC8XGaSv4
-        // custom filters etc.. this one seems to be for us
         // https://www.youtube.com/watch?v=YnNpwk_Q9d0
-        // See also
         // https://www.youtube.com/watch?v=9OWmnYPX1uc
-        // Search View as a menu item.. See code in onCreateOptionsMenu() below...
-        //mySearch = (SearchView) findViewById(R.id.sv_search);   // remove from the layout!!!
-        //mySearch.setVisibility(View.GONE);
-        /*mySearch.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+
+        /* The old code: SearchView within our content_main layout, that showed up on request
+        mySearch = (SearchView) findViewById(R.id.sv_search);
+        mySearch.setVisibility(View.GONE);
+        mySearch.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String s) {
                 adp.getFilter().filter(s);
@@ -501,10 +533,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // This is called, if Rating Dialog OK button has been pressed
     @Override
     public void updateRating(int rating, ArrayList<Integer> selected) {
-        //ArrayList<String> titles = new ArrayList<>();
         HashSet<String> titles = new HashSet<>();
-
         for (int idx : selected) {
+            //myList.get(adp.getIdx(idx)).setRating(rating);
             myList.get(idx).setRating(rating);
             titles.add(myList.get(idx).getTitle());
         }
@@ -551,10 +582,15 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
     // GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
     /*
-     * TODO: recheck again, VERY IMPORTANT!!!, also in terms of splitting large code with inner classes into smaller segments, as with my spaceItemFilter (22.10.2017)
+     * TODO: VERY IMPORTANT!!!
+     * also in terms of splitting large code with inner classes into smaller segments, as with my spaceItemFilter (22.10.2017)
      * https://medium.com/freenet-engineering/memory-leaks-in-android-identify-treat-and-avoid-d0b1233acc8
      * making apodTask static to eliminate implicit reference does not allow access to apodItem
      * any more. So we need a constructor
+     * and see
+     * https://stackoverflow.com/questions/10864853/when-exactly-is-it-leak-safe-to-use-anonymous-inner-classes
+     * https://blog.androidcafe.in/android-memory-leak-part-1-context-85cebdc97ab3
+     * http://simonvt.net/2014/04/17/asynctask-is-bad-and-you-should-feel-bad/
      */
     private class apodTask extends AsyncTask<String, String, String> {
         private String imgUrl;
@@ -933,10 +969,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 return;
             }*/
 
-            // "Good old ugly?" version just iterating all items in ArrayList. This is ok, because
-            // first item should match, because latest image is on top of the list.
-            // already been loaded before. In our case, it just depends on the order of search :)
-            // TODO: why not skip that and allow for duplicate title strings?
+            // "Good old ugly?" version just iterating all items in ArrayList. This is ok. The first
+            // item should match anyway, because latest image is on top of the list.
             for(int i=0; i<myList.size();i++) {
                 if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
                     // TODO here's the point to check, if the thumbnail file exists, and if not
@@ -954,7 +988,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // have a prepared "not found image thumbnail" for these cases...
             if (bitmap != null) {
                 File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
-                // TODO: make it RGB565 to save memory and work on not loading all images permanently into memory
                 Bitmap thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
                 FileOutputStream outstream = null;
                 try {
@@ -1012,35 +1045,26 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // next, this needs to be rewritten to internal storage
             utils.writef(getApplicationContext(), localJson, outString);
 
-            // add our new entry to the spaceItem list and notify the Adapter
+            // add our new entry to the spaceItem list and notify the Adapter - old hash adapter
             //myMap.put(apodItem.getTitle(), apodItem);
             //hashadp.notifyDataSetChanged();
 
-            if (newestFirst) {
-                myList.add(0, apodItem);
-            } else {
-                myList.add(apodItem);
-            }
+            myList.add(0, apodItem);
             adp.notifyDataSetChanged();
 
             Toast.makeText(MainActivity.this, R.string.apod_load,
                     Toast.LENGTH_LONG).show();
-            // scroll to the new space Item in the list, that has been loaded
-            if (newestFirst) {
-                myItemsLV.setSelection(0);
-            } else {
-                myItemsLV.setSelection(adp.getCount() -1);
-            }
+            // scroll to top of list with new item
+            myItemsLV.setSelection(0);
         }
     }
 
-    // Listen to any rating bar changes
-    // Strange: does not get called at all, but works, if changing in xml
-    // style="@style/Widget.AppCompat.RatingBar" - works
-    // from
-    // style="@style/Widget.AppCompat.RatingBar.Small" - fails
-    // same with device default bars: small versions do not call the listener!!
-    // YEAH, the "small" versions are designed to ignore any interaction - hmmmm, very bad for me
+    /*
+     *Listener for rating bar changes - useless for me, because I use "small" bars
+     *style="@style/Widget.AppCompat.RatingBar" - works
+     *style="@style/Widget.AppCompat.RatingBar.Small" - fails
+     * >> "small" versions are designed to ignore any interaction, see Android docs
+     */
     private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
         @Override
         public void onRatingChanged(RatingBar ratingBar, float v, boolean b) {
@@ -1062,15 +1086,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         @Override
         public void onClick(View view) {
             int idx = (int) view.getTag();
-
-            // 20000+ - rating bars, but this actually does not work, because the small versions
-            // do not support interaction. See links at other places in this code
-            /*if (idx >= 2*MAX_ITEMS) {
+            /* Can't use this, because "small" ratingbars do not support interaction. So going
+               for a separate dialog to set rating for items selected via contextual action mode
+            if (idx >= 2*MAX_ITEMS) {
                 RatingBar rb = (RatingBar) view;
-                Toast.makeText(MainActivity.this, "Rating value is " + rb.getRating(),
-                        Toast.LENGTH_LONG).show();
             }*/
-
             // bad hack: index i+MAX_ITEMS is corresponding textview for thumbnail on index i
             if (idx >= MAX_ITEMS) {
                 // we just reset the maxlines to a larger limit and remove the ellipse stuff. This
@@ -1088,7 +1108,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     v.setMaxLines(MAX_ELLIPSED_LINES);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
                 }
-                myItemsLV.setSelection(idx-MAX_ITEMS);
+                myItemsLV.setSelection(idx-MAX_ITEMS);  // selected item to top of view
                 return;
             }
 
@@ -1333,7 +1353,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 //String order = shPref.getString("item_order", "newest_first");
                 //String returnedorder = data.getStringExtra("order");    // TODO
                 //newestFirst = order.equals("newest_first");
-                newestFirst = true;
+                //newestFirst = true;
             }
         }
     }
@@ -1355,22 +1375,43 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 }
             };
 
+    /*
+     * The options menu is the primary Application menu. Do not confuse with "settings" dialog.
+     * It is called during startup of the activity once.
+     */
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
         // 22.10.2017 - search
         MenuItem searchItem = menu.findItem(R.id.action_search);
-        SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem);
+        //SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem); // deprecated
+        SearchView sv = (SearchView) searchItem.getActionView();
+
+        // on close listener does not work at all
+        sv.setOnCloseListener(new SearchView.OnCloseListener() {
+            @Override
+            public boolean onClose() {
+                Log.i("HFCM", "onClose() for Searchview reached");
+                return false;
+            }
+        });
+
         sv.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String s) {
+                if (s.length() == 0) {
+                    adp.cleanMap();
+                }
                 adp.getFilter().filter(s);
                 return false;
             }
 
             @Override
             public boolean onQueryTextChange(String s) {
+                if (s.length() == 0) {
+                    adp.cleanMap();
+                }
                 adp.getFilter().filter(s);
                 return false;
             }
@@ -1379,7 +1420,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     }
 
     /*
-     * This code handles selections from the menu bar
+     * This code handles selections from the menu bar. Contents are defined in menu_main.xml.
+     * Note, that action_search is defined in menu_main.xml as well, with following parameters:
+     * app:showAsAction="ifRoom|collapseActionView"
+     * app:actionViewClass="android.support.v7.widget.SearchView"
+     * This is handled by actionViewClass
      */
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
@@ -1530,16 +1575,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         String strMedia = "";
         String strHiSize = "";
         String strLowSize = "";
-        // The newest first option has been disabled, we now always display the newest item first!
-        //int i;
-        //for (int k = 0; k < parent.length(); k++) {
+        // The newest first option has been disabled, we now always display the newest items first
         for (int i = parent.length()-1; i >=0 ; i--)
         {
-            /*if (newestFirst) {
-                i = parent.length() - 1 -k;
-            } else {
-                i = k;
-            }*/
             try {
                 obj = parent.getJSONObject(i);
             } catch (JSONException e) {

@@ -1,7 +1,10 @@
 package de.herb64.funinspace;
 
+import android.util.SparseIntArray;
 import android.widget.Filter;
 import java.util.ArrayList;
+import java.util.HashMap;
+
 import de.herb64.funinspace.models.spaceItem;
 
 /**
@@ -11,14 +14,18 @@ import de.herb64.funinspace.models.spaceItem;
 
 public class spaceItemFilter extends Filter {
 
-    //Context ctx;
     private ArrayList<spaceItem> filterList;
     private spaceAdapter adapter;
+    protected SparseIntArray idxMap;     // TIP: SparseIntArray preferred for efficiency over HashMap
 
     // Constructor
     public spaceItemFilter(ArrayList<spaceItem> filterList, spaceAdapter adapter) {
         this.filterList = filterList;
         this.adapter = adapter;
+        this.idxMap = new SparseIntArray();
+        for (int i = 0; i< filterList.size(); i++) {
+            idxMap.append(i, i);
+        }
     }
 
     @Override
@@ -27,9 +34,12 @@ public class spaceItemFilter extends Filter {
         if (filterTerm != null && filterTerm.length() > 0) {
             filterTerm = filterTerm.toString().toUpperCase();
             ArrayList<spaceItem> filteredItems = new ArrayList<>();
+            idxMap.clear();
+            int key = 0;
             for (int i = 0; i< filterList.size(); i++) {
                 if (filterList.get(i).getTitle().toUpperCase().contains(filterTerm)) {
                     filteredItems.add(filterList.get(i));
+                    idxMap.append(key++, i);
                 }
             }
             results.count = filteredItems.size();
@@ -46,4 +56,8 @@ public class spaceItemFilter extends Filter {
         adapter.iList = (ArrayList<spaceItem>) filterResults.values;
         adapter.notifyDataSetChanged();
     }
+
+    /*protected SparseIntArray getIdxMap() {
+        return idxMap;
+    }*/
 }
