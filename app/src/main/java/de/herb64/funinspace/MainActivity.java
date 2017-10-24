@@ -15,7 +15,6 @@ import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.view.ActionMode;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
@@ -51,7 +50,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 
@@ -80,7 +78,10 @@ import de.herb64.funinspace.models.spaceItem;
 //       might be an option. But take care, because
 //       on 10.10.2017, it failed, although link was ok - network issue most likely, CHECK!!!
 
-public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener {
+/*
+ * The MainActivity Class for FunInSpace
+ */
+public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener, jsonLoad.AsyncResponse {
 
     private spaceItem apodItem;                     // the latest item to be fetched
     private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
@@ -107,17 +108,17 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     }
     public native String yT();
     public native String nS();
-    public native String vA();
+    public native String vA();                      // vimeo
 
     // App settings variables from preferences dialog
-    private boolean needWifi = false;               // hires loading - only with wifi?
+    //private boolean needWifi = false;               // hires loading - only with wifi?
 
     // We go for our CONSTANTS here, this is similar to #define in C for a constant
     //public static String TAG = MainActivity.class.getSimpleName();
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
-    // changed to other location on 13.10.2017 into testing folder
+    // changed to other location on 13.10.2017 into testing folder on my dropbox
     private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
     //private static final int KIB = 1024;
     //private static final int MIB = 1024 * KIB;
@@ -160,11 +161,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // arrow_down_float image only - don't like that, but do it now
         // Drawable for textview - use builtin in "android.R...." - now use SVG graphic via xml
         // https://stackoverflow.com/questions/29041027/android-getresources-getdrawable-deprecated-api-22
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            expl_points = ContextCompat.getDrawable(this, R.drawable.hfcm);
-        } else {
-            expl_points = ContextCompat.getDrawable(this, android.R.drawable.arrow_down_float);
-        }
         // https://medium.com/@chrisbanes/appcompat-v23-2-age-of-the-vectors-91cbafa87c88
         // - vectorDrawables.useSupportLibrary = true >> already in build.gradle
         // - setting "app:srcCompat="@drawable/hfcm" in spaceitem textview xml also does not help
@@ -172,6 +168,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // on 4.1 AVD....
         // https://stackoverflow.com/questions/39091521/vector-drawables-flag-doesnt-work-on-support-library-24
         // https://developer.android.com/topic/libraries/support-library/features.html
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            expl_points = ContextCompat.getDrawable(this, R.drawable.hfcm);
+        } else {
+            expl_points = ContextCompat.getDrawable(this, android.R.drawable.arrow_down_float);
+        }
 
         /*FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -189,17 +190,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // onCreate() and even the Toast within onActivityResult shows the correct value.
         devInfo = new deviceInfo(getApplicationContext());
 
-        /* hmmm, strange behaviour when checking for installed packages
-        boolean flashInstalled = false;
-        try {
-            PackageManager pm = getPackageManager();
-            ApplicationInfo ai = pm.getApplicationInfo("com.adobe.flashplayer", 0);
-            if (ai != null)
-                flashInstalled = true;
-        } catch (PackageManager.NameNotFoundException e) {
-            flashInstalled = false;
-        }*/
-
         // Prepare the main ListView containing all our Space Items
         myItemsLV = (ListView) findViewById(R.id.lv_content);
 
@@ -214,7 +204,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         });*/
 
         // --------  Option 1 for  contextual action mode (non multi select) ---------
-
         // LONG CLICK MENU - Option 1 for "non multi select"...
         // needs ActionMode.Callback as well, see code at end of this listing...
         //myItemsLV.setLongClickable(true);
@@ -239,7 +228,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             }});*/
 
         // --------  Option 2 for  contextual action mode with multiple selections ---------
-
         // Handling multiple choices - add another listener. Note, that this responds to long clicks
         // without using the longclick listener explicitly...
         // https://www.youtube.com/watch?v=kyErynku-BM  (Prabeesh R K)
@@ -300,7 +288,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // selected SpaceItems in our listview
             @Override
             public boolean onActionItemClicked(android.view.ActionMode actionMode, MenuItem menuItem) {
-                //return false;
                 switch (menuItem.getItemId()) {
                     case R.id.cab_delete:
                         new dialogDisplay(MainActivity.this, "This currently only deletes items for testing from the shown list. " +
@@ -317,6 +304,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                             // TODO: make this permanent in Json file - but first we need to have
                             // the sync with dropbox implemented to be able to recreate entries
                             // what about an UNDO function?
+                            // AND: we should also remove thumbnail.jpg from internal storage!!
                         }
                         actionMode.finish();
                         return true;
@@ -337,9 +325,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         Bundle fragArguments = new Bundle();    // AGAIN: do NOT use non default constructor with fragments!
                         fragArguments.putIntegerArrayList("indices", selected);
                         int current = 0;
-                        for (int i=0; i<selected.size();i++) {
-                            if (myList.get(selected.get(i)).getRating() > current) {
-                                current = myList.get(selected.get(i)).getRating();
+                        for (int i : selected) {
+                            if (myList.get(i).getRating() > current) {
+                                current = myList.get(i).getRating();
+                        //for (int i=0; i<selected.size();i++) {
+                            //if (myList.get(selected.get(i)).getRating() > current) {
+                                //current = myList.get(selected.get(i)).getRating();
                             }
                         }
                         fragArguments.putInt("current_rating", current);
@@ -356,12 +347,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
             @Override
             public void onDestroyActionMode(android.view.ActionMode actionMode) {
-                // make sure to reset all selected items - I do not think it is good to have
-                // an extra field in the spaceItem structure to reflect the status, as done now
-                for (int idx = 0; idx < myList.size(); idx++) {
-                    myList.get(idx).setSelected(false);
+                // reset selection status for all items
+                for (int i : selected) {
+                    myList.get(i).setSelected(false);
                 }
-                //mActionMode = null;
+                //for (int idx = 0; idx < myList.size(); idx++) {
+                //    myList.get(idx).setSelected(false);
+                //}
             }
         });
 
@@ -906,6 +898,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // TODO - about returning values from asynctask !!!
     // TODO - seems to work with execute().get()  but it blocks!!! - search topic: wait for asynctask to complete
     // ++++   >>>  https://stackoverflow.com/questions/12575068/how-to-get-the-result-of-onpostexecute-to-main-activity-because-asynctask-is-a
+    // jsonLoad.java is one of the results of this - now still make sure about memory leaks!!!!
     private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
         @Override
         protected Bitmap doInBackground(String... params) {
@@ -1014,7 +1007,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    /*
+    /* N O T E:   T H I S   I S   N O T   A C T I V E
      *Listener for rating bar changes - useless for me, because I use "small" bars
      *style="@style/Widget.AppCompat.RatingBar" - works
      *style="@style/Widget.AppCompat.RatingBar.Small" - fails
@@ -1289,7 +1282,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // Check for any changed preference items, which have been marked by the listener.
                 if (thumbQualityChanged) {
                     SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
-                    Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
+                    //Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
                     thumbQualityChanged = false;    // RESET !!!
                     // Reload the complete list with all local thumbnails
                     myList.clear();
@@ -1300,18 +1293,24 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // Try to listen for changed preferences here. Important: this one reacts IMMEDIATELY!!!
-    // This means, if changing a preference and this might trigger a longer action, it could
-    // get bad if user toggles that switch. The onActivityResult() method reacting on SETTINGS_REQUEST
-    // is called AFTER the settings dialog activity is closed.
+    // Try to listen for changed preferences here. Important: this is called after each single
+    // change IMMEDIATELY.
+    // This means, if changing a preference that might trigger a more expensive action, it could
+    // get bad if user toggles that switch and in the end closes the dialog without any effective
+    // change.
+    // The onActivityResult() method reacting on SETTINGS_REQUEST is called AFTER the settings
+    // dialog activity is closed and might be a better place to handle changes. The following
+    // code solves this by using "change flags"
     SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener = new
             SharedPreferences.OnSharedPreferenceChangeListener() {
                 @Override
                 public void onSharedPreferenceChanged(SharedPreferences sharedPreferences,
                                                       String changed) {
                     if (changed.equals("rgb565_thumbs")) {
-                        // on each switch toggle, we invert the value. Final value is checked in
-                        // onActivityResult() to determine, if an action is needed
+                        // On each switch toggle, we invert the value without immediately starting
+                        // any action. The final value is checked in onActivityResult()
+                        // to determine, if an action is needed based on the value of this setting
+                        // after the user has closed the dialog.
                         thumbQualityChanged ^= true;
                     }
                 }
@@ -1325,19 +1324,18 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
-        // 22.10.2017 - search
-        MenuItem searchItem = menu.findItem(R.id.action_search);
+        MenuItem searchItem = menu.findItem(R.id.action_search); // 22.10.2017 - add
         //SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem); // deprecated
         SearchView sv = (SearchView) searchItem.getActionView();
 
-        // on close listener does not work at all
-        sv.setOnCloseListener(new SearchView.OnCloseListener() {
+        // on close listener does not work at all - see also discussions on web. I now use the
+        // current search string length = 0 to detect, that the search is closed and that the list
+        // is not filtered again.
+        /*sv.setOnCloseListener(new SearchView.OnCloseListener() {
             @Override
             public boolean onClose() {
-                Log.i("HFCM", "onClose() for Searchview reached");
-                return false;
             }
-        });
+        });*/
 
         sv.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
@@ -1398,14 +1396,29 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         if (id == R.id.action_help) {
             return true;
         }
-        // Sync metatata with dropbox. For now: just overwrite everything, This allows to refresh
-        // without a new installation.
-        // might be a merge, keeping local infos about ratings ... if not dropping this at all
+        // Sync metatata with dropbox. This allows to refresh without a new installation.
+        // do a merge, keeping local infos about ratings and just reloading what is needed
         if (id == R.id.dropbox_sync) {
-            new dialogDisplay(MainActivity.this, "Sync from dropbox without reinstallation of the App", "To be implemented");
+            // create jsonLoad class instance - this returns immediately and the processFinish()
+            // implementation of jsonLoad is called after the async load is done
+            new jsonLoad(this).execute(DROPBOX_JSON);
+
+            /* Old code with inner class - dropped that to implement interface in MainActivity
+            jsonLoad(new jsonLoad.AsyncResponse() {
+                @Override
+                public void processFinish(Object output) {
+                    ....
+                }
+            }).execute("url to load");*/
             return true;
         }
-        return super.onOptionsItemSelected(item);
+
+        // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
+        //      using overflow menu while having the SearchView open - this was really nasty
+        // GOOD return values here:
+        // true  --> Event Consumed here, so should not be forwarded for other event
+        // false --> Forward for other event to get consumed, we use this if we did not handle it
+        return false;
     }
 
     // TODO - memory trim
@@ -1703,6 +1716,44 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             adp.notifyDataSetChanged();
         }
     }
+
+    /*
+     * Testing jsonLoad class - this is implementation of interface for this class. This is called
+     * when the jsonLoad class has finished retrieving the json data.
+     */
+    @Override
+    public void processFinish(Object output) {
+        if (output != null && output instanceof JSONArray) {
+            // for now, just overwrite existing data by brute force, which means
+            // 1. metadata on the device which is not on dropbox is lost - could be restored from local nasa json info, if already stored (timestamp.json)
+            // 2. deleted items are loaded again - no problem, because deletes are not yet persistent yet, but also later: how to determine, why not to restore an item?
+            // 3. personal ratings stored on device are overwritten with dropbox content - easy to solve
+            // 4. what about thumbnail images in internal storage?
+            // issues 1,3 can be solved by a correct merge operation
+            JSONArray temp;
+            temp = (JSONArray) output;
+            parent = temp;
+            myList.clear();
+            addItems();
+            checkMissingThumbs();
+            adp.notifyDataSetChanged();
+            // the next one is really challenging - just kicking of a new apod task...
+            new apodTask().execute(nS());
+            // NOTE: the latest apod might be missing now, so a reload is necessary. This is not
+            //       needed if we really perform a smooth merge...
+        } else {
+            new dialogDisplay(MainActivity.this, "Herb's Dropbox resync did not return a valid JSON Array Structure, no reload was done", "Dropbox resync");
+        }
+        // recursive call is a really bad idea :) (tested and found that non json is recognized)
+        // new jsonLoad(this).execute("some url");
+    }
+
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    //  O L D    C O D E   J U S T   K E P T   H E R E
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
     // This is only used in combination with long click listener. It is not needed with multiple
     // choice variant, which does implement these functions in "MultiChoiceModeListener"

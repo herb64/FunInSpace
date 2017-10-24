@@ -54,4 +54,17 @@ public final class utils {
             e.printStackTrace();
         }
     }
+
+    ///////////////// J U S T   S O M E   J U N K  /////////////////////////////////////////////////
+    // stuff to check
+    /* hmmm, strange behaviour when checking for installed packages
+        boolean flashInstalled = false;
+        try {
+            PackageManager pm = getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo("com.adobe.flashplayer", 0);
+            if (ai != null)
+                flashInstalled = true;
+        } catch (PackageManager.NameNotFoundException e) {
+            flashInstalled = false;
+        }*/
 }

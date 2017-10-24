@@ -105,4 +105,6 @@
     <string name="pref_title_wifi_required"> Load Hires with Wifi only</string>
     <string name="newest_first">newest_first</string>
     <string name="enable_tls"><![CDATA[Please enable TLS v1 in Settings > General]]></string>
+    <string name="lowres_fallback">Fall back to lower resolution image if NASA has a bad link for hires image, which happens from time to time</string>
+    <string name="fallback_lowres_title">Fallback to lowres (NOT YET ACTIVE)</string>
 </resources>

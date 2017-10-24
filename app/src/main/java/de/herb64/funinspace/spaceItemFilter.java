@@ -3,7 +3,6 @@ package de.herb64.funinspace;
 import android.util.SparseIntArray;
 import android.widget.Filter;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 import de.herb64.funinspace.models.spaceItem;
 

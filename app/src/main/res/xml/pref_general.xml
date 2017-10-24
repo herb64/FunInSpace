@@ -39,6 +39,12 @@
         android:summary="Use lower color resolution Thumbnail pictures to save memory"
         android:title="Thumbnail color quality" />
 
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="fallback_to_lowres"
+        android:summary="@string/lowres_fallback"
+        android:title="@string/fallback_lowres_title" />
+
     <!--
     <SwitchPreference
         android:defaultValue="true"

@@ -19,7 +19,7 @@
         android:orderInCategory="96"
         android:title="@string/action_settings"
         android:icon="@android:drawable/ic_menu_preferences"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="always" />
     <item
         android:id="@+id/action_help"
         android:orderInCategory="99"
@@ -34,7 +34,7 @@
         android:id="@+id/action_search"
         android:title="Search"
         android:icon="@android:drawable/ic_menu_search"
-        app:showAsAction="ifRoom|collapseActionView"
+        app:showAsAction="always|collapseActionView"
         app:actionViewClass="android.support.v7.widget.SearchView"/>
 
     <!-- This is for resync with dropbox metadata json. Most likely not part of final version
@@ -43,6 +43,6 @@
         android:id="@+id/dropbox_sync"
         android:orderInCategory="92"
         android:title="Refresh content"
-        app:showAsAction="ifRoom"
+        app:showAsAction="always"
         android:icon="@android:drawable/ic_popup_sync" />
 </menu>
