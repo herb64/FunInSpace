@@ -56,8 +56,4 @@ public class spaceItemFilter extends Filter {
         adapter.iList = (ArrayList<spaceItem>) filterResults.values;
         adapter.notifyDataSetChanged();
     }
-
-    /*protected SparseIntArray getIdxMap() {
-        return idxMap;
-    }*/
 }

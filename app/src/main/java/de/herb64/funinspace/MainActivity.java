@@ -14,7 +14,6 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
-import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.view.ActionMode;
 import android.support.v7.widget.Toolbar;
@@ -24,7 +23,6 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.AbsListView;
-import android.widget.AdapterView;
 import android.widget.ListView;
 import android.widget.RatingBar;
 import android.support.v7.widget.SearchView;
@@ -86,9 +84,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
     private spaceItem apodItem;                     // the latest item to be fetched
     private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
-    //private HashSet<String> itemTitles;             // just containing title strings of items - not used yet
-    private LinkedHashMap<String, spaceItem> myMap; // replacement for myList - abandoned
-    //private myAdapter adp;
+    //private LinkedHashMap<String, spaceItem> myMap; // replacement for myList - abandoned
     private spaceAdapter adp;
     private JSONArray parent;
     private String jsonData;
@@ -96,13 +92,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     protected thumbClickListener myThumbClickListener;
     private ratingChangeListener myRatingChangeListener;
     private ListView myItemsLV;
-    private SearchView mySearch;
     private deviceInfo devInfo;
     private int maxTextureSize = 999;   // TODO clean this, just to check the 999 was ok - still seems to be found, see Nathan
     private String lastImage;           // for log dialog title
     private Locale loc;
     protected Drawable expl_points;
-    private ActionMode mActionMode = null;
+    //private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
     private boolean thumbQualityChanged = false;    // indicate preference setting change
 
@@ -115,7 +110,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public native String vA();
 
     // App settings variables from preferences dialog
-    //private boolean newestFirst = true;             // sort order for list of space items
     private boolean needWifi = false;               // hires loading - only with wifi?
 
     // We go for our CONSTANTS here, this is similar to #define in C for a constant
@@ -251,28 +245,22 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // https://www.youtube.com/watch?v=kyErynku-BM  (Prabeesh R K)
         myItemsLV.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE_MODAL);
         myItemsLV.setMultiChoiceModeListener(new AbsListView.MultiChoiceModeListener() {
-            // keep track of selected position values
-            private ArrayList<Integer> selected;
+            private ArrayList<Integer> selected;    // keep track of selected items
 
             @Override
             public void onItemCheckedStateChanged(android.view.ActionMode actionMode,
                                                   int position,
-                                                  long id,      // important!!
+                                                  long id,
                                                   boolean checked) {
-                // the idea: id contains position, if not filtered, else the adapter delivers the
-                // translated position from adapter view into the overall dataset array
+                // IMPORTANT: ID always contains index in FULL dataset. See spaceAdapter.getItemId()
+                // POSITION is the index within the CURRENTLY presented view, which may be filtered
                 if (checked) {
-                    selected.add((int) id); // position
-                    Log.i("HFCM", "Adding position " + position + " to selected list, id is " + id);
+                    selected.add((int) id);
                 } else {
-                    // Either object or postion as parameter? here, both are of type int :)
+                    // Either object or position as parameter? here, both are of type int :)
                     // https://stackoverflow.com/questions/4534146/properly-removing-an-integer-from-a-listinteger
-                    selected.remove(Integer.valueOf((int) id));  //position
-                    Log.i("HFCM", "Removing position " + position + " from selected list, id is " + id);
+                    selected.remove(Integer.valueOf((int) id));
                 }
-                // index correction - how bad is this... we should not have selected state stored
-                // within the spaceitem structure!!!
-                //myList.get(adp.getIdx(position)).setSelected(checked);
                 myList.get((int) id).setSelected(checked);
                 adp.notifyDataSetChanged();
             }
@@ -280,26 +268,25 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
-                Log.i("HFCM", "onCreateActionMode() called");
                 selected = new ArrayList<>();
 
-                // Trying to display the RatingBar within CAB, similar to search in main bar
+                /* Just for keeping track of actions
+                // Trying to display the RatingBar within CAB, similar to SearchView in main bar
                 // https://developer.android.com/training/appbar/action-views.html
                 // https://stackoverflow.com/questions/26415468/how-do-i-create-a-search-field-in-a-contextual-action-bar
-
                 // Problems with this, so compare with onCreateOptionsMenu - even that code does
                 // not work in this context. The MenuItem structure looks completely different
                 // to the one in onCreateOptionsMenu - looks like here another MenuItem interface
-                // is used...
-                //MenuItem searchItem = menu.findItem(R.id.action_search);
-                //SearchView sv = (SearchView) searchItem.getActionView();   // returns null always
-
-                // onCreateOptionsMenu code comparison here
+                // is used... getActionView() always returns null
+                MenuItem searchItem = menu.findItem(R.id.action_search);
+                SearchView sv = (SearchView) searchItem.getActionView();
+                // code from onCreateOptionsMenu for comparison - same code - different result
                 //getMenuInflater().inflate(R.menu.menu_main, menu);
                 //MenuItem searchItem = menu.findItem(R.id.action_search);
                 //SearchView sv = (SearchView) searchItem.getActionView();
+                */
 
-                return true;        // important, otherwise no selection of items!
+                return true; // important, otherwise no selection of items!
             }
 
             @Override
@@ -316,19 +303,20 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 //return false;
                 switch (menuItem.getItemId()) {
                     case R.id.cab_delete:
-                        // TODO need to remove from json as well to make it permanent... undo???
                         new dialogDisplay(MainActivity.this, "This currently only deletes items for testing from the shown list. " +
                                 "This is not yet persistent, and restart of the App loads all deleted items again.", "Don't panic...");
-
                         // Within ArrayList - removal from back to front is essential!!
                         Collections.sort(selected, Collections.<Integer>reverseOrder());
                         for (int idx : selected) {
-                            // TODO: does not yet remove from filtered view from search. After
-                            // closing search view, the elements are gone. So here, we need the
-                            // indices into the filtered view as well :)
+                            // spaceAdapter.remove() has been overwritten, so that it deletes the
+                            // image in the full ArrayList plus (if filtered view) in the currently
+                            // presented view as well.
                             adp.remove(myList.get(idx));
-                            adp.notifyDataSetChanged();     // TODO set notifychanged automatically
-                            // TODO: remove from json and rewrite
+                            // adp.setNotifyOnChange(true); // TODO - test this for auto notify ?
+                            adp.notifyDataSetChanged();
+                            // TODO: make this permanent in Json file - but first we need to have
+                            // the sync with dropbox implemented to be able to recreate entries
+                            // what about an UNDO function?
                         }
                         actionMode.finish();
                         return true;
@@ -373,7 +361,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 for (int idx = 0; idx < myList.size(); idx++) {
                     myList.get(idx).setSelected(false);
                 }
-                mActionMode = null;
+                //mActionMode = null;
             }
         });
 
@@ -382,26 +370,25 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         myRatingChangeListener = new ratingChangeListener();
 
         myList = new ArrayList<> ();
-        //itemTitles = new HashSet<>();
         //adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
-        adp = new spaceAdapter(getApplicationContext(), MainActivity.this, R.layout.space_item, myList);
+        adp = new spaceAdapter(getApplicationContext(), MainActivity.this,
+                R.layout.space_item, myList);
         myItemsLV.setAdapter(adp);
 
-        /*old stuff from trying Adapter to work with LinkedHashMap
+        /* Old stuff in onCreate() from tests with Adapter to work with LinkedHashMap
         myMap = new LinkedHashMap<>();
         hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
-        myItemsLV.setAdapter(hashadp);        // linkedhashmap version - now abandoned*/
+        myItemsLV.setAdapter(hashadp);        // linkedhashmap version - now abandoned
 
-        // TODO  - cleanup all the search/filtering stuff....
-        // SearchView - this had been in XML, but set to "GONE" by default. When search is
+        // SearchView - this had been defined in XML, but set to "GONE" by default. When search is
         // requested, this was originally shown above the listview. This has been changed to show
-        // the SearchView within the App Bar. See about custom filters etc..
-        // Search View as a menu item.. See code in onCreateOptionsMenu()
+        // the SearchView within the App Bar. See "SearchView" as a menu item..
+        // See code in onCreateOptionsMenu()
         // https://www.youtube.com/watch?v=c9yC8XGaSv4
         // https://www.youtube.com/watch?v=YnNpwk_Q9d0
         // https://www.youtube.com/watch?v=9OWmnYPX1uc
 
-        /* The old code: SearchView within our content_main layout, that showed up on request
+        // The old code: SearchView within our content_main layout, that showed up on request
         mySearch = (SearchView) findViewById(R.id.sv_search);
         mySearch.setVisibility(View.GONE);
         mySearch.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
@@ -420,8 +407,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         });*/
 
         if (savedInstanceState != null) {
-            // The spaceItem internal structure and the json data string are restored
-            // on Android 8.0 this fails with Transaction Too Large error, so we do not put this
+            // The spaceItem internal structure and the json data string are restored.
+            // On Android 8.0 this fails with Transaction Too Large error, so we do not put this
             // structure onto the saved instance state and instead recreate it using addItems()
             //myList = savedInstanceState.getParcelableArrayList("myList");
             jsonData = savedInstanceState.getString("jsonData");
@@ -438,7 +425,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         } else {
             // If local history json file does not exist, this is assumed to be a newly installed
             // app and we get some basic json data from dropbox for testing for now...
-            // TODO: backup and restore...
             jsonData = null;
             File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
             if (jsonFile.exists()) {
@@ -449,9 +435,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
                 maxTextureSize = shPref.getInt("maxtexsize", 0);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
-                Log.i("HFCM", "MAX_TEXTURE_SIZE read from shared prefs: " + maxTextureSize);
-                // TODO: in case, the shared preferences are lost for some reason, we should
-                // run the gl texture size detection again!
+                // TODO: if shared preferences are lost for some reason, run texsize check again
 
                 if (jsonData.equals("")) {
                     jsonData = "[]";
@@ -463,18 +447,15 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
-                // Parse the local json file contents and add these to myList, used by listview and
-                // the parent json array. This is not yet a good solution.
+                // Parse the local json file contents and add these to ArrayList
                 addItems();
-                // TODO: recheck, just new test on 11.09.2017 - check for missing thumbs
                 checkMissingThumbs();
             } else {
                 // jsonData is empty. It looks like we did not have a local json file yet, or it
                 // is not a valid one. So we create a new empty parent array and attempt to load a
                 // prefilled json file from our (hardcoded) testing dropbox link.
 
-                // GL TEXTURE check is only run at first time after installation and result is
-                // written to shared preferences
+                // GL TEXTURE check only after installation, result written to shared preferences
                 Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
                 startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
@@ -487,10 +468,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 new loadFromDropboxTask().execute(DROPBOX_JSON); // calls addItems() + adapter notify
             }
 
-            // now go for the latest APOD item to append - call NASA and get infos
-            // TODO this should only be done once a day, afterwards info is available in local json
-            // TODO make config option, if connection should be done if not connected in Wifi
-            // we can disable this for debugging purposes to avoid unnecessary calls to NASA
+            // Get latest APOD item to append from NASA
+            // TODO: reduce these calls to required minimum
             if (sharedPref.getBoolean("get_apod", true)) {
                 new apodTask().execute(nS());
                 // or some local URL using python simplehttpserver (change to httpurlconnection)
@@ -535,7 +514,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public void updateRating(int rating, ArrayList<Integer> selected) {
         HashSet<String> titles = new HashSet<>();
         for (int idx : selected) {
-            //myList.get(adp.getIdx(idx)).setRating(rating);
             myList.get(idx).setRating(rating);
             titles.add(myList.get(idx).getTitle());
         }
@@ -567,27 +545,26 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 e.printStackTrace();
             }
         }
-        // Rewrite local json
+        // Rewrite local json with spacing of 2
         String outString = null;
         try {
-            outString = parent.toString(2);     // spacing of 2
+            outString = parent.toString(2);
         } catch (JSONException e) {
             e.printStackTrace();
         }
         utils.writef(getApplicationContext(), localJson, outString);
     }
 
-    // old code of myHashAdapter derived from HfcmMapAdapter is moved to bottom as comment
-    // old code of myAdapter using ArrayList also moved to bottom as comment
+    /*old code of myHashAdapter derived from HfcmMapAdapter is moved to bottom as comment
+     * old code of myAdapter using ArrayList also moved to bottom as comment*/
 
-    // GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
     /*
-     * TODO: VERY IMPORTANT!!!
+     * GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
+     * TODO: VERY IMPORTANT!!! bad asynctask use here, need to fix for memory leaks!!!
      * also in terms of splitting large code with inner classes into smaller segments, as with my spaceItemFilter (22.10.2017)
      * https://medium.com/freenet-engineering/memory-leaks-in-android-identify-treat-and-avoid-d0b1233acc8
      * making apodTask static to eliminate implicit reference does not allow access to apodItem
      * any more. So we need a constructor
-     * and see
      * https://stackoverflow.com/questions/10864853/when-exactly-is-it-leak-safe-to-use-anonymous-inner-classes
      * https://blog.androidcafe.in/android-memory-leak-part-1-context-85cebdc97ab3
      * http://simonvt.net/2014/04/17/asynctask-is-bad-and-you-should-feel-bad/
@@ -598,10 +575,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         protected String doInBackground(String... params) {
             apodItem = new spaceItem();
 
-            // Enable TLSv1 on Android below 5.0 (Lollipop) TODO TLS higher versions?
+            // Enable TLSv1 below 5.0 (Lollipop) TODO: TLS > 1.0 / move to oncreate / android 7
             // https://blog.dev-area.net/2015/08/13/android-4-1-enable-tls-1-1-and-tls-1-2/
-            // could we move that code to "onCreate?"
-            // see also android 7 changes, might be of interest at a later point
             // https://developer.android.com/about/versions/nougat/android-7.0-changes.html#tls-ssl
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
                     sharedPref.getBoolean("enable_tls_pre_lollipop", true)) {
@@ -646,7 +621,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // of LAN card and Wifi present in host - Problem on my Windows Studio installation
                 // And on 14.10.2017 on AVD Android 4.1...
                 e.printStackTrace();
-                //String ttt = e.getMessage();
                 return e.getMessage();
             } finally {
                 if(nasa_conn != null) {
@@ -753,7 +727,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
                 if (resource_uri != null) {
                     if (sMediaType.equals("video")) {
-                        // note, that this rewrites mediatype!!
+                        // note, that this rewrites sMediaType variable!
                         String host = resource_uri.getHost();
                         List<String> path = resource_uri.getPathSegments();
                         apodItem.setHires(resource_uri.toString());
@@ -780,7 +754,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                             apodItem.setLowres("");     // will hold thumbnail url
                         } else {
                             sMediaType = M_VIDEO_UNKNOWN;
-                            // hmmm, many more possibilities might exist, depending on NASA content
+                            // Many more possibilities might exist, depending on NASA content
                             apodItem.setThumb("th_UNKNOWN.jpg");
                         }
                     } else {
@@ -793,7 +767,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             } else {
                 Log.e("HFCM", "no APOD String returned from doInBackground");
             }
-            // TODO shouldn't super be executed first ?=?? might have done this bad
+            // TODO shouldn't super be executed first ??? might have done this bad
             super.onPostExecute(s);
 
             apodItem.setTitle(sTitle);
@@ -959,24 +933,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         @Override
         protected void onPostExecute(Bitmap bitmap) {
             super.onPostExecute(bitmap);
-            // Check, if title string is already present - we rely on unique title strings provided
-            // by NASA for each new image!
-
-            // Code using key finding in HashMap...
             /*if (myMap.containsKey(apodItem.getTitle())) {
-                Toast.makeText(MainActivity.this, R.string.already_loaded,
-                        Toast.LENGTH_LONG).show();
                 return;
             }*/
-
-            // "Good old ugly?" version just iterating all items in ArrayList. This is ok. The first
+            // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
             // item should match anyway, because latest image is on top of the list.
             for(int i=0; i<myList.size();i++) {
                 if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
-                    // TODO here's the point to check, if the thumbnail file exists, and if not
-                    // it was lost. so load the image and create thumb again... but this is unlikely
-                    // to happen, unless the app was uninstalled (already handled) or some hardware
-                    // defects are present...
+                    // TODO here's the point to check, if the thumbnail file exists (and reload)
                     Toast.makeText(MainActivity.this, R.string.already_loaded,
                             Toast.LENGTH_LONG).show();
                     return;
@@ -984,8 +948,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             }
 
             // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
-            // TODO 20.08.2017 - null bitmap was passed by doInBackground() - crashed here
-            // have a prepared "not found image thumbnail" for these cases...
             if (bitmap != null) {
                 File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
                 Bitmap thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
@@ -1006,7 +968,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 }
                 apodItem.setBmpThumb(thumbnail);
             } else {
-                apodItem.setBmpThumb(null);     // just have a black image here
+                apodItem.setBmpThumb(null);     // just have a black image here TODO missing img?
             }
 
             // JSON is an array of objects, which have a "Type" and a "Content". Type is just
@@ -1034,27 +996,20 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             } catch (JSONException e) {
                 e.printStackTrace();
             }
-            // this one needs to be appended to the local json array
+            // add object to local json array and save json content to internal storage
             parent.put(apodObj);
             String outString = null;
             try {
-                outString = parent.toString(2);     // spacing of 2
+                outString = parent.toString(2);
             } catch (JSONException e) {
                 e.printStackTrace();
             }
-            // next, this needs to be rewritten to internal storage
             utils.writef(getApplicationContext(), localJson, outString);
-
-            // add our new entry to the spaceItem list and notify the Adapter - old hash adapter
-            //myMap.put(apodItem.getTitle(), apodItem);
-            //hashadp.notifyDataSetChanged();
 
             myList.add(0, apodItem);
             adp.notifyDataSetChanged();
-
             Toast.makeText(MainActivity.this, R.string.apod_load,
                     Toast.LENGTH_LONG).show();
-            // scroll to top of list with new item
             myItemsLV.setSelection(0);
         }
     }
@@ -1085,7 +1040,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // See https://developer.android.com/training/basics/firstapp/starting-activity.html
         @Override
         public void onClick(View view) {
-            int idx = (int) view.getTag();
+            int idx = (int) view.getTag();  // for "filtered" view - index into full list!
             /* Can't use this, because "small" ratingbars do not support interaction. So going
                for a separate dialog to set rating for items selected via contextual action mode
             if (idx >= 2*MAX_ITEMS) {
@@ -1130,17 +1085,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     hiresIntent.putExtra("maxtexturesize", maxTextureSize);
                     lastImage = myList.get(idx).getTitle();
                     hiresIntent.putExtra("imagename", lastImage);
-                    // Use ..forResult now ALWAYS to get logstring returned for debugging, also
+                    // forResult now ALWAYS to get logstring returned for debugging
                     // if hires size is already
                     // TODO: how about running one thread to just query the hires image size
-                    //       and then adjust possible exchanged resolution links (as i found)
-                    //       and after this, getting the hires image..
                     startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
-                    /*if(myList.get(idx).getHiSize().equals("")) {
-                        startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
-                    } else{
-                        startActivity(hiresIntent);
-                    }*/
             } else if (media.equals(M_YOUTUBE)) {
                 String thumb = myList.get(idx).getThumb();
                 // We get the ID from thumb name - hmmm, somewhat dirty ?
@@ -1311,7 +1259,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         }
                         String outString = null;
                         try {
-                            outString = parent.toString(2);     // spacing of 2
+                            outString = parent.toString(2);
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
@@ -1320,7 +1268,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     }
                 }
                 adp.notifyDataSetChanged();
-                //hashadp.notifyDataSetChanged();
             }
         } else if (requestCode == GL_MAX_TEX_SIZE_QUERY) {
             if (resultCode == RESULT_OK) {
@@ -1342,18 +1289,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // Check for any changed preference items, which have been marked by the listener.
                 if (thumbQualityChanged) {
                     SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
-                    //shPref.getBoolean("rgb565_thumbs", false);
-                    Log.i("HFCM", "Low quality thumbs enable, now: " + shPref.getBoolean("rgb565_thumbs", false));
-                    thumbQualityChanged = false;
+                    Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
+                    thumbQualityChanged = false;    // RESET !!!
+                    // Reload the complete list with all local thumbnails
                     myList.clear();
                     addItems();
                     adp.notifyDataSetChanged();
                 }
-                //SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
-                //String order = shPref.getString("item_order", "newest_first");
-                //String returnedorder = data.getStringExtra("order");    // TODO
-                //newestFirst = order.equals("newest_first");
-                //newestFirst = true;
             }
         }
     }
@@ -1466,7 +1408,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         return super.onOptionsItemSelected(item);
     }
 
-    // see also
+    // TODO - memory trim
     // https://developer.android.com/topic/performance/memory.html
     /*@Override
     public void onTrimMemory(int level) {
@@ -1538,8 +1480,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
-                // 19.09.2017 - new code to write json file.. not yet understood, how it could
-                // work before at all, cause there was no write...
+                // write json file to internal storage, spacing of 2
                 try {
                     utils.writef(getApplicationContext(), localJson, parent.toString(2));
                 } catch (JSONException e) {
@@ -1553,7 +1494,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // https://stackoverflow.com/questions/10686107/what-does-runs-on-ui-thread-for-onpostexecute-really-mean
                 checkMissingThumbs();
                 adp.notifyDataSetChanged();
-                //hashadp.notifyDataSetChanged();
             }
         }
     }
@@ -1575,7 +1515,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         String strMedia = "";
         String strHiSize = "";
         String strLowSize = "";
-        // The newest first option has been disabled, we now always display the newest items first
+
         for (int i = parent.length()-1; i >=0 ; i--)
         {
             try {
@@ -1661,14 +1601,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // URL and saves a thumbnail file.
     public void checkMissingThumbs() {
         ArrayList<Integer> missing = new ArrayList<Integer>();
-        //ArrayList<String> missing2 = new ArrayList<String>();
         for(int i=0; i<myList.size(); i++) {
-            //if (myList.get(i).getBmpThumb() == null) {
-            //String tt = myList.get(i).getMedia();
-            // TODO recheck no lowres key handling - here checked to avoid crash 11.09.2017
             if (myList.get(i).getBmpThumb() == null && !myList.get(i).getLowres().equals("")) {
-                // TODO: this is temporary only: vimeo videos do not have a thumb yet, so skip
-                // unknown not yet checked...
+                // TODO unknown not yet checked...
                 missing.add(i);
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
             }
@@ -1698,21 +1633,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
     // new: also called for all images, if thumb quality is changed between rgb565 and argb8888
     private class thumbLoaderTask extends AsyncTask<ArrayList<Integer>, Integer, Void> {
-    //private class thumbLoaderTask extends AsyncTask<ArrayList<String>, String, Void> {
         private ArrayList<Integer> missing;
-        //private ArrayList<String> missing2;
-        //@Override
-        //protected Void doInBackground(ArrayList<String>... params) {
+
         @Override
         protected Void doInBackground(ArrayList<Integer>... params) {
-            // url for image is found in params[0]...
             Bitmap bitmap = null;
             Bitmap thumbnail = null;
             File thumbFile = null;
             spaceItem wkItem;
-            //missing2 = params[0];
-            //for (String str : missing2) {
-            //    wkItem = myMap.get(str);
             missing = params[0];
             for (int i=0; i < missing.size(); i++) {
                 wkItem = myList.get(missing.get(i));
@@ -1720,16 +1648,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 try {
                     URL imgurl = new URL(lowresurl);
                     try {
-                        // we use this option to save some memory - experimental
-                        // but not here, because it could cause the saved file to be of low quality
-                        // do it in addItems().
-                        /*if (sharedPref.getBoolean("rgb565_thumbs", false)) {
-                            BitmapFactory.Options options = new BitmapFactory.Options();
-                            options.inPreferredConfig = Bitmap.Config.RGB_565;
-                            bitmap = BitmapFactory.decodeStream((InputStream) imgurl.getContent(), null, options);
-                        } else {
-                            bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
-                        }*/
                         bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -1746,17 +1664,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
                     wkItem.setBmpThumb(thumbnail);
                 }
-                // TODO DOCU: adapter notify does not work from within this thread
-                // adp.notifyDataSetChanged();
+                // TODO DOCU: adp.notifyDataSetChanged() fails with following exception:
                 // Caused by: android.view.ViewRootImpl$CalledFromWrongThreadException:
-                // Only the original thread that created a view hierarchy can touch its views.
-                // possible option:  runOnUiThread ???
-                // NO, just use the progress update mechanism for this
+                // >> Only the original thread that created a view hierarchy can touch its views. <<
+                // Therefore use the progress update mechanism for this.
                 // https://stackoverflow.com/questions/6450275/android-how-to-work-with-asynctasks-progressdialog
                 publishProgress(missing.get(i));
-                //publishProgress(str);
 
-                // And write the thumbnail to internal storage
+                // Write the thumbnail as small jpeg file to internal storage
                 FileOutputStream outstream = null;
                 try {
                     if (thumbFile != null) {
@@ -1780,15 +1695,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
         // For each loaded thumbnail, we receive a progress update and notify the adapter to update
         // the view, if the image has been loaded. We might run this in parallel for multiple images
-        //@Override
-        //protected void onProgressUpdate(String... values) {
+        // triggered by publishProgress() within doInBackground()
         @Override
         protected void onProgressUpdate(Integer... values) {
             super.onProgressUpdate(values);
             myList.get(values[0]).setThumbLoadingState(View.INVISIBLE);
             adp.notifyDataSetChanged();
-            /*myMap.get(values[0]).setThumbLoadingState(View.INVISIBLE);
-            hashadp.notifyDataSetChanged();*/
         }
     }
 

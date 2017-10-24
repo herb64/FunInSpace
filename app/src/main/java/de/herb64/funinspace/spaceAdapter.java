@@ -1,13 +1,11 @@
 package de.herb64.funinspace;
 
-import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.support.annotation.LayoutRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
-import android.util.Log;
 import android.util.SparseIntArray;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -19,19 +17,16 @@ import android.widget.Filterable;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 
 import de.herb64.funinspace.models.spaceItem;
 
 /**
  * Created by herbert on 10/22/17.
- *
  * See also https://www.youtube.com/watch?v=YnNpwk_Q9d0
- *
  * Strange effect: theme seems to be changed, text is just white, stars just black...
  * Root cause: inflater = (LayoutInflater) ctx.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
  *                                         ---
- * need to use the activity instead, see
+ * need to use the activity instead of context, see
  * https://stackoverflow.com/questions/28817716/recyclerview-textview-color-of-text-changed
  *
  * This adapter works in combination with filtering for Search as of 22.10.2017.
@@ -43,15 +38,15 @@ import de.herb64.funinspace.models.spaceItem;
  */
 
 public class spaceAdapter extends ArrayAdapter implements Filterable {
-    // interesting, that "implements Filterable" does not pop up inspection for impleman
+    // interesting, that "implements Filterable" does not pop up inspection for implementation needs
     protected ArrayList<spaceItem> iList;
     private ArrayList<spaceItem> filterList;
-    private int resource;
+    //private int resource;
     private LayoutInflater inflater;
     private Context ctx;
     private MainActivity act;
-    spaceItemFilter filter;
-    private SparseIntArray idxMap;
+    private spaceItemFilter filter;
+    private SparseIntArray idxMap;      // mapping of filtered/unfiltered index values
 
     // Constructor (add via alt+insert) and adjust to our list of type spaceItem
     spaceAdapter(@NonNull Context context,
@@ -61,22 +56,21 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         super(context, resource, objects);
         this.iList = objects;
         this.filterList = objects;
-        this.resource = resource;
+        //this.resource = resource;
         this.ctx = context;
         this.act = activity;
-        // note: use act.getSystemService(..)! If using the application context instead of the
-        //       activity, the Textviews all appear white and rating starts are black, regardless
+        // note: use act.getSystemService(..)! If using context instead of the
+        //       activity, the Textviews all appear white and rating stars are black, regardless
         //       of their selection state...
         inflater = (LayoutInflater) act.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-        //filter = new spaceItemFilter(filterList, this);
         idxMap = new SparseIntArray();
         idxMap.clear();
     }
 
     // adding getView() by alt-insert - override methods - the "NonNull" stuff seems to be new
     // Document: strange, but getView() gets called many more times than rows exist if layout
-    //           is bad. I had this effect and did only notice this by chance, while the app
-    //           looked fine. Check getView() calls from time to time to see, if it's fine.
+    //           is bad. I had this effect and did only notice this by chance, while the app still
+    //           looked fine. Check getView() calls from time to time to see, if it's ok.
     // After filtering: getView gets called with position value out of bound, so crash at end of
     // listview...
     @NonNull
@@ -165,9 +159,15 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
 
         holder.tvExplanation.setText(iList.get(position).getExplanation());
         iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
-        holder.tvExplanation.setTag(act.MAX_ITEMS + id);                                              //
+        if (idxMap.size() > 0) {
+            //static member being accessed by instance reference
+            //holder.tvExplanation.setTag(act.MAX_ITEMS + position);
+            holder.tvExplanation.setTag(MainActivity.MAX_ITEMS + position);
+        } else {
+            holder.tvExplanation.setTag(MainActivity.MAX_ITEMS + id);
+        }
         holder.tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
-        holder.tvExplanation.setMaxLines(act.MAX_ELLIPSED_LINES);
+        holder.tvExplanation.setMaxLines(MainActivity.MAX_ELLIPSED_LINES);
         // and here, we have a friendly listener, which temporarily overwrites that stuff, when
         // we click on the text view content - We reuse the existing listener for the thumbs
         // and distinguish views by ID ranges
@@ -187,7 +187,6 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         // for some reason, inspection did not warn of this missing interface implementation
         if (filter == null) {
             filter = new spaceItemFilter(filterList, this);
-            //idxMap = filter.getIdxMap();
             idxMap = filter.idxMap;
         }
         return filter;
@@ -211,6 +210,16 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
             return position;
         }
         //return super.getItemId(position);
+    }
+
+    // override remove(): we need to remove the object from the current filtered view as well, if
+    // we are in a filtered view
+    @Override
+    public void remove(@Nullable Object object) {
+        if (idxMap.size() > 0) {
+            iList.remove(object);
+        }
+        super.remove(object);
     }
 
     /*@Nullable
