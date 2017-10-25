@@ -1,6 +1,7 @@
 package de.herb64.funinspace;
 
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -14,6 +15,7 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
@@ -33,6 +35,7 @@ import com.google.android.youtube.player.YouTubeStandalonePlayer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -49,6 +52,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -81,7 +85,7 @@ import de.herb64.funinspace.models.spaceItem;
 /*
  * The MainActivity Class for FunInSpace
  */
-public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener, jsonLoad.AsyncResponse {
+public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener, asyncLoad.AsyncResponse {
 
     private spaceItem apodItem;                     // the latest item to be fetched
     private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
@@ -120,6 +124,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     private static final int SETTINGS_REQUEST = 3;
     // changed to other location on 13.10.2017 into testing folder on my dropbox
     private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
+    private static final String DROPBOX_MINI = "https://dl.dropboxusercontent.com/s/5itsg1bjbytrk6d/nasamini.json";
     //private static final int KIB = 1024;
     //private static final int MIB = 1024 * KIB;
     //private static final int GIB = 1024 * MIB;
@@ -290,21 +295,65 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             public boolean onActionItemClicked(android.view.ActionMode actionMode, MenuItem menuItem) {
                 switch (menuItem.getItemId()) {
                     case R.id.cab_delete:
-                        new dialogDisplay(MainActivity.this, "This currently only deletes items for testing from the shown list. " +
-                                "This is not yet persistent, and restart of the App loads all deleted items again.", "Don't panic...");
+                        //new dialogDisplay(MainActivity.this, "This currently only deletes items for testing from the shown list. " +
+                        //        "This is not yet persistent, and restart of the App loads all deleted items again.", "Don't panic...");
                         // Within ArrayList - removal from back to front is essential!!
                         Collections.sort(selected, Collections.<Integer>reverseOrder());
                         for (int idx : selected) {
                             // spaceAdapter.remove() has been overwritten, so that it deletes the
                             // image in the full ArrayList plus (if filtered view) in the currently
                             // presented view as well.
+                            if (parent.length() != myList.size()) {
+                                new dialogDisplay(MainActivity.this, "Some problem with json (" +
+                                        parent.length() + ") vs. list (" + myList.size() +
+                                        ") size", "Debug");
+                            }
+                            // Remove thumbfile, BEFORE indexed item gets deleted from list
+                            Log.i("HFCM", "Delete: " + myList.get(idx).getThumb());
+                            File thdel = new File(getApplicationContext().getFilesDir(), myList.get(idx).getThumb());
+                            if (!thdel.delete()) {
+                                Log.i("HFCM", "File delete did not return true");
+                            }
+                            //new File(getApplicationContext().getFilesDir(),
+                            //        myList.get(idx).getThumb()).delete();
+                            // delete the json object from json array
+                            try {
+                                JSONObject obj = (JSONObject) parent.get(parent.length() - 1 - idx);
+                                String title = obj.getJSONObject("Content").getString("Title");
+
+                                // json array remove: parent.remove(index) requires API level 19
+                                // https://gist.github.com/emmgfx/0f018b5acfa3fd72b3f6
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                                    Log.i("HFCM", "json remove: " + title);
+                                    parent.remove(parent.length() - 1 - idx);
+                                } else {
+                                    Log.i("HFCM", "Doing PRE KITKAT json remove for " + title);
+                                    // no nice code here.... we should improve that, for example
+                                    // do only one iteration for ALL elements in "selected"
+                                    JSONArray tempjson = new JSONArray();
+                                    for (int i = 0; i < parent.length(); i++) {
+                                        JSONObject tobj = (JSONObject) parent.get(i);
+                                        if (!tobj.getJSONObject("Content").getString("Title").equals(title)) {
+                                            tempjson.put(tobj);
+                                        }
+                                    }
+                                    parent = tempjson;
+                                }
+                                // Make changes permanent by rewriting json file
+                                utils.writeJson(getApplicationContext(), localJson, parent);
+                                /*String outString = null;
+                                try {
+                                    outString = parent.toString(2);
+                                } catch (JSONException e) {
+                                    e.printStackTrace();
+                                }
+                                utils.writef(getApplicationContext(), localJson, outString);*/
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
                             adp.remove(myList.get(idx));
                             // adp.setNotifyOnChange(true); // TODO - test this for auto notify ?
                             adp.notifyDataSetChanged();
-                            // TODO: make this permanent in Json file - but first we need to have
-                            // the sync with dropbox implemented to be able to recreate entries
-                            // what about an UNDO function?
-                            // AND: we should also remove thumbnail.jpg from internal storage!!
                         }
                         actionMode.finish();
                         return true;
@@ -348,12 +397,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             @Override
             public void onDestroyActionMode(android.view.ActionMode actionMode) {
                 // reset selection status for all items
-                for (int i : selected) {
-                    myList.get(i).setSelected(false);
-                }
-                //for (int idx = 0; idx < myList.size(); idx++) {
-                //    myList.get(idx).setSelected(false);
+                //for (int i : selected) {
+                //    myList.get(i).setSelected(false);
                 //}
+                for (int idx = 0; idx < myList.size(); idx++) {
+                    myList.get(idx).setSelected(false);
+                }
             }
         });
 
@@ -365,6 +414,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         //adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
         adp = new spaceAdapter(getApplicationContext(), MainActivity.this,
                 R.layout.space_item, myList);
+        adp.setFullSearch(sharedPref.getBoolean("full_search", false));
         myItemsLV.setAdapter(adp);
 
         /* Old stuff in onCreate() from tests with Adapter to work with LinkedHashMap
@@ -457,7 +507,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                                 "from Herbert's DropBox and loading required images in background for " +
                                 "thumbnail pictures generation to have some test data available...",
                         Toast.LENGTH_LONG).show();
-                new loadFromDropboxTask().execute(DROPBOX_JSON); // calls addItems() + adapter notify
+                //new loadFromDropboxTask().execute(DROPBOX_JSON); // calls addItems() + adapter notify
+                new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(DROPBOX_JSON);
             }
 
             // Get latest APOD item to append from NASA
@@ -538,13 +589,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             }
         }
         // Rewrite local json with spacing of 2
-        String outString = null;
+        utils.writeJson(getApplicationContext(), localJson, parent);
+        /*String outString = null;
         try {
             outString = parent.toString(2);
         } catch (JSONException e) {
             e.printStackTrace();
         }
-        utils.writef(getApplicationContext(), localJson, outString);
+        utils.writef(getApplicationContext(), localJson, outString);*/
     }
 
     /*old code of myHashAdapter derived from HfcmMapAdapter is moved to bottom as comment
@@ -784,18 +836,23 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             apodItem.setHiSize("");
 
             // 20.09.2017 - keep a local copy of the nasa json file returned by api for reference
-            try {
+            // TODO: we should remove these on deletion as well - but they cannot be recreated!!!
+            if (parent != null) {
+                utils.writeJson(getApplicationContext(), String.valueOf(epoch) + ".json", parent);
+            }
+            /*try {
                 if (parent != null) {
                     utils.writef(getApplicationContext(),
                             String.valueOf(epoch) + ".json", parent.toString(2));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
-            // For Vimeo, we need to "insert" an extra thread using oembed API to determine
-            // infos about the thumbnail image URL before calling the imgLowResTask thread to
-            // load thumbnail bitmap data.
-            if (sMediaType == M_VIMEO) {
+            }*/
+            // For VIMEO, "insert" an extra thread using oembed API to determine infos about the
+            // thumbnail image URL before calling the imgLowResTask thread to load thumbnail bitmap
+            //if (sMediaType == M_VIMEO) {
+            if (sMediaType.equals(M_VIMEO)) {   // TODO: test this
+                Log.i("HFCM", ">>>>>>>>>>>>>>>>>>>>>>>>>>>>> vimeo >>>>>>>>>>>>>>>>>");
                 new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
             } else {
                 new ImgLowresTask().execute(imgUrl);
@@ -895,10 +952,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // TODO - about returning values from asynctask !!!
-    // TODO - seems to work with execute().get()  but it blocks!!! - search topic: wait for asynctask to complete
+    // TODO - return values from asynctask - seems to work with execute().get()  but it blocks!!! - search topic: wait for asynctask to complete
     // ++++   >>>  https://stackoverflow.com/questions/12575068/how-to-get-the-result-of-onpostexecute-to-main-activity-because-asynctask-is-a
-    // jsonLoad.java is one of the results of this - now still make sure about memory leaks!!!!
+    // asyncLoad.java is one of the results of this - now still make sure about memory leaks!!!!
     private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
         @Override
         protected Bitmap doInBackground(String... params) {
@@ -991,13 +1047,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             }
             // add object to local json array and save json content to internal storage
             parent.put(apodObj);
-            String outString = null;
+            utils.writeJson(getApplicationContext(), localJson, parent);
+            /*String outString = null;
             try {
                 outString = parent.toString(2);
             } catch (JSONException e) {
                 e.printStackTrace();
             }
-            utils.writef(getApplicationContext(), localJson, outString);
+            utils.writef(getApplicationContext(), localJson, outString);*/
 
             myList.add(0, apodItem);
             adp.notifyDataSetChanged();
@@ -1250,13 +1307,15 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
-                        String outString = null;
+                        // Write changes to storage
+                        utils.writeJson(getApplicationContext(), localJson, parent);
+                        /*String outString = null;
                         try {
                             outString = parent.toString(2);
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
-                        utils.writef(getApplicationContext(), localJson, outString);
+                        utils.writef(getApplicationContext(), localJson, outString);*/
                         break;
                     }
                 }
@@ -1313,6 +1372,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         // after the user has closed the dialog.
                         thumbQualityChanged ^= true;
                     }
+                    if (changed.equals("full_search")) {
+                        adp.setFullSearch(sharedPref.getBoolean("full_search", false));
+                    }
                 }
             };
 
@@ -1324,6 +1386,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
+        //adp.setFullSearch(sharedPref.getBoolean("full_search", false));
         MenuItem searchItem = menu.findItem(R.id.action_search); // 22.10.2017 - add
         //SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem); // deprecated
         SearchView sv = (SearchView) searchItem.getActionView();
@@ -1399,12 +1462,47 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // Sync metatata with dropbox. This allows to refresh without a new installation.
         // do a merge, keeping local infos about ratings and just reloading what is needed
         if (id == R.id.dropbox_sync) {
-            // create jsonLoad class instance - this returns immediately and the processFinish()
-            // implementation of jsonLoad is called after the async load is done
-            new jsonLoad(this).execute(DROPBOX_JSON);
+            // create asyncLoad class instance - this returns immediately and the processFinish()
+            // implementation of asyncLoad is called after the async load is done
 
+            // We should have a dialog asking to continue
+            //https://stackoverflow.com/questions/2115758/how-do-i-display-an-alert-dialog-on-android
+            AlertDialog.Builder builder;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                //builder = new AlertDialog.Builder(getApplicationContext(), android.R.style.Theme_Material_Dialog_Alert);
+                // java.lang.IllegalStateException: You need to use a Theme.AppCompat theme (or descendant) with this activity.
+                // when show() is called. Using context was bad here..
+                builder = new AlertDialog.Builder(MainActivity.this, android.R.style.Theme_Material_Dialog_Alert);
+            } else {
+                builder = new AlertDialog.Builder(MainActivity.this);
+            }
+
+            // we could add an extended dialog with selection of different contents to load
+            builder.setTitle("Refresh of image list")
+                    .setMessage("Do you want to refresh your list with Herbert's Dropbox informations?")
+                    .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int which) {
+                            new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_JSON);
+                            //new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_MINI);
+                        }
+                    })
+                    .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int which) {
+                            // nothing done
+                        }
+                    })
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .show();
+            // show ends in
+            // java.lang.IllegalStateException: You need to use a Theme.AppCompat theme (or descendant) with this activity.
+
+            //new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_JSON);
+            //new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_MINI);
+            //new asyncLoad(this, "NASA-TEST").execute("https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY");
+            //new asyncLoad(this, "NASA-TEST").executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY");
+            //new asyncLoad(this, "JPEG_TEST").execute("https://apod.nasa.gov/apod/image/1710/M51_KerryLeckyHepburn_1024.jpg");
             /* Old code with inner class - dropped that to implement interface in MainActivity
-            jsonLoad(new jsonLoad.AsyncResponse() {
+            asyncLoad(new asyncLoad.AsyncResponse() {
                 @Override
                 public void processFinish(Object output) {
                     ....
@@ -1428,88 +1526,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         super.onTrimMemory(level);
     }*/
 
-    // Get JSON file from DropBox link after initial installation. This also triggers the load
-    // of all thumbnails in an extra thread
-    // TODO - needs retained fragment to run, so do not rotate phone while thumbs are loading
-    // TODO - also found problems if Wifi is not available after new installation of app
-    //        on 17.09.2017. And even then, this was bad with >40 images. CHECK!!! see notices
-    private class loadFromDropboxTask extends AsyncTask<String, String, String> {
-        @Override
-        protected String doInBackground(String... params) {
-            HttpsURLConnection dropbox_conn = null;
-            BufferedReader reader = null;
-
-            try {
-                URL url = new URL(params[0]);
-                dropbox_conn = (HttpsURLConnection) url.openConnection();
-                try {
-                    dropbox_conn.connect();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                // Read data from this connection into an input stream
-                InputStream jsonstream = dropbox_conn.getInputStream();
-                reader = new BufferedReader(new InputStreamReader(jsonstream));
-                StringBuffer jsonbuffer = new StringBuffer();
-                String jsonstring;
-
-                while((jsonstring = reader.readLine()) != null) {
-                    jsonbuffer.append(jsonstring);
-                }
-                return jsonbuffer.toString();   // returned to onPostExecute
-
-            } catch (MalformedURLException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                // Running into this because of DNS problems in AVD device. Seems to be because
-                // of LAN card and Wifi present in host - only on Win10 Android Studio installation
-                e.printStackTrace();
-                return e.getMessage();
-            } finally {
-                if(dropbox_conn != null) {
-                    try {
-                        dropbox_conn.disconnect();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-                try {
-                    if(reader != null) {
-                        reader.close();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(String s) {
-            super.onPostExecute(s);
-            if (s != null) {
-                try {
-                    parent = new JSONArray(s);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-                // write json file to internal storage, spacing of 2
-                try {
-                    utils.writef(getApplicationContext(), localJson, parent.toString(2));
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-
-                addItems();
-                // Note: we cannot run network operations directly in the checkMissingThumbs()
-                // function. Because code in onPostExecute() does belong to the main thread
-                // for the same reason: do not block during checkMissingThumbs!!!
-                // https://stackoverflow.com/questions/10686107/what-does-runs-on-ui-thread-for-onpostexecute-really-mean
-                checkMissingThumbs();
-                adp.notifyDataSetChanged();
-            }
-        }
-    }
 
     /**
      * Add all items currently defined within the local JSON to the ArrayList of space items.
@@ -1592,20 +1608,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 } else {
                     thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
                 }
-                //Bitmap thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
                 newitem.setBmpThumb(thumb);
-                int allocByteCount;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                    allocByteCount = thumb.getAllocationByteCount();
-                } else {
-                    allocByteCount = thumb.getByteCount();
-                }
-                Log.i("HFCM", "Thumbnail size: " + strThumb + " = " + allocByteCount);
+                //Log.i("HFCM", "Thumbnail size: " + strThumb + " = " + utils.getBMPBytes(thumb));
             } else {
                 newitem.setBmpThumb(null);
             }
             myList.add(newitem);
-            //myMap.put(strTitle, newitem);
         }
     }
 
@@ -1718,36 +1726,152 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     }
 
     /*
-     * Testing jsonLoad class - this is implementation of interface for this class. This is called
-     * when the jsonLoad class has finished retrieving the json data.
+     * Refresh the local json array with contents from the dropbox. The current array is replaced
+     * by the new array, which might contain more ore less images as the current array.
+     * - Existing rating values in the local array are preserved
+     * - Thumbnail files of images are deleted, if they are not referenced any more in the new array
      */
-    @Override
-    public void processFinish(Object output) {
-        if (output != null && output instanceof JSONArray) {
-            // for now, just overwrite existing data by brute force, which means
-            // 1. metadata on the device which is not on dropbox is lost - could be restored from local nasa json info, if already stored (timestamp.json)
-            // 2. deleted items are loaded again - no problem, because deletes are not yet persistent yet, but also later: how to determine, why not to restore an item?
-            // 3. personal ratings stored on device are overwritten with dropbox content - easy to solve
-            // 4. what about thumbnail images in internal storage?
-            // issues 1,3 can be solved by a correct merge operation
-            JSONArray temp;
-            temp = (JSONArray) output;
-            parent = temp;
-            myList.clear();
-            addItems();
-            checkMissingThumbs();
-            adp.notifyDataSetChanged();
-            // the next one is really challenging - just kicking of a new apod task...
-            new apodTask().execute(nS());
-            // NOTE: the latest apod might be missing now, so a reload is necessary. This is not
-            //       needed if we really perform a smooth merge...
-        } else {
-            new dialogDisplay(MainActivity.this, "Herb's Dropbox resync did not return a valid JSON Array Structure, no reload was done", "Dropbox resync");
+    private void refreshFromDropbox(JSONArray dropbox) {
+        // for now, just overwrite existing data by brute force, which means
+        // 1. metadata on the device which is not on dropbox is lost - could be restored from local nasa json info, if already stored (timestamp.json)
+        // 2. deleted items are loaded again - no problem, because deletes are not yet persistent yet, but also later: how to determine, why not to restore an item?
+        // 3. personal ratings stored on device are overwritten with dropbox content - easy to solve
+        // 4. what about thumbnail images in internal storage?
+        JSONObject obj = null;
+        JSONObject content = null;
+        HashMap<String, Integer> ratings;
+        HashMap<String, String> thumbsToDelete;
+
+        // Iterate the currently active json array to fill maps for rating / thumbfilenames
+        ratings = new HashMap<>();
+        thumbsToDelete = new HashMap<>();
+        for (int i = 0; i < parent.length(); i++) {
+            try {
+                obj = parent.getJSONObject(i);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            try {
+                if (obj != null) {
+                    content = obj.getJSONObject("Content");
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            if (content == null) {
+                return;
+            }
+            try {
+                ratings.put(content.getString("Title"), content.getInt("Rating"));
+                // All thumbfiles are candidates for deletion
+                thumbsToDelete.put(content.getString("Title"), content.getString("Thumb"));
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
         }
-        // recursive call is a really bad idea :) (tested and found that non json is recognized)
-        // new jsonLoad(this).execute("some url");
+
+        content = null;
+        obj = null;
+        for (int i = 0; i < dropbox.length(); i++) {
+            try {
+                obj = dropbox.getJSONObject(i);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            try {
+                if (obj != null) {
+                    content = obj.getJSONObject("Content");
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            if (content == null) {
+                continue;
+            }
+            try {
+                if (ratings.containsKey(content.getString("Title"))) {
+                    if (ratings.get(content.getString("Title")) != content.getInt("Rating")) {
+                        Log.i("HFCM", "Adjust rating for '" + content.getString("Title") +
+                                "' from " + content.getInt("Rating") + " to " +
+                                ratings.get(content.getString("Title")));
+                    }
+                    content.put("Rating", ratings.get(content.getString("Title")));
+                    // remove existing item from thumb deletion candidate list
+                    thumbsToDelete.remove(content.getString("Title"));
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+        // Remove remaining thumbnails which have no reference any more in the new json array
+        for (String key : thumbsToDelete.keySet()) {
+            Log.i("HFCM", "Delete thumb: " + thumbsToDelete.get(key));
+            new File(getApplicationContext().getFilesDir(), thumbsToDelete.get(key)).delete();
+        }
+
+        // Activate the contents of the new json array
+        parent = dropbox;
+        utils.writeJson(getApplicationContext(), localJson, parent);
+        myList.clear();
+        addItems();
+        checkMissingThumbs();
+        adp.notifyDataSetChanged();
+        if (sharedPref.getBoolean("get_apod", true)) {
+            new apodTask().execute(nS());
+        }
     }
 
+    /*
+     * Testing asyncLoad class - this is implementation of interface for this class. This is called
+     * when the asyncLoad class has finished retrieving the json data.
+     * Note: for parallel asynctask execution (executeonexecutor), see also my lalatex document...
+     */
+    @Override
+    public void processFinish(int status, String tag, Object output) {
+        // switch-case for strings availabale since Java 7
+        switch (tag) {
+            case "DROPBOX_REFRESH":
+                Object json;
+                try {
+                    json = new JSONTokener((String) output).nextValue();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    return;
+                }
+                if (json != null && json instanceof JSONArray) {
+                    refreshFromDropbox((JSONArray) json);
+                }
+                break;
+            case "DROPBOX_INIT":
+                // On 25.10.2017, loadFromDropboxTask() has been retired. some comments from old code
+                // TODO - needs retained fragment to run, so do not rotate phone while thumbs are loading
+                // TODO - also found problems if Wifi is not available after new installation of app
+                //        on 17.09.2017. And even then, this was bad with >40 images. CHECK!!! see notices
+                // Note: we cannot run network operations directly in the checkMissingThumbs()
+                // function. Because code in onPostExecute() does belong to the main thread
+                // for the same reason: do not block during checkMissingThumbs!!!
+                // https://stackoverflow.com/questions/10686107/what-does-runs-on-ui-thread-for-onpostexecute-really-mean
+                try {
+                    json = new JSONTokener((String) output).nextValue();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    return;
+                }
+                if (json != null && json instanceof JSONArray) {
+                    parent = (JSONArray) json;
+                    utils.writeJson(getApplicationContext(), localJson, parent);
+                    addItems();
+                    checkMissingThumbs();
+                    adp.notifyDataSetChanged();
+                }
+                break;
+            default:
+                new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
+                break;
+        }
+        // recursive call is a really bad idea :)
+        // new asyncLoad(this).execute("some url");
+    }
 
 
 
@@ -1986,5 +2110,75 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         //    }
         //    return convertView;
         //}
+    }*/
+
+    // OLD CODE FOR DROPBOX LOAD - retired on 25.10.2017
+    /*private class loadFromDropboxTask extends AsyncTask<String, String, String> {
+        @Override
+        protected String doInBackground(String... params) {
+            HttpsURLConnection dropbox_conn = null;
+            BufferedReader reader = null;
+
+            try {
+                URL url = new URL(params[0]);
+                dropbox_conn = (HttpsURLConnection) url.openConnection();
+                try {
+                    dropbox_conn.connect();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                // Read data from this connection into an input stream
+                InputStream jsonstream = dropbox_conn.getInputStream();
+                reader = new BufferedReader(new InputStreamReader(jsonstream));
+                StringBuffer jsonbuffer = new StringBuffer();
+                String jsonstring;
+
+                while((jsonstring = reader.readLine()) != null) {
+                    jsonbuffer.append(jsonstring);
+                }
+                return jsonbuffer.toString();   // returned to onPostExecute
+
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                // Running into this because of DNS problems in AVD device. Seems to be because
+                // of LAN card and Wifi present in host - only on Win10 Android Studio installation
+                e.printStackTrace();
+                return e.getMessage();
+            } finally {
+                if(dropbox_conn != null) {
+                    try {
+                        dropbox_conn.disconnect();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                try {
+                    if(reader != null) {
+                        reader.close();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            super.onPostExecute(s);
+            if (s != null) {
+                try {
+                    parent = new JSONArray(s);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                // write json file to internal storage, spacing of 2
+                utils.writeJson(getApplicationContext(), localJson, parent);
+                addItems();
+                checkMissingThumbs();
+                adp.notifyDataSetChanged();
+            }
+        }
     }*/
 }

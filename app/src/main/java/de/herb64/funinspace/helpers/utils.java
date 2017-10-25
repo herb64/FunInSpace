@@ -1,6 +1,12 @@
 package de.herb64.funinspace.helpers;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.os.Build;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
@@ -52,6 +58,34 @@ public final class utils {
             outputStream.close();
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    public static void writeJson(Context ctx, String filename, JSONObject json) {
+        try {
+            if (json != null) {
+                writef(ctx, filename, json.toString(2));
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void writeJson(Context ctx, String filename, JSONArray json) {
+        try {
+            if (json != null) {
+                writef(ctx, filename, json.toString(2));
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static int getBMPBytes(Bitmap bmp) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            return bmp.getAllocationByteCount();
+        } else {
+            return bmp.getByteCount();
         }
     }
 

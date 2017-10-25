@@ -47,6 +47,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     private MainActivity act;
     private spaceItemFilter filter;
     private SparseIntArray idxMap;      // mapping of filtered/unfiltered index values
+    private boolean bFullSearch;
 
     // Constructor (add via alt+insert) and adjust to our list of type spaceItem
     spaceAdapter(@NonNull Context context,
@@ -233,5 +234,13 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     // for the searc view does not work.
     public void cleanMap() {
         idxMap.clear();
+    }
+
+    public void setFullSearch(boolean fullSearch) {
+        bFullSearch = fullSearch;
+    }
+
+    public boolean getFullSearch() {
+        return bFullSearch;
     }
 }

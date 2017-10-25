@@ -45,6 +45,12 @@
         android:summary="@string/lowres_fallback"
         android:title="@string/fallback_lowres_title" />
 
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="full_search"
+        android:summary="Search in explanation text in addition to title only"
+        android:title="Full Search" />
+
     <!--
     <SwitchPreference
         android:defaultValue="true"

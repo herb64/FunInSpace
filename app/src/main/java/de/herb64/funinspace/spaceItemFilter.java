@@ -1,5 +1,6 @@
 package de.herb64.funinspace;
 
+import android.preference.PreferenceManager;
 import android.util.SparseIntArray;
 import android.widget.Filter;
 import java.util.ArrayList;
@@ -36,9 +37,17 @@ public class spaceItemFilter extends Filter {
             idxMap.clear();
             int key = 0;
             for (int i = 0; i< filterList.size(); i++) {
-                if (filterList.get(i).getTitle().toUpperCase().contains(filterTerm)) {
-                    filteredItems.add(filterList.get(i));
-                    idxMap.append(key++, i);
+                if (adapter.getFullSearch()) {
+                    if (filterList.get(i).getTitle().toUpperCase().contains(filterTerm) ||
+                            filterList.get(i).getExplanation().toUpperCase().contains(filterTerm)) {
+                        filteredItems.add(filterList.get(i));
+                        idxMap.append(key++, i);
+                    }
+                } else {
+                    if (filterList.get(i).getTitle().toUpperCase().contains(filterTerm)) {
+                        filteredItems.add(filterList.get(i));
+                        idxMap.append(key++, i);
+                    }
                 }
             }
             results.count = filteredItems.size();
