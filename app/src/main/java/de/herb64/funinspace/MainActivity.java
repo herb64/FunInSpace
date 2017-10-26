@@ -125,6 +125,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // changed to other location on 13.10.2017 into testing folder on my dropbox
     private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
     private static final String DROPBOX_MINI = "https://dl.dropboxusercontent.com/s/5itsg1bjbytrk6d/nasamini.json";
+    private static final String APOD_SIMULATE = "https://dl.dropboxusercontent.com/s/agfxia2f6or5plk/apod-simulate.json?";
+    // interesting: the name behind the link is not important, notfound.json worked as well, need to change the ID!!
+    private static final String APOD_NOTFOUND = "https://dl.dropboxusercontent.com/s/mzidejp3qfnosff/notfound.json";
     //private static final int KIB = 1024;
     //private static final int MIB = 1024 * KIB;
     //private static final int GIB = 1024 * MIB;
@@ -306,7 +309,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                             if (parent.length() != myList.size()) {
                                 new dialogDisplay(MainActivity.this, "Some problem with json (" +
                                         parent.length() + ") vs. list (" + myList.size() +
-                                        ") size", "Debug");
+                                        ") size", "Info for Herbert");
                             }
                             // Remove thumbfile, BEFORE indexed item gets deleted from list
                             Log.i("HFCM", "Delete: " + myList.get(idx).getThumb());
@@ -341,13 +344,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                                 }
                                 // Make changes permanent by rewriting json file
                                 utils.writeJson(getApplicationContext(), localJson, parent);
-                                /*String outString = null;
-                                try {
-                                    outString = parent.toString(2);
-                                } catch (JSONException e) {
-                                    e.printStackTrace();
-                                }
-                                utils.writef(getApplicationContext(), localJson, outString);*/
                             } catch (JSONException e) {
                                 e.printStackTrace();
                             }
@@ -365,21 +361,19 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         // AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
                         // builder.setView(R.layout.rating_dialog);  // REQUIRES 21 minimum :(
                         // We use a DialogFragment that displays the Rating dialog and our main
-                        // activity implements
+                        // activity implements an interface for rating listener
                         FragmentManager fm = getSupportFragmentManager();
                         ratingDialog dlg = new ratingDialog();
                         // Just pass the indices to the rating fragment, so that they get returned
                         // by our interface implementation. This avoids a global def. of "selected"
                         // and potential problems with phone rotation
-                        Bundle fragArguments = new Bundle();    // AGAIN: do NOT use non default constructor with fragments!
+                        // AGAIN: do NOT use non default constructor with fragments - use arguments
+                        Bundle fragArguments = new Bundle();
                         fragArguments.putIntegerArrayList("indices", selected);
                         int current = 0;
                         for (int i : selected) {
                             if (myList.get(i).getRating() > current) {
                                 current = myList.get(i).getRating();
-                        //for (int i=0; i<selected.size();i++) {
-                            //if (myList.get(selected.get(i)).getRating() > current) {
-                                //current = myList.get(selected.get(i)).getRating();
                             }
                         }
                         fragArguments.putInt("current_rating", current);
@@ -397,9 +391,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             @Override
             public void onDestroyActionMode(android.view.ActionMode actionMode) {
                 // reset selection status for all items
-                //for (int i : selected) {
-                //    myList.get(i).setSelected(false);
-                //}
                 for (int idx = 0; idx < myList.size(); idx++) {
                     myList.get(idx).setSelected(false);
                 }
@@ -514,8 +505,15 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // Get latest APOD item to append from NASA
             // TODO: reduce these calls to required minimum
             if (sharedPref.getBoolean("get_apod", true)) {
-                new apodTask().execute(nS());
-                // or some local URL using python simplehttpserver (change to httpurlconnection)
+                //new apodTask().execute(nS());
+                //new apodTask().execute(APOD_SIMULATE); // just for testing - files on dropbox
+                // new version using asyncload - apodTask() is now retired
+                new asyncLoad(MainActivity.this,
+                        "APOD_LOAD",
+                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).execute(nS());
+                /*new asyncLoad(MainActivity.this,
+                        "APOD_LOAD",
+                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).execute(APOD_SIMULATE);*/
             }
         }
     }
@@ -588,15 +586,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 e.printStackTrace();
             }
         }
-        // Rewrite local json with spacing of 2
+        // Rewrite local json file
         utils.writeJson(getApplicationContext(), localJson, parent);
-        /*String outString = null;
-        try {
-            outString = parent.toString(2);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-        utils.writef(getApplicationContext(), localJson, outString);*/
     }
 
     /*old code of myHashAdapter derived from HfcmMapAdapter is moved to bottom as comment
@@ -612,462 +603,196 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
      * https://stackoverflow.com/questions/10864853/when-exactly-is-it-leak-safe-to-use-anonymous-inner-classes
      * https://blog.androidcafe.in/android-memory-leak-part-1-context-85cebdc97ab3
      * http://simonvt.net/2014/04/17/asynctask-is-bad-and-you-should-feel-bad/
+     *
+     * Code has been moved to asyncLoad and orignal code now at end of this file... 26.10.2017
      */
-    private class apodTask extends AsyncTask<String, String, String> {
-        private String imgUrl;
-        @Override
-        protected String doInBackground(String... params) {
-            apodItem = new spaceItem();
 
-            // Enable TLSv1 below 5.0 (Lollipop) TODO: TLS > 1.0 / move to oncreate / android 7
-            // https://blog.dev-area.net/2015/08/13/android-4-1-enable-tls-1-1-and-tls-1-2/
-            // https://developer.android.com/about/versions/nougat/android-7.0-changes.html#tls-ssl
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
-                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)) {
-                SSLContext sslcontext = null;
-                try {
-                    sslcontext = SSLContext.getInstance("TLSv1");
-                    sslcontext.init(null, null, null);
-                    SSLSocketFactory noSSLv3Factory = new TLSSocketFactory();
-                    HttpsURLConnection.setDefaultSSLSocketFactory(noSSLv3Factory);
-                } catch (NoSuchAlgorithmException | KeyManagementException e) {
-                    e.printStackTrace();
-                }
-            }
 
-            HttpsURLConnection nasa_conn = null;
-            BufferedReader reader = null;
-            try {
-                URL url = new URL(params[0]);
-                nasa_conn = (HttpsURLConnection) url.openConnection();
-                nasa_conn.connect();
-                InputStream jsonstream = nasa_conn.getInputStream();
-                reader = new BufferedReader(new InputStreamReader(jsonstream));
-                StringBuffer jsonbuffer = new StringBuffer();
-                String jsonstring;
-
-                while((jsonstring = reader.readLine()) != null) {
-                    jsonbuffer.append(jsonstring);
-                }
-                // this is returned to onPostExecute
-                return jsonbuffer.toString();
-
-            } catch (MalformedURLException e) {
-                e.printStackTrace();
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-                // TODO : handle over rate limit here
-                // OVER_RATE_LIMIT
-                // You have exceeded your rate limit. Try again later or contact us at https://api.nasa.gov/contact/ for assistance
-                return "FILENOTFOUND";
-            } catch (IOException e) {
-                // running into this because of DNS problems in AVD device. Seems to be because
-                // of LAN card and Wifi present in host - Problem on my Windows Studio installation
-                // And on 14.10.2017 on AVD Android 4.1...
-                e.printStackTrace();
-                return e.getMessage();
-            } finally {
-                if(nasa_conn != null) {
-                    try {
-                        nasa_conn.disconnect();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-                try {
-                    if(reader != null) {
-                        reader.close();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-            return null;
+    // CODE for processing apod json returned from asyncLoad...  former onpostexecute from apodtask
+    /*
+     * Create a new spaceItem from information returned in daily JSON
+     * @params String
+     */
+    void createApodFromJson(String s) {
+        String imgUrl = "";
+        apodItem = new spaceItem();
+        String sTitle = "n/a";
+        String sCopyright = "";
+        String sExplanation = "";
+        String sMediaType = "";
+        String sHiresUrl = "";
+        String sDate = "";
+        JSONObject parent = null;
+        Uri resource_uri = null;
+        try {
+            parent = new JSONObject(s);
+            sMediaType = parent.getString("media_type");
+            sDate = parent.getString("date");
+            // TODO copyright not yet finalized - replace newline or not, limit length
+            sCopyright = "Copyright: " + parent.getString("copyright").
+                    replaceAll(System.getProperty("line.separator"), " ");
+            sTitle = parent.getString("title");
+            imgUrl = parent.getString("url"); // TODO: 11.09.2017 - missing leads to strange effects of missing keys
+            resource_uri = Uri.parse(imgUrl);
+            sHiresUrl = parent.getString("hdurl");
+            sExplanation = parent.getString("explanation");
+        } catch (JSONException e) {
+            e.printStackTrace();
+            Log.e("HFCM", e.getMessage());
+            new dialogDisplay(this, e.getMessage(), "APOD Processing error");
         }
-        // INFO: this one get's added by starting to type onPostEx.. in the editor
-        @Override
-        protected void onPostExecute(String s) {
-            String sTitle = "n/a";
-            String sCopyright = "";
-            String sExplanation = "";
-            String sMediaType = "";
-            String sHiresUrl = "";
-            String sDate = "";
-            JSONObject parent = null;
-            Uri resource_uri = null;
-            if(s != null) {
-                if (s.equals("FILENOTFOUND")) {
-                    // TODO: this is not necessarily the case...
-                    Log.e("HFCM", "FILENOTFOUND - MAYBE API RATE LIMIT EXCEEDED ??");
-                    new dialogDisplay(MainActivity.this, getString(R.string.rate_limit_exceeded),
-                            getString(R.string.no_apod));
-                    return;
-                } else if (s.startsWith("Connection")) {
-                    new dialogDisplay(MainActivity.this, s + "\n" + getString(R.string.enable_tls), "NASA Connect");
-                    return;
-                }
-                //JSONObject parent = null;
-                try {
-                    parent = new JSONObject(s);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-                if(parent == null) {
-                    return;
-                }
-                if(parent.has("media_type")) {
-                    try {
-                        sMediaType = parent.getString("media_type");
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }
-                if(parent.has("date")) {
-                    try {
-                        sDate = parent.getString("date");
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }
-                if(parent.has("copyright")) {
-                    try {
-                        sCopyright = "Copyright: " + parent.getString("copyright").
-                                replaceAll(System.getProperty("line.separator"), " ");
-                        // removing any new lines - as found in IC 1396: Emission Nebula in Cepheus
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }
-                if(parent.has("title")) {
-                    try {
-                        sTitle = parent.getString("title");
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }
-                if(parent.has("url")) {
-                    try {
-                        imgUrl = parent.getString("url");
-                        resource_uri = Uri.parse(imgUrl);
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                        // TODO: missing on 11.09.2017 - leads to strange effects of missing keys
-                    }
-                }
-                if(parent.has("hdurl")) {
-                    try {
-                        sHiresUrl = parent.getString("hdurl");
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }
-                if(parent.has("explanation")) {
-                    try {
-                        sExplanation = parent.getString("explanation");
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }
 
-                if (resource_uri != null) {
-                    if (sMediaType.equals("video")) {
-                        // note, that this rewrites sMediaType variable!
-                        String host = resource_uri.getHost();
-                        List<String> path = resource_uri.getPathSegments();
-                        apodItem.setHires(resource_uri.toString());
-                        if (host.equals("www.youtube.com")) {
-                            // TODO: now we just assume 'embed' link - might not be true always ??
-                            // https://www.youtube.com/embed/" + path.get(1) + "?rel=0
-                            // corresponding image link can be found on
-                            // https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
-                            sMediaType = M_YOUTUBE;
-                            apodItem.setThumb("th_" + path.get(1) + ".jpg");
-                            sHiresUrl = imgUrl;
-                            imgUrl = "https://img.youtube.com/vi/" + path.get(1) + "/0.jpg";
-                            apodItem.setLowres(imgUrl);
-                        } else if (host.endsWith("vimeo.com")) { // vimeo.com / player.vimeo.com
-                            // see example file from 11.09.2017: link is in url, NOT hdurl
-                            sMediaType = M_VIMEO;
-                            apodItem.setThumb("th_VIMEO_unknown.jpg");
-                            sHiresUrl = imgUrl;
-                            // URL is the link that can be played in a WebView, just not using
-                            // iframe embed at all... doing it like this for now
-                            // TODO: extract video ID and thumbnail url from given video url
-                            // thumbnail image name: th_<video-id>.jpg
-                            // Note: this needs a REST API call to gather the required infos..
-                            apodItem.setLowres("");     // will hold thumbnail url
-                        } else {
-                            sMediaType = M_VIDEO_UNKNOWN;
-                            // Many more possibilities might exist, depending on NASA content
-                            apodItem.setThumb("th_UNKNOWN.jpg");
-                        }
-                    } else {
-                        // thumbnail gets name of lowres image with prefix 'th_'
-                        apodItem.setThumb("th_" + resource_uri.getLastPathSegment());
-                        apodItem.setHires(sHiresUrl);
-                        apodItem.setLowres(imgUrl);
-                    }
+        if (resource_uri != null) {
+            if (sMediaType.equals("video")) {
+                // note, that this rewrites sMediaType variable!
+                String host = resource_uri.getHost();
+                List<String> path = resource_uri.getPathSegments();
+                apodItem.setHires(resource_uri.toString());
+                if (host.equals("www.youtube.com")) {
+                    // TODO: now we just assume 'embed' link - might not be true always ??
+                    // url> https://www.youtube.com/embed/" + path.get(1) + "?rel=0
+                    // img> https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
+                    sMediaType = M_YOUTUBE;
+                    apodItem.setThumb("th_" + path.get(1) + ".jpg");
+                    sHiresUrl = imgUrl;
+                    imgUrl = "https://img.youtube.com/vi/" + path.get(1) + "/0.jpg";
+                    apodItem.setLowres(imgUrl);
+                } else if (host.endsWith("vimeo.com")) { // vimeo.com / player.vimeo.com
+                    // see example file from 11.09.2017: link is in url, NOT hdurl
+                    sMediaType = M_VIMEO;
+                    apodItem.setThumb("th_VIMEO_unknown.jpg");
+                    sHiresUrl = imgUrl;
+                    // URL is the link that can be played in a WebView, just not using
+                    // iframe embed at all... doing it like this for now
+                    // TODO: extract video ID and thumbnail url from given video url
+                    // thumbnail image name: th_<video-id>.jpg
+                    // Note: this needs a REST API call to gather the required infos..
+                    apodItem.setLowres("");     // will hold thumbnail url
+                } else {
+                    sMediaType = M_VIDEO_UNKNOWN;
+                    apodItem.setThumb("th_UNKNOWN.jpg");
                 }
             } else {
-                Log.e("HFCM", "no APOD String returned from doInBackground");
+                // thumbnail gets name of lowres image with prefix 'th_'
+                apodItem.setThumb("th_" + resource_uri.getLastPathSegment());
+                apodItem.setHires(sHiresUrl);
+                apodItem.setLowres(imgUrl);
             }
-            // TODO shouldn't super be executed first ??? might have done this bad
-            super.onPostExecute(s);
+        }
+        // TODO shouldn't super be executed first ??? might have done this bad
+        //super.onPostExecute(s);
+        apodItem.setTitle(sTitle);
+        apodItem.setCopyright(sCopyright);
+        apodItem.setExplanation(sExplanation);
+        apodItem.setHires(sHiresUrl);
+        // now using long int epoch value for date in spaceItem
+        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
+        // normally we would use code as below for correct locale, but we parse a specific
+        // format here :_ "date": "2017-09-17", as returned by NASA in their json
+        // DateFormat dF = SimpleDateFormat.getDateInstance();
+        long epoch = 0;
+        try {
+            epoch = dF.parse(sDate).getTime();
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        apodItem.setDateTime(epoch);
+        apodItem.setMedia(sMediaType);
+        apodItem.setRating(0);
+        apodItem.setLowSize("");
+        apodItem.setHiSize("");
 
-            apodItem.setTitle(sTitle);
-            apodItem.setCopyright(sCopyright);
-            apodItem.setExplanation(sExplanation);
-            apodItem.setHires(sHiresUrl);
-            // now using long int epoch value for date in spaceItem
-            SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
-            // normally we would use code as below for correct locale, but we parse a specific
-            // format here :_ "date": "2017-09-17", as returned by NASA in their json
-            // DateFormat dF = SimpleDateFormat.getDateInstance();
-            long epoch = 0;
-            try {
-                epoch = dF.parse(sDate).getTime();
-            } catch (ParseException e) {
-                e.printStackTrace();
-            }
-            apodItem.setDateTime(epoch);
-            apodItem.setMedia(sMediaType);
-            apodItem.setRating(0);
-            apodItem.setLowSize("");
-            apodItem.setHiSize("");
+        // Keep a local copy of the original apod nasa json file returned by api
+        // TODO: remove these as well on item deletion? They can never be recreated later on
+        if (parent != null) {
+            utils.writeJson(getApplicationContext(), String.valueOf(epoch) + ".json", parent);
+        }
 
-            // 20.09.2017 - keep a local copy of the nasa json file returned by api for reference
-            // TODO: we should remove these on deletion as well - but they cannot be recreated!!!
-            if (parent != null) {
-                utils.writeJson(getApplicationContext(), String.valueOf(epoch) + ".json", parent);
-            }
-            /*try {
-                if (parent != null) {
-                    utils.writef(getApplicationContext(),
-                            String.valueOf(epoch) + ".json", parent.toString(2));
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }*/
-            // For VIMEO, "insert" an extra thread using oembed API to determine infos about the
-            // thumbnail image URL before calling the imgLowResTask thread to load thumbnail bitmap
-            //if (sMediaType == M_VIMEO) {
-            if (sMediaType.equals(M_VIMEO)) {   // TODO: test this
-                Log.i("HFCM", ">>>>>>>>>>>>>>>>>>>>>>>>>>>>> vimeo >>>>>>>>>>>>>>>>>");
-                new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
-            } else {
-                new ImgLowresTask().execute(imgUrl);
-            }
+        // For VIMEO, "insert" an extra thread using oembed API to determine infos about the
+        // thumbnail image URL before calling the imgLowResTask thread to load thumbnail bitmap
+        if (sMediaType.equals(M_VIMEO)) {   // TODO: test this
+            //new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
+            Log.i("HFCM", "Launching asyncLoad for VIMEO info: " + sHiresUrl);
+            new asyncLoad(MainActivity.this, "VIMEO_INFO").
+                    execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
+        } else {
+            //new ImgLowresTask().execute(imgUrl);
+            new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(imgUrl);
         }
     }
 
-    // Get vimeo infos about thumbnail picture URL first, before calling imgLowResTask to load
-    // this thumbnail image.
-    private class vimeoInfoTask extends AsyncTask<String, String, String> {
-        @Override
-        protected String doInBackground(String... params) {
-            HttpsURLConnection vimeo_conn = null;
-            BufferedReader reader = null;
-
-            try {
-                URL url = new URL(params[0]);
-                vimeo_conn = (HttpsURLConnection) url.openConnection();
-                vimeo_conn.connect();
-                // We now read data from this connection into an input stream
-                InputStream jsonstream = vimeo_conn.getInputStream();
-                reader = new BufferedReader(new InputStreamReader(jsonstream));
-                StringBuffer jsonbuffer = new StringBuffer();
-                String jsonstring;
-
-                while((jsonstring = reader.readLine()) != null) {
-                    jsonbuffer.append(jsonstring);
-                }
-                return jsonbuffer.toString();
-
-            } catch (MalformedURLException e) {
-                e.printStackTrace();
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-                return "FILENOTFOUND";
-            } catch (IOException e) {
-                e.printStackTrace();
-                return e.getMessage();
-            } finally {
-                if(vimeo_conn != null) {
-                    try {
-                        vimeo_conn.disconnect();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-                try {
-                    if(reader != null) {
-                        reader.close();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(String s) {
-            JSONObject parent = null;
-            String thumbUrl = "n/a";
-            String videoIid = null;
-            if(s != null) {
-                if (s.equals("FILENOTFOUND")) {
-                    return;
-                }
-            }
-            try {
-                parent = new JSONObject(s);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            if(parent == null) {
-                return;
-            }
-            // We are interested in video ID and thumbnail_url
-            if(parent.has("video_id")) {
-                try {
-                    videoIid = parent.getString("video_id");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }
-            if(parent.has("thumbnail_url")) {
-                try {
-                    thumbUrl = parent.getString("thumbnail_url");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }
-            if (videoIid != null) {
-                apodItem.setThumb("th_" + videoIid + ".jpg");   // thumb filename
-            }
-            apodItem.setLowres(thumbUrl);
-            super.onPostExecute(s);
-            new ImgLowresTask().execute(thumbUrl);
-        }
-    }
 
     // TODO - return values from asynctask - seems to work with execute().get()  but it blocks!!! - search topic: wait for asynctask to complete
     // ++++   >>>  https://stackoverflow.com/questions/12575068/how-to-get-the-result-of-onpostexecute-to-main-activity-because-asynctask-is-a
     // asyncLoad.java is one of the results of this - now still make sure about memory leaks!!!!
-    private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
-        @Override
-        protected Bitmap doInBackground(String... params) {
-            // TODO 20.08.2017 - bitmap could not be loaded from youtube by the below method
-            //                   using link https://img.youtube.com/vi/53641212/0.jpg
-            //                   bitmap null as result passed to onPostExecute() - crashed
-            Bitmap bitmap = null;
-            try {
-                URL lrURL = new URL(params[0]);     // URL for image in params[0]
-                try {
-                    bitmap = BitmapFactory.decodeStream((InputStream)lrURL.getContent());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            if(bitmap != null) {
-                apodItem.setLowSize(String.valueOf(bitmap.getWidth()) + "x" +
-                        String.valueOf(bitmap.getHeight()));
-            }
-            return bitmap;
-        }
+    //
+    // private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
+    // .. now also retired and replaced by asyncLoad
 
-        @Override
-        protected void onPostExecute(Bitmap bitmap) {
-            super.onPostExecute(bitmap);
-            /*if (myMap.containsKey(apodItem.getTitle())) {
+    // new code on 26.10. to replace imglowrestask with asyncload as well
+    void lowresBitmapOnPostExecuteReplacement(Bitmap bitmap) {
+        // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
+        // item should match anyway, because latest image is on top of the list.
+        for(int i=0; i<myList.size();i++) {
+            if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
+                // TODO here's the point to check, if the thumbnail file exists (and reload)
+                Toast.makeText(MainActivity.this, R.string.already_loaded,
+                        Toast.LENGTH_LONG).show();
                 return;
-            }*/
-            // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
-            // item should match anyway, because latest image is on top of the list.
-            for(int i=0; i<myList.size();i++) {
-                if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
-                    // TODO here's the point to check, if the thumbnail file exists (and reload)
-                    Toast.makeText(MainActivity.this, R.string.already_loaded,
-                            Toast.LENGTH_LONG).show();
-                    return;
-                }
             }
-
-            // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
-            if (bitmap != null) {
-                File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
-                Bitmap thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
-                FileOutputStream outstream = null;
-                try {
-                    outstream = new FileOutputStream(thumbFile);
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                }
-                thumbnail.compress(Bitmap.CompressFormat.JPEG, 90, outstream);
-                try {
-                    if (outstream != null) {
-                        outstream.flush();
-                        outstream.close();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                apodItem.setBmpThumb(thumbnail);
-            } else {
-                apodItem.setBmpThumb(null);     // just have a black image here TODO missing img?
-            }
-
-            // JSON is an array of objects, which have a "Type" and a "Content". Type is just
-            // a string, content is another JSON object.
-            JSONObject apodObj = new JSONObject();
-            JSONObject contentObj = new JSONObject();
-            try {
-                contentObj.put("Title", apodItem.getTitle());
-                contentObj.put("DateTime", apodItem.getDateTime());
-                contentObj.put("Copyright", apodItem.getCopyright());
-                contentObj.put("Explanation", apodItem.getExplanation());
-                contentObj.put("Lowres", apodItem.getLowres());
-                contentObj.put("Hires", apodItem.getHires());
-                contentObj.put("Thumb", apodItem.getThumb());
-                contentObj.put("Rating", apodItem.getRating());
-                contentObj.put("Media", apodItem.getMedia());
-                contentObj.put("HiSize", apodItem.getHiSize());
-                contentObj.put("LowSize", apodItem.getLowSize());
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            try {
-                apodObj.put("Type", "APOD");
-                apodObj.put("Content", contentObj);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            // add object to local json array and save json content to internal storage
-            parent.put(apodObj);
-            utils.writeJson(getApplicationContext(), localJson, parent);
-            /*String outString = null;
-            try {
-                outString = parent.toString(2);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            utils.writef(getApplicationContext(), localJson, outString);*/
-
-            myList.add(0, apodItem);
-            adp.notifyDataSetChanged();
-            Toast.makeText(MainActivity.this, R.string.apod_load,
-                    Toast.LENGTH_LONG).show();
-            myItemsLV.setSelection(0);
         }
+
+        // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
+        if (bitmap != null) {
+            //File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
+            Bitmap thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
+            Log.i("HFCM", "Calling utils to write thumb for new APOD:" + apodItem.getTitle());
+            utils.writeJPG(getApplicationContext(), apodItem.getThumb(), thumbnail);
+            apodItem.setBmpThumb(thumbnail);
+        } else {
+            apodItem.setBmpThumb(null);     // just have a black image here TODO missing img?
+        }
+
+        // JSON is an array of objects, which have a "Type" and a "Content". Type is just
+        // a string, content is another JSON object.
+        JSONObject apodObj = new JSONObject();
+        JSONObject contentObj = new JSONObject();
+        try {
+            contentObj.put("Title", apodItem.getTitle());
+            contentObj.put("DateTime", apodItem.getDateTime());
+            contentObj.put("Copyright", apodItem.getCopyright());
+            contentObj.put("Explanation", apodItem.getExplanation());
+            contentObj.put("Lowres", apodItem.getLowres());
+            contentObj.put("Hires", apodItem.getHires());
+            contentObj.put("Thumb", apodItem.getThumb());
+            contentObj.put("Rating", apodItem.getRating());
+            contentObj.put("Media", apodItem.getMedia());
+            contentObj.put("HiSize", apodItem.getHiSize());
+            contentObj.put("LowSize", apodItem.getLowSize());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        try {
+            apodObj.put("Type", "APOD");
+            apodObj.put("Content", contentObj);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        // add object to local json array and save json content to internal storage
+        parent.put(apodObj);
+        utils.writeJson(getApplicationContext(), localJson, parent);
+        myList.add(0, apodItem);
+        adp.notifyDataSetChanged();
+        Toast.makeText(MainActivity.this, R.string.apod_load,
+                Toast.LENGTH_LONG).show();
+        myItemsLV.setSelection(0);
     }
+
 
     /* N O T E:   T H I S   I S   N O T   A C T I V E
      *Listener for rating bar changes - useless for me, because I use "small" bars
-     *style="@style/Widget.AppCompat.RatingBar" - works
-     *style="@style/Widget.AppCompat.RatingBar.Small" - fails
+     *style="@style/Widget.AppCompat.RatingBar"       > works
+     *style="@style/Widget.AppCompat.RatingBar.Small" > fails
      * >> "small" versions are designed to ignore any interaction, see Android docs
      */
     private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
@@ -1077,12 +802,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // just as a first test: we create a listener class for onclick events on our
-    // thumbnail images. The adapter sets a Tag, which can be read here and used
-    // for further actions. NEW: this listener now also runs for the explanation textviews!!!
-    // TODO add listeners for clicking on later to be added rating bar
-    // maybe this is not a good way to do it, and just using base class might be better
-    // but we are going to learn and experiment... :)
+    // Listener for clicks on items in the list. This is registered in spaceAdapter.
+    // The adapter sets a Tag, which can be read here and used for further actions.
     private class thumbClickListener implements View.OnClickListener {
         // onClick() gets passed the view in which we store the URL to be opened
         // in a TAG - this happens in getView() in our adapter...
@@ -1101,8 +822,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // we just reset the maxlines to a larger limit and remove the ellipse stuff. This
                 // is only temporarily and automatically disappears when scrolling or when clicking
                 // again.
-                // TODO - during background load of thumbs at initial install, the full text always
-                //        disappears on refreshs - hmm, should we really bother?
+                // TODO - during background load of thumbs, the full text always
+                //        disappears on refreshs.
                 TextView v = (TextView) view;
                 if (v.getMaxLines() == MAX_ELLIPSED_LINES) {
                     v.setMaxLines(MAX_LINES);
@@ -1263,62 +984,28 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         if (requestCode == HIRES_LOAD_REQUEST) {
             if (resultCode == RESULT_OK) {
                 String testsize = data.getStringExtra("sizeHires");
-                String hUrl = data.getStringExtra("hiresurl");
+                //String hUrl = data.getStringExtra("hiresurl");
                 int listidx = data.getIntExtra("lstIdx",0);
                 String logString = data.getStringExtra("logString");
                 new dialogDisplay(this, logString, lastImage);
-                // we now have the index into our list, so set the field
-                myList.get(listidx).setHiSize(testsize);
-
-                // update local json array "parent" - bad here: doing a loop to search
-                // the correct url... - should be done better
-                // TODO: how to get the correct object immediately? Better change JSON format
-                // to put Title out of content one hierarchy higher
-                JSONObject obj = null;
-                JSONObject content = null;
-                String strHres = "";
-                for (int i = 0; i < parent.length(); i++) {
-                    try {
-                        obj = parent.getJSONObject(i);
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                    try {
-                        if (obj != null) {
-                            content = obj.getJSONObject("Content");
-                        } else {
-                            continue;
-                        }
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                    try {
-                        if (content != null) {
-                            strHres = content.getString("Hires");
-                        } else {
-                            continue;
-                        }
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                    if(strHres.equals(hUrl)) {
-                        try {
-                            content.put("HiSize", testsize);
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                        // Write changes to storage
-                        utils.writeJson(getApplicationContext(), localJson, parent);
-                        /*String outString = null;
-                        try {
-                            outString = parent.toString(2);
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                        utils.writef(getApplicationContext(), localJson, outString);*/
-                        break;
-                    }
+                if (myList.get(listidx).getHiSize().equals(testsize)) {
+                    return;     // no action needed if hires size already in data
                 }
+                // maybe change json to put Title out of content one hierarchy higher ??
+                try {
+                    // data in json is reverse ordered as in list
+                    JSONObject content = parent.getJSONObject(parent.length() - 1 - listidx).
+                            getJSONObject("Content");
+                    Log.i("HFCM", "HIRES_LOAD: index=" + listidx +
+                            ", list: " + myList.get(listidx).getTitle() +
+                            ", json: " + content.getString("Title"));
+                    content.put("HiSize", testsize);
+                    utils.writeJson(getApplicationContext(), localJson, parent);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    Log.e("HFCM", e.toString());
+                }
+                myList.get(listidx).setHiSize(testsize);
                 adp.notifyDataSetChanged();
             }
         } else if (requestCode == GL_MAX_TEX_SIZE_QUERY) {
@@ -1341,9 +1028,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 // Check for any changed preference items, which have been marked by the listener.
                 if (thumbQualityChanged) {
                     SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
-                    //Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
+                    Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
                     thumbQualityChanged = false;    // RESET !!!
-                    // Reload the complete list with all local thumbnails
+                    // Just reload the complete list. This reloads all images with changed settings
+                    // from the locally stored thumbnail images
                     myList.clear();
                     addItems();
                     adp.notifyDataSetChanged();
@@ -1352,14 +1040,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // Try to listen for changed preferences here. Important: this is called after each single
-    // change IMMEDIATELY.
+    // Listener for changed preferences. This is called after each single change IMMEDIATELY!
     // This means, if changing a preference that might trigger a more expensive action, it could
     // get bad if user toggles that switch and in the end closes the dialog without any effective
     // change.
     // The onActivityResult() method reacting on SETTINGS_REQUEST is called AFTER the settings
     // dialog activity is closed and might be a better place to handle changes. The following
-    // code solves this by using "change flags"
+    // code solves this by using "change flags", checked in onActivityResult() later on.
     SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener = new
             SharedPreferences.OnSharedPreferenceChangeListener() {
                 @Override
@@ -1373,6 +1060,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         thumbQualityChanged ^= true;
                     }
                     if (changed.equals("full_search")) {
+                        // this one: just set on each single toggle
                         adp.setFullSearch(sharedPref.getBoolean("full_search", false));
                     }
                 }
@@ -1386,7 +1074,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
-        //adp.setFullSearch(sharedPref.getBoolean("full_search", false));
         MenuItem searchItem = menu.findItem(R.id.action_search); // 22.10.2017 - add
         //SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem); // deprecated
         SearchView sv = (SearchView) searchItem.getActionView();
@@ -1459,13 +1146,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         if (id == R.id.action_help) {
             return true;
         }
-        // Sync metatata with dropbox. This allows to refresh without a new installation.
-        // do a merge, keeping local infos about ratings and just reloading what is needed
         if (id == R.id.dropbox_sync) {
-            // create asyncLoad class instance - this returns immediately and the processFinish()
-            // implementation of asyncLoad is called after the async load is done
-
-            // We should have a dialog asking to continue
+            // Refresh metatata with dropbox. This allows to refresh without a new installation.
             //https://stackoverflow.com/questions/2115758/how-do-i-display-an-alert-dialog-on-android
             AlertDialog.Builder builder;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -1477,11 +1159,17 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 builder = new AlertDialog.Builder(MainActivity.this);
             }
 
-            // we could add an extended dialog with selection of different contents to load
+            // we could add an extended dialog with selection of different contents to load, e.g.
+            // having data filtered by criteria on refresh
+            // - only videos, no videos, only youtube or vimeo
+            // - only images newer than, older than, timerange
+            // - only images larger than given size
             builder.setTitle("Refresh of image list")
                     .setMessage("Do you want to refresh your list with Herbert's Dropbox informations?")
                     .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                         public void onClick(DialogInterface dialog, int which) {
+                            // asyncload requires an implementation of processFinish(), which is
+                            // called after data has been loaded
                             new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_JSON);
                             //new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_MINI);
                         }
@@ -1493,21 +1181,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     })
                     .setIcon(android.R.drawable.ic_dialog_alert)
                     .show();
-            // show ends in
-            // java.lang.IllegalStateException: You need to use a Theme.AppCompat theme (or descendant) with this activity.
-
-            //new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_JSON);
-            //new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_MINI);
-            //new asyncLoad(this, "NASA-TEST").execute("https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY");
-            //new asyncLoad(this, "NASA-TEST").executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY");
-            //new asyncLoad(this, "JPEG_TEST").execute("https://apod.nasa.gov/apod/image/1710/M51_KerryLeckyHepburn_1024.jpg");
-            /* Old code with inner class - dropped that to implement interface in MainActivity
-            asyncLoad(new asyncLoad.AsyncResponse() {
-                @Override
-                public void processFinish(Object output) {
-                    ....
-                }
-            }).execute("url to load");*/
             return true;
         }
 
@@ -1528,10 +1201,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
 
     /**
-     * Add all items currently defined within the local JSON to the ArrayList of space items.
+     * On startup, fill ArrayList of spaceItems with contents described in local JSON
      */
     public void addItems() {
-        JSONObject obj = null;
         JSONObject content = null;
         String strTitle = "";
         long dateTime = 0;
@@ -1548,24 +1220,17 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         for (int i = parent.length()-1; i >=0 ; i--)
         {
             try {
-                obj = parent.getJSONObject(i);
+                // we do not check "Type" field here, only APOD is present now
+                content = parent.getJSONObject(i).getJSONObject("Content");
             } catch (JSONException e) {
                 e.printStackTrace();
             }
-            // get the "Content" object, not yet checking type, currently only "APOD" is expected
-            try {
-                content = obj.getJSONObject("Content");
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            // get the fields - we know, that the keys exist, because we have written this ourselves
-            // ha, not always :( bad with 11.09.2017 - no lowres key present, because "url" missing
-            // in json from NASA TODO 11.09.2017
+
+            // 11.09.2017 - no lowres key present, because "url" missing in NASA json TODO recheck
             try {
                 strTitle = content.getString("Title");
                 dateTime = content.getLong("DateTime");
-                // TODO - temporary code for removing newlines from copyright for existing
-                // TODO - long copyright notices, as in "Cassini approaches Saturn - 2017-09-11
+                // TODO - revisit: long copyright string (2017-09-11) and newline removal
                 // images... Remove later and only use the code already in new apod loading
                 strCopyright = content.getString("Copyright").
                         replaceAll(System.getProperty("line.separator"), " ");
@@ -1581,7 +1246,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 e.printStackTrace();
             }
             // add info to our list of spaceItems
-            //Log.i("HFCM", "Add Items " + strTitle + " > " + strThumb);
             spaceItem newitem = new spaceItem();
             newitem.setTitle(strTitle);
             newitem.setDateTime(dateTime);
@@ -1629,17 +1293,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
             }
         }
-        // map version: arraylist of title strings
-        /*for (String key : myMap.keySet()) {
-            if (myMap.get(key).getBmpThumb() == null &&
-                    !myMap.get(key).getLowres().equals("")) {
-                missing2.add(key);
-                myMap.get(key).setThumbLoadingState(View.VISIBLE);
-            }
-        }*/
-
-        // we might change this to missing2 if using map based version - needs also quite some
-        // changes in thumbLoaderTask() code
         if (missing.size() > 0) {
             Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, missing.size()),
                     Toast.LENGTH_LONG).show();
@@ -1660,7 +1313,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         protected Void doInBackground(ArrayList<Integer>... params) {
             Bitmap bitmap = null;
             Bitmap thumbnail = null;
-            File thumbFile = null;
+            //File thumbFile = null;
             spaceItem wkItem;
             missing = params[0];
             for (int i=0; i < missing.size(); i++) {
@@ -1668,11 +1321,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 String lowresurl = wkItem.getLowres();
                 try {
                     URL imgurl = new URL(lowresurl);
-                    try {
-                        bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -1681,7 +1330,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     wkItem.setLowSize(String.valueOf(bitmap.getWidth()) + "x" +
                             String.valueOf(bitmap.getHeight()));
                     // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
-                    thumbFile = new File(getApplicationContext().getFilesDir(), wkItem.getThumb());
+                    //thumbFile = new File(getApplicationContext().getFilesDir(), wkItem.getThumb());
                     thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
                     wkItem.setBmpThumb(thumbnail);
                 }
@@ -1693,23 +1342,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 publishProgress(missing.get(i));
 
                 // Write the thumbnail as small jpeg file to internal storage
-                FileOutputStream outstream = null;
-                try {
-                    if (thumbFile != null) {
-                        outstream = new FileOutputStream(thumbFile);
-                    }
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                }
-                try {
-                    if (outstream != null) {
-                        thumbnail.compress(Bitmap.CompressFormat.JPEG, 90, outstream);
-                        outstream.flush();
-                        outstream.close();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                utils.writeJPG(getApplicationContext(), wkItem.getThumb(), thumbnail);
             }
             return null;
         }
@@ -1732,6 +1365,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
      * - Thumbnail files of images are deleted, if they are not referenced any more in the new array
      */
     private void refreshFromDropbox(JSONArray dropbox) {
+        // TODO: filters for things to load and: KEEP NEWER IMAGES already present on device?? (now, apod is removed if not in dropbox and then reloaded)
         // for now, just overwrite existing data by brute force, which means
         // 1. metadata on the device which is not on dropbox is lost - could be restored from local nasa json info, if already stored (timestamp.json)
         // 2. deleted items are loaded again - no problem, because deletes are not yet persistent yet, but also later: how to determine, why not to restore an item?
@@ -1747,26 +1381,19 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         thumbsToDelete = new HashMap<>();
         for (int i = 0; i < parent.length(); i++) {
             try {
-                obj = parent.getJSONObject(i);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            try {
+                /*obj = parent.getJSONObject(i);
                 if (obj != null) {
                     content = obj.getJSONObject("Content");
+                }*/
+                content = parent.getJSONObject(i).getJSONObject("Content");
+                if (content != null) {
+                    ratings.put(content.getString("Title"), content.getInt("Rating"));
+                    // All thumbfiles are candidates for deletion
+                    thumbsToDelete.put(content.getString("Title"), content.getString("Thumb"));
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-            }
-            if (content == null) {
-                return;
-            }
-            try {
-                ratings.put(content.getString("Title"), content.getInt("Rating"));
-                // All thumbfiles are candidates for deletion
-                thumbsToDelete.put(content.getString("Title"), content.getString("Thumb"));
-            } catch (JSONException e) {
-                e.printStackTrace();
+                Log.e("HFCM", e.toString());
             }
         }
 
@@ -1817,7 +1444,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         checkMissingThumbs();
         adp.notifyDataSetChanged();
         if (sharedPref.getBoolean("get_apod", true)) {
-            new apodTask().execute(nS());
+            //new apodTask().execute(nS());
+            new asyncLoad(MainActivity.this,
+                    "APOD_LOAD",
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)).execute(nS());
         }
     }
 
@@ -1828,7 +1458,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
      */
     @Override
     public void processFinish(int status, String tag, Object output) {
-        // switch-case for strings availabale since Java 7
+        // switch-case for String type available since Java version 7
         switch (tag) {
             case "DROPBOX_REFRESH":
                 Object json;
@@ -1843,6 +1473,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 }
                 break;
             case "DROPBOX_INIT":
+                // Todo: we might use refreshFromDropbox Code as well, maybe with parm "init" ?
                 // On 25.10.2017, loadFromDropboxTask() has been retired. some comments from old code
                 // TODO - needs retained fragment to run, so do not rotate phone while thumbs are loading
                 // TODO - also found problems if Wifi is not available after new installation of app
@@ -1863,6 +1494,57 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     addItems();
                     checkMissingThumbs();
                     adp.notifyDataSetChanged();
+                }
+                break;
+            case "VIMEO_INFO":
+                // 26.10.2017 - vimeoInfoTask replaced by asyncLoad as well
+                Log.i("HFCM", "Vimeo info task returned via asyncLoad....");
+                JSONObject parent = null;
+                String thumbUrl = "n/a";
+                String videoId = null;
+                if (status == asyncLoad.FILENOTFOUND) {
+                    break;
+                }
+                try {
+                    parent = new JSONObject((String) output);
+                    videoId = parent.getString("video_id");
+                    thumbUrl = parent.getString("thumbnail_url");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                    Log.e("HFCM", e.getMessage());
+                    new dialogDisplay(this, "Could not load thumbnail for this video\n'" +
+                            e.getMessage() + "'",
+                            "VIMEO INFO JSON ERROR");
+                }
+                if (videoId != null) {
+                    apodItem.setThumb("th_" + videoId + ".jpg");   // thumb filename
+                }
+                apodItem.setLowres(thumbUrl);
+                //new ImgLowresTask().execute(thumbUrl);
+                new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(thumbUrl);
+                break;
+            case "APOD_LOAD":
+                // 26.10.2017 - apodTask - move into asyncLoad as well
+                if (status == asyncLoad.FILENOTFOUND) {
+                    Log.e("HFCM", "APOD Loader asyncLoad returned: File not found, " + output);
+                    break;
+                }
+                // todo: this check needs to be done better via status - which exception is thrown?
+                String h = (String)output;
+                if (h.startsWith("Connection")) {
+                    new dialogDisplay(MainActivity.this, h + "\n" + getString(R.string.enable_tls), "NASA Connect");
+                    return;
+                }
+                createApodFromJson((String) output);
+                break;
+            case "IMG_LOWRES_LOAD":
+                if (output instanceof Bitmap) {
+                    Log.i("HFCM", "Lowres bitmap returned by asyncLoad");
+                    apodItem.setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
+                            String.valueOf(((Bitmap) output).getHeight()));
+                    lowresBitmapOnPostExecuteReplacement((Bitmap) output);
+                } else {
+                    Log.e("HFCM", "asyncLoad for lowres image did not return a bitmap");
                 }
                 break;
             default:
@@ -2179,6 +1861,438 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 checkMissingThumbs();
                 adp.notifyDataSetChanged();
             }
+        }
+    }*/
+
+    // Get vimeo infos about thumbnail picture URL first, before calling imgLowResTask to load
+    // this thumbnail image.
+    /* 26.10.2017 - replaced by calling asyncLoad with interface AsyncResponse.processFinish()
+    private class vimeoInfoTask extends AsyncTask<String, String, String> {
+        @Override
+        protected String doInBackground(String... params) {
+            HttpsURLConnection vimeo_conn = null;
+            BufferedReader reader = null;
+
+            try {
+                URL url = new URL(params[0]);
+                vimeo_conn = (HttpsURLConnection) url.openConnection();
+                vimeo_conn.connect();
+                // We now read data from this connection into an input stream
+                InputStream jsonstream = vimeo_conn.getInputStream();
+                reader = new BufferedReader(new InputStreamReader(jsonstream));
+                StringBuffer jsonbuffer = new StringBuffer();
+                String jsonstring;
+
+                while((jsonstring = reader.readLine()) != null) {
+                    jsonbuffer.append(jsonstring);
+                }
+                return jsonbuffer.toString();
+
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+                return "FILENOTFOUND";
+            } catch (IOException e) {
+                e.printStackTrace();
+                return e.getMessage();
+            } finally {
+                if(vimeo_conn != null) {
+                    try {
+                        vimeo_conn.disconnect();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                try {
+                    if(reader != null) {
+                        reader.close();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            JSONObject parent = null;
+            String thumbUrl = "n/a";
+            String videoIid = null;
+            if(s != null) {
+                if (s.equals("FILENOTFOUND")) {
+                    return;
+                }
+            }
+            try {
+                parent = new JSONObject(s);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            if(parent == null) {
+                return;
+            }
+            // We are interested in video ID and thumbnail_url
+            if(parent.has("video_id")) {
+                try {
+                    videoIid = parent.getString("video_id");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+            if(parent.has("thumbnail_url")) {
+                try {
+                    thumbUrl = parent.getString("thumbnail_url");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (videoIid != null) {
+                apodItem.setThumb("th_" + videoIid + ".jpg");   // thumb filename
+            }
+            apodItem.setLowres(thumbUrl);
+            super.onPostExecute(s);
+            new ImgLowresTask().execute(thumbUrl);
+        }
+    }*/
+
+    /* OLD APOD TASK CODE, 26.10.2017 - replaced by asyncLoad
+    private class apodTask extends AsyncTask<String, String, String> {
+        private String imgUrl;
+        @Override
+        protected String doInBackground(String... params) {
+            apodItem = new spaceItem();
+
+            // Enable TLSv1 below 5.0 (Lollipop) TODO: TLS > 1.0 / move to oncreate / android 7
+            // https://blog.dev-area.net/2015/08/13/android-4-1-enable-tls-1-1-and-tls-1-2/
+            // https://developer.android.com/about/versions/nougat/android-7.0-changes.html#tls-ssl
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)) {
+                SSLContext sslcontext = null;
+                try {
+                    sslcontext = SSLContext.getInstance("TLSv1");
+                    sslcontext.init(null, null, null);
+                    SSLSocketFactory noSSLv3Factory = new TLSSocketFactory();
+                    HttpsURLConnection.setDefaultSSLSocketFactory(noSSLv3Factory);
+                } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            HttpsURLConnection nasa_conn = null;
+            BufferedReader reader = null;
+            try {
+                URL url = new URL(params[0]);
+                nasa_conn = (HttpsURLConnection) url.openConnection();
+                nasa_conn.connect();
+                InputStream jsonstream = nasa_conn.getInputStream();
+                reader = new BufferedReader(new InputStreamReader(jsonstream));
+                StringBuffer jsonbuffer = new StringBuffer();
+                String jsonstring;
+
+                while((jsonstring = reader.readLine()) != null) {
+                    jsonbuffer.append(jsonstring);
+                }
+                // this is returned to onPostExecute
+                return jsonbuffer.toString();
+
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+                // TODO : handle over rate limit here
+                // OVER_RATE_LIMIT
+                // You have exceeded your rate limit. Try again later or contact us at https://api.nasa.gov/contact/ for assistance
+                return "FILENOTFOUND";
+            } catch (IOException e) {
+                // running into this because of DNS problems in AVD device. Seems to be because
+                // of LAN card and Wifi present in host - Problem on my Windows Studio installation
+                // And on 14.10.2017 on AVD Android 4.1...
+                e.printStackTrace();
+                return e.getMessage();
+            } finally {
+                if(nasa_conn != null) {
+                    try {
+                        nasa_conn.disconnect();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                try {
+                    if(reader != null) {
+                        reader.close();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            return null;
+        }
+        // INFO: this one get's added by starting to type onPostEx.. in the editor
+        @Override
+        protected void onPostExecute(String s) {
+            String sTitle = "n/a";
+            String sCopyright = "";
+            String sExplanation = "";
+            String sMediaType = "";
+            String sHiresUrl = "";
+            String sDate = "";
+            JSONObject parent = null;
+            Uri resource_uri = null;
+            if(s != null) {
+                if (s.equals("FILENOTFOUND")) {
+                    // TODO: this is not necessarily the case...
+                    Log.e("HFCM", "FILENOTFOUND - MAYBE API RATE LIMIT EXCEEDED ??");
+                    new dialogDisplay(MainActivity.this, getString(R.string.rate_limit_exceeded),
+                            getString(R.string.no_apod));
+                    return;
+                } else if (s.startsWith("Connection")) {
+                    new dialogDisplay(MainActivity.this, s + "\n" + getString(R.string.enable_tls), "NASA Connect");
+                    return;
+                }
+                //JSONObject parent = null;
+                try {
+                    parent = new JSONObject(s);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                if(parent == null) {
+                    return;
+                }
+                if(parent.has("media_type")) {
+                    try {
+                        sMediaType = parent.getString("media_type");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if(parent.has("date")) {
+                    try {
+                        sDate = parent.getString("date");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if(parent.has("copyright")) {
+                    try {
+                        sCopyright = "Copyright: " + parent.getString("copyright").
+                                replaceAll(System.getProperty("line.separator"), " ");
+                        // removing any new lines - as found in IC 1396: Emission Nebula in Cepheus
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if(parent.has("title")) {
+                    try {
+                        sTitle = parent.getString("title");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if(parent.has("url")) {
+                    try {
+                        imgUrl = parent.getString("url");
+                        resource_uri = Uri.parse(imgUrl);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        // TODO: missing on 11.09.2017 - leads to strange effects of missing keys
+                    }
+                }
+                if(parent.has("hdurl")) {
+                    try {
+                        sHiresUrl = parent.getString("hdurl");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+                if(parent.has("explanation")) {
+                    try {
+                        sExplanation = parent.getString("explanation");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                if (resource_uri != null) {
+                    if (sMediaType.equals("video")) {
+                        // note, that this rewrites sMediaType variable!
+                        String host = resource_uri.getHost();
+                        List<String> path = resource_uri.getPathSegments();
+                        apodItem.setHires(resource_uri.toString());
+                        if (host.equals("www.youtube.com")) {
+                            // TODO: now we just assume 'embed' link - might not be true always ??
+                            // url> https://www.youtube.com/embed/" + path.get(1) + "?rel=0
+                            // img> https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
+                            sMediaType = M_YOUTUBE;
+                            apodItem.setThumb("th_" + path.get(1) + ".jpg");
+                            sHiresUrl = imgUrl;
+                            imgUrl = "https://img.youtube.com/vi/" + path.get(1) + "/0.jpg";
+                            apodItem.setLowres(imgUrl);
+                        } else if (host.endsWith("vimeo.com")) { // vimeo.com / player.vimeo.com
+                            // see example file from 11.09.2017: link is in url, NOT hdurl
+                            sMediaType = M_VIMEO;
+                            apodItem.setThumb("th_VIMEO_unknown.jpg");
+                            sHiresUrl = imgUrl;
+                            // URL is the link that can be played in a WebView, just not using
+                            // iframe embed at all... doing it like this for now
+                            // TODO: extract video ID and thumbnail url from given video url
+                            // thumbnail image name: th_<video-id>.jpg
+                            // Note: this needs a REST API call to gather the required infos..
+                            apodItem.setLowres("");     // will hold thumbnail url
+                        } else {
+                            sMediaType = M_VIDEO_UNKNOWN;
+                            apodItem.setThumb("th_UNKNOWN.jpg");
+                        }
+                    } else {
+                        // thumbnail gets name of lowres image with prefix 'th_'
+                        apodItem.setThumb("th_" + resource_uri.getLastPathSegment());
+                        apodItem.setHires(sHiresUrl);
+                        apodItem.setLowres(imgUrl);
+                    }
+                }
+            } else {
+                Log.e("HFCM", "no APOD String returned from doInBackground");
+            }
+            // TODO shouldn't super be executed first ??? might have done this bad
+            super.onPostExecute(s);
+
+            apodItem.setTitle(sTitle);
+            apodItem.setCopyright(sCopyright);
+            apodItem.setExplanation(sExplanation);
+            apodItem.setHires(sHiresUrl);
+            // now using long int epoch value for date in spaceItem
+            SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
+            // normally we would use code as below for correct locale, but we parse a specific
+            // format here :_ "date": "2017-09-17", as returned by NASA in their json
+            // DateFormat dF = SimpleDateFormat.getDateInstance();
+            long epoch = 0;
+            try {
+                epoch = dF.parse(sDate).getTime();
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+            apodItem.setDateTime(epoch);
+            apodItem.setMedia(sMediaType);
+            apodItem.setRating(0);
+            apodItem.setLowSize("");
+            apodItem.setHiSize("");
+
+            // Keep a local copy of the original apod nasa json file returned by api
+            // TODO: remove these as well? they cannot be recreated later on!
+            if (parent != null) {
+                utils.writeJson(getApplicationContext(), String.valueOf(epoch) + ".json", parent);
+            }
+
+            // For VIMEO, "insert" an extra thread using oembed API to determine infos about the
+            // thumbnail image URL before calling the imgLowResTask thread to load thumbnail bitmap
+            if (sMediaType.equals(M_VIMEO)) {   // TODO: test this
+                //new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
+                Log.i("HFCM", "Launching asyncLoad for VIMEO info: " + sHiresUrl);
+                new asyncLoad(MainActivity.this, "VIMEO_INFO").
+                        execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
+            } else {
+                new ImgLowresTask().execute(imgUrl);
+            }
+        }
+    }*/
+
+    /* Old code for imglowres Load to create thumbnails - now in asyncload
+    private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
+        @Override
+        protected Bitmap doInBackground(String... params) {
+            // TODO 20.08.2017 - bitmap could not be loaded from youtube by the below method
+            //                   using link https://img.youtube.com/vi/53641212/0.jpg
+            //                   bitmap null as result passed to onPostExecute() - crashed
+            Bitmap bitmap = null;
+            try {
+                URL lrURL = new URL(params[0]);     // URL for image in params[0]
+                try {
+                    bitmap = BitmapFactory.decodeStream((InputStream)lrURL.getContent());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            if(bitmap != null) {
+                apodItem.setLowSize(String.valueOf(bitmap.getWidth()) + "x" +
+                        String.valueOf(bitmap.getHeight()));
+            }
+            return bitmap;
+        }
+
+        @Override
+        protected void onPostExecute(Bitmap bitmap) {
+            super.onPostExecute(bitmap);
+            // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
+            // item should match anyway, because latest image is on top of the list.
+            for(int i=0; i<myList.size();i++) {
+                if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
+                    // TODO here's the point to check, if the thumbnail file exists (and reload)
+                    Toast.makeText(MainActivity.this, R.string.already_loaded,
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+            }
+
+            // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
+            if (bitmap != null) {
+                File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
+                Bitmap thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
+                FileOutputStream outstream = null;
+                try {
+                    outstream = new FileOutputStream(thumbFile);
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                }
+                thumbnail.compress(Bitmap.CompressFormat.JPEG, 90, outstream);
+                try {
+                    if (outstream != null) {
+                        outstream.flush();
+                        outstream.close();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                apodItem.setBmpThumb(thumbnail);
+            } else {
+                apodItem.setBmpThumb(null);     // just have a black image here TODO missing img?
+            }
+
+            // JSON is an array of objects, which have a "Type" and a "Content". Type is just
+            // a string, content is another JSON object.
+            JSONObject apodObj = new JSONObject();
+            JSONObject contentObj = new JSONObject();
+            try {
+                contentObj.put("Title", apodItem.getTitle());
+                contentObj.put("DateTime", apodItem.getDateTime());
+                contentObj.put("Copyright", apodItem.getCopyright());
+                contentObj.put("Explanation", apodItem.getExplanation());
+                contentObj.put("Lowres", apodItem.getLowres());
+                contentObj.put("Hires", apodItem.getHires());
+                contentObj.put("Thumb", apodItem.getThumb());
+                contentObj.put("Rating", apodItem.getRating());
+                contentObj.put("Media", apodItem.getMedia());
+                contentObj.put("HiSize", apodItem.getHiSize());
+                contentObj.put("LowSize", apodItem.getLowSize());
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            try {
+                apodObj.put("Type", "APOD");
+                apodObj.put("Content", contentObj);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            // add object to local json array and save json content to internal storage
+            parent.put(apodObj);
+            utils.writeJson(getApplicationContext(), localJson, parent);
+            myList.add(0, apodItem);
+            adp.notifyDataSetChanged();
+            Toast.makeText(MainActivity.this, R.string.apod_load,
+                    Toast.LENGTH_LONG).show();
+            myItemsLV.setSelection(0);
         }
     }*/
 }

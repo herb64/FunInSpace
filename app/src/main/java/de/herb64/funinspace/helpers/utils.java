@@ -3,12 +3,14 @@ package de.herb64.funinspace.helpers;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -86,6 +88,21 @@ public final class utils {
             return bmp.getAllocationByteCount();
         } else {
             return bmp.getByteCount();
+        }
+    }
+
+    public static void writeJPG(Context ctx, String filename, Bitmap bitmap) {
+        File thumbFile = new File(ctx.getFilesDir(), filename);
+        FileOutputStream outstream = null;
+        Log.i("HFCM", "Utils writeJPG for " + filename);
+        try {
+            outstream = new FileOutputStream(thumbFile);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outstream);
+            outstream.flush();
+            outstream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e("HFCM", e.getMessage());
         }
     }
 
