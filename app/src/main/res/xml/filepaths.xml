@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- this had been created automatically
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+</PreferenceScreen>
+-->
+
+<!--
+Need to setup paths correctly, getting
+ java.lang.NullPointerException: Attempt to invoke virtual method
+ 'android.content.res.XmlResourceParser
+ android.content.pm.ProviderInfo.loadXmlMetaData(android.content.pm.PackageManager, java.lang.String)'
+ on a null object reference
+ > this was because bad authorities in manifest
+see: https://developer.android.com/reference/android/support/v4/content/FileProvider.html
+files-path: Represents files in the files/ subdirectory of your app's internal storage area.
+            This subdirectory is the same as the value returned by Context.getFilesDir().
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="files" path="/"/>
+</paths>

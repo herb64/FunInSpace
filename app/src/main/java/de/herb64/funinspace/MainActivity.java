@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
@@ -15,6 +16,7 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.content.FileProvider;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -113,6 +115,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     public native String yT();
     public native String nS();
     public native String vA();                      // vimeo
+    public native String vE();
+    public native String vKE();
+    public native String vHH();
 
     // App settings variables from preferences dialog
     //private boolean needWifi = false;               // hires loading - only with wifi?
@@ -265,30 +270,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
                 selected = new ArrayList<>();
-
                 /* Just for keeping track of actions
                 // Trying to display the RatingBar within CAB, similar to SearchView in main bar
-                // https://developer.android.com/training/appbar/action-views.html
-                // https://stackoverflow.com/questions/26415468/how-do-i-create-a-search-field-in-a-contextual-action-bar
-                // Problems with this, so compare with onCreateOptionsMenu - even that code does
-                // not work in this context. The MenuItem structure looks completely different
-                // to the one in onCreateOptionsMenu - looks like here another MenuItem interface
-                // is used... getActionView() always returns null
-                MenuItem searchItem = menu.findItem(R.id.action_search);
-                SearchView sv = (SearchView) searchItem.getActionView();
-                // code from onCreateOptionsMenu for comparison - same code - different result
-                //getMenuInflater().inflate(R.menu.menu_main, menu);
-                //MenuItem searchItem = menu.findItem(R.id.action_search);
-                //SearchView sv = (SearchView) searchItem.getActionView();
-                */
-
+                // this fails, see lalatex doc for details: RatingBar within Contextual Action Bar*/
                 return true; // important, otherwise no selection of items!
             }
 
             @Override
             public boolean onPrepareActionMode(android.view.ActionMode actionMode, Menu menu) {
-                //rb.requestFocus();
-                //return true;
                 return false;
             }
 
@@ -402,42 +391,18 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         myRatingChangeListener = new ratingChangeListener();
 
         myList = new ArrayList<> ();
-        //adp = new myAdapter(getApplicationContext(), R.layout.space_item, myList);
         adp = new spaceAdapter(getApplicationContext(), MainActivity.this,
                 R.layout.space_item, myList);
         adp.setFullSearch(sharedPref.getBoolean("full_search", false));
         myItemsLV.setAdapter(adp);
 
-        /* Old stuff in onCreate() from tests with Adapter to work with LinkedHashMap
-        myMap = new LinkedHashMap<>();
-        hashadp = new myHashAdapter(getApplicationContext(), R.layout.space_item, myMap);
-        myItemsLV.setAdapter(hashadp);        // linkedhashmap version - now abandoned
-
         // SearchView - this had been defined in XML, but set to "GONE" by default. When search is
         // requested, this was originally shown above the listview. This has been changed to show
-        // the SearchView within the App Bar. See "SearchView" as a menu item..
-        // See code in onCreateOptionsMenu()
+        // the SearchView within the App Bar.
+        // See code in onCreateOptionsMenu() for SearchView as a menu item
         // https://www.youtube.com/watch?v=c9yC8XGaSv4
         // https://www.youtube.com/watch?v=YnNpwk_Q9d0
         // https://www.youtube.com/watch?v=9OWmnYPX1uc
-
-        // The old code: SearchView within our content_main layout, that showed up on request
-        mySearch = (SearchView) findViewById(R.id.sv_search);
-        mySearch.setVisibility(View.GONE);
-        mySearch.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-            @Override
-            public boolean onQueryTextSubmit(String s) {
-                adp.getFilter().filter(s);
-                mySearch.clearFocus();
-                return true;
-            }
-
-            @Override
-            public boolean onQueryTextChange(String s) {
-                adp.getFilter().filter(s);
-                return false;
-            }
-        });*/
 
         if (savedInstanceState != null) {
             // The spaceItem internal structure and the json data string are restored.
@@ -514,6 +479,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 /*new asyncLoad(MainActivity.this,
                         "APOD_LOAD",
                         sharedPref.getBoolean("enable_tls_pre_lollipop", true)).execute(APOD_SIMULATE);*/
+            } else {
+                new dialogDisplay(this, getString(R.string.warn_apod_disable), getString(R.string.reminder));
             }
         }
     }
@@ -589,9 +556,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         // Rewrite local json file
         utils.writeJson(getApplicationContext(), localJson, parent);
     }
-
-    /*old code of myHashAdapter derived from HfcmMapAdapter is moved to bottom as comment
-     * old code of myAdapter using ArrayList also moved to bottom as comment*/
 
     /*
      * GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
@@ -1124,6 +1088,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
+        int o = 0;
         if (id == R.id.action_settings) {
             Intent settingsIntent = new Intent(this, SettingsActivity.class);
             startActivityForResult(settingsIntent, SETTINGS_REQUEST);
@@ -1144,6 +1109,52 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             return true;
         }
         if (id == R.id.action_help) {
+            return true;
+        }
+        if (id == R.id.action_mail) {
+            //Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto",vE(), null));
+            Intent i = new Intent(Intent.ACTION_SENDTO);  // ACTION_SEND - also shows whatsapp etc..
+            i.setData(Uri.parse("mailto:" + vE()));
+            //i.setType("message/rfc822");    // had to be removed
+            //String to[] = {"user@domain.com","user2@domain.com"};
+            String cc[] = {vKE() + "," + vHH()};
+            //i.putExtra(Intent.EXTRA_EMAIL, new String[]{"user@domain.com"});
+            i.putExtra(Intent.EXTRA_EMAIL, cc);
+            i.putExtra(Intent.EXTRA_SUBJECT, "Greetings from FunInSpace");
+            i.putExtra(Intent.EXTRA_TEXT, "Just a test email sent by the famous FunInSpace App. I hope you enjoy the attachment :)");
+
+            // == ADDING A SINGLE FILE ATTACHMENT TO THE MAIL ==  // TODO multiple
+            // E-mail apps do not have access to my storage - prohibited by Android security
+            // - use external storage
+            // - create a provider - this is what we do here - see lalatex docu
+            // we just send out the
+            File attachment_file = new File(getApplicationContext().getFilesDir(), localJson);
+            Uri contentUri = FileProvider.getUriForFile(MainActivity.this,
+                    "de.herb64.funinspace.fileprovider",
+                    attachment_file);
+            i.putExtra(Intent.EXTRA_STREAM, contentUri);
+
+            //i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);    // TODO check
+
+            // Finding matching apps for the intent - see more details in lalatex docu
+            // a) if (i.resolveActivity(getPackageManager()) != null)
+            // b) try {startActivity(Intent.createChooser(i, "Send mail..."));}
+            //    catch (android.content.ActivityNotFoundException ex) {}
+            // c) List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);
+
+            List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);   // flags ?
+            if(pkgs.size() == 0) {
+                new dialogDisplay(MainActivity.this, getString(R.string.no_email_client));
+            } else {
+                for (ResolveInfo pkg : pkgs) {
+                    // see more infos in lalatex - TODO: how to restrict grant to selected app?
+                    Log.i("HFCM", "Granting shared rights for package: " + pkg.activityInfo.packageName);
+                    grantUriPermission(pkg.activityInfo.packageName,
+                            contentUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
+                startActivity(i);
+            }
             return true;
         }
         if (id == R.id.dropbox_sync) {

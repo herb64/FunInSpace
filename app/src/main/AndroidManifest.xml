@@ -35,6 +35,21 @@
         <activity
             android:name=".SettingsActivity"
             android:label="@string/title_activity_settings"></activity>
+
+        <!-- HFCM - 27.20.2017: manually add a provider to the app section to be able to share
+             files for sending as email attachment
+             Note: exported must not be set to true, see my lalatex doc
+                   make sure, that autorities is set to correct package name               -->
+        <provider
+            android:name="android.support.v4.content.FileProvider"
+            android:authorities="de.herb64.funinspace.fileprovider"
+            android:grantUriPermissions="true"
+            android:exported="false">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
+
     </application>
 
 </manifest>
