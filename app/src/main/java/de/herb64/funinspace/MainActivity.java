@@ -87,7 +87,7 @@ import de.herb64.funinspace.models.spaceItem;
 /*
  * The MainActivity Class for FunInSpace
  */
-public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener, asyncLoad.AsyncResponse {
+public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener,asyncLoad.AsyncResponse {
 
     private spaceItem apodItem;                     // the latest item to be fetched
     private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
@@ -465,16 +465,17 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                                 "thumbnail pictures generation to have some test data available...",
                         Toast.LENGTH_LONG).show();
                 //new loadFromDropboxTask().execute(DROPBOX_JSON); // calls addItems() + adapter notify
+                //asyncLoad loader = new asyncLoad(MainActivity.this, "DROPBOX_INIT");
+                //loader.execute(DROPBOX_JSON);
                 new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(DROPBOX_JSON);
             }
 
-            // Get latest APOD item to append from NASA
-            // TODO: reduce these calls to required minimum
+            // Get latest APOD item to append from NASA (or a simulation item from dropbox)
             if (sharedPref.getBoolean("get_apod", true)) {
                 new asyncLoad(MainActivity.this,
                         "APOD_LOAD",
                         sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                        execute(sharedPref.getBoolean("get_apod_simulate", true) ? APOD_SIMULATE : nS());
+                        execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
             } else {
                 new dialogDisplay(this, getString(R.string.warn_apod_disable), getString(R.string.reminder));
             }
@@ -527,7 +528,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             titles.add(myList.get(idx).getTitle());
         }
         adp.notifyDataSetChanged();
-        // TODO make persistent in JSON file as well
         JSONObject obj = null;
         JSONObject content = null;
         for (int i = 0; i < parent.length(); i++) {
@@ -535,23 +535,33 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 obj = parent.getJSONObject(i);
             } catch (JSONException e) {
                 e.printStackTrace();
+                Log.e("HFCM", e.getMessage());
+                new dialogDisplay(this, "Rating JSON Exception:\n" + e.getMessage());
             }
             // get the "Content" object, not yet checking type, currently only "APOD" is expected
             try {
-                content = obj.getJSONObject("Content");
+                if (obj != null) {
+                    content = obj.getJSONObject("Content");
+                }
             } catch (JSONException e) {
                 e.printStackTrace();
+                Log.e("HFCM", e.getMessage());
+                new dialogDisplay(this, "Rating JSON Exception:\n" + e.getMessage());
             }
             // get the fields - we know, that the keys exist, because we have written this ourselves
             // ha, not always :( bad with 11.09.2017 - no lowres key present, because "url" missing
             // in json from NASA TODO 11.09.2017
             try {
-                String strTitle = content.getString("Title");
-                if (titles.contains(strTitle)) {
-                    content.put("Rating", rating);
+                if (content != null) {
+                    String strTitle = content.getString("Title");
+                    if (titles.contains(strTitle)) {
+                        content.put("Rating", rating);
+                    }
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
+                Log.e("HFCM", e.getMessage());
+                new dialogDisplay(this, "Rating JSON Exception:\n" + e.getMessage());
             }
         }
         // Rewrite local json file
@@ -1049,7 +1059,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        int o = 0;
         if (id == R.id.action_settings) {
             Intent settingsIntent = new Intent(this, SettingsActivity.class);
             startActivityForResult(settingsIntent, SETTINGS_REQUEST);
@@ -1073,16 +1082,15 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             return true;
         }
         if (id == R.id.action_mail) {
-            // TODO AVD failures
+            // TODO AVD failures - seems to be known
             // https://stackoverflow.com/questions/27528236/mailto-android-unsupported-action-error
-
             //Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto",vE(), null));
             Intent i = new Intent(Intent.ACTION_SENDTO);  // ACTION_SEND - also shows whatsapp etc..
             i.setData(Uri.parse("mailto:" + vE()));
             //i.setType("message/rfc822");    // had to be removed
             //String to[] = {"user@domain.com","user2@domain.com"};
-            String cc[] = {vKE() + "," + vHH()};
             //i.putExtra(Intent.EXTRA_EMAIL, new String[]{"user@domain.com"});
+            String cc[] = {vKE() + "," + vHH()};
             i.putExtra(Intent.EXTRA_EMAIL, cc);
             i.putExtra(Intent.EXTRA_SUBJECT, "Greetings from FunInSpace");
             i.putExtra(Intent.EXTRA_TEXT, "Just a test email sent by the famous FunInSpace App. I hope you enjoy the attachment :)");
@@ -1111,7 +1119,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 new dialogDisplay(MainActivity.this, getString(R.string.no_email_client));
             } else {
                 for (ResolveInfo pkg : pkgs) {
-                    // see more infos in lalatex - TODO: how to restrict grant to selected app?
+                    // see more infos in lalatex - TODO: how to restrict grant to one selected app? / default app
                     Log.i("HFCM", "Granting shared rights for package: " + pkg.activityInfo.packageName);
                     grantUriPermission(pkg.activityInfo.packageName,
                             contentUri,
@@ -1129,7 +1137,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 //builder = new AlertDialog.Builder(getApplicationContext(), android.R.style.Theme_Material_Dialog_Alert);
                 // java.lang.IllegalStateException: You need to use a Theme.AppCompat theme (or descendant) with this activity.
                 // when show() is called. Using context was bad here..
-                builder = new AlertDialog.Builder(MainActivity.this, android.R.style.Theme_Material_Dialog_Alert);
+                builder = new AlertDialog.Builder(MainActivity.this,
+                        android.R.style.Theme_Material_Dialog_Alert);
             } else {
                 builder = new AlertDialog.Builder(MainActivity.this);
             }
@@ -1258,21 +1267,36 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
      * URL and saves a thumbnail file.
      */
     public void checkMissingThumbs() {
-        ArrayList<Integer> missing = new ArrayList<Integer>();
+        //ArrayList<Integer> missing = new ArrayList<Integer>();
+        //ArrayList<String> missingurls = new ArrayList<>();
+        int count = 0;
         for(int i=0; i<myList.size(); i++) {
             if (myList.get(i).getBmpThumb() == null && !myList.get(i).getLowres().equals("")) {
                 // TODO unknown not yet checked...
-                missing.add(i);
+                //missing.add(i);
+                //missingurls.add(myList.get(i).getLowres());
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
+                // TODO: check parallel execution - seems to not load all images / and duplicates
+                new asyncLoad(MainActivity.this,
+                        "THUMB_" + i).
+                        execute(myList.get(i).getLowres());
+                        //executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, myList.get(i).getLowres());
+                count ++;
             }
         }
-        if (missing.size() > 0) {
+        if (count > 0) {
+            Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, count),
+                    Toast.LENGTH_LONG).show();
+        }
+        /*if (missing.size() > 0) {
             Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, missing.size()),
                     Toast.LENGTH_LONG).show();
             // kick off a new thread for loading from network, because this function is called
             // from within onPostExecute()
-            new thumbLoaderTask().execute(missing);
-        }
+            //new thumbLoaderTask().execute(missing);
+            // TODO: asyncLoad with multiple links - makes things just complicated... drop again
+            //new asyncLoad(MainActivity.this, "MISSING_THUMBS_RELOAD").execute(missingurls);
+        }*/
     }
 
     /**
@@ -1281,6 +1305,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
      * https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
      * new: also called for all images, if thumb quality is changed between rgb565 and argb8888
      */
+    /*
     private class thumbLoaderTask extends AsyncTask<ArrayList<Integer>, Integer, Void> {
         private ArrayList<Integer> missing;
 
@@ -1331,7 +1356,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             myList.get(values[0]).setThumbLoadingState(View.INVISIBLE);
             adp.notifyDataSetChanged();
         }
-    }
+    }*/
 
     /**
      * Refresh the local json array with contents from the dropbox. The current array is replaced
@@ -1423,7 +1448,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             new asyncLoad(MainActivity.this,
                     "APOD_LOAD",
                     sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                    execute(sharedPref.getBoolean("get_apod_simulate", true) ? APOD_SIMULATE : nS());
+                    execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
         }
     }
 
@@ -1438,6 +1463,26 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     @Override
     public void processFinish(int status, String tag, Object output) {
         // switch-case for String type available since Java version 7
+
+        // no switch-case with string segments, so first check this...
+        if (tag.startsWith("THUMB_")) {
+            int idx = Integer.parseInt(tag.replace("THUMB_",""));
+            Log.i("HFCM", "Returned from asyncLoad() THUMB with index " + idx);
+            if (output instanceof Bitmap) {
+                myList.get(idx).setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
+                        String.valueOf(((Bitmap)output).getHeight()));
+                // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
+                //thumbFile = new File(getApplicationContext().getFilesDir(), wkItem.getThumb());
+                Bitmap thumbnail = ThumbnailUtils.extractThumbnail((Bitmap) output, 120, 120);
+                myList.get(idx).setBmpThumb(thumbnail);
+                // Write the thumbnail as small jpeg file to internal storage
+                utils.writeJPG(getApplicationContext(), myList.get(idx).getThumb(), thumbnail);
+                myList.get(idx).setThumbLoadingState(View.INVISIBLE);
+                adp.notifyDataSetChanged();
+            }
+            return;
+        }
+
         switch (tag) {
             case "DROPBOX_REFRESH":
                 Object json;
@@ -1476,16 +1521,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 }
                 break;
             case "VIMEO_INFO":
-                // 26.10.2017 - vimeoInfoTask replaced by asyncLoad as well
-                Log.i("HFCM", "Vimeo info task returned via asyncLoad....");
-                JSONObject parent = null;
+                //JSONObject parent = null;
                 String thumbUrl = "n/a";
                 String videoId = null;
                 if (status == asyncLoad.FILENOTFOUND) {
                     break;
                 }
                 try {
-                    parent = new JSONObject((String) output);
+                    JSONObject parent = new JSONObject((String) output);
                     videoId = parent.getString("video_id");
                     thumbUrl = parent.getString("thumbnail_url");
                 } catch (JSONException e) {
@@ -1517,7 +1560,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 break;
             case "IMG_LOWRES_LOAD":
                 if (output instanceof Bitmap) {
-                    Log.i("HFCM", "Lowres bitmap returned by asyncLoad");
+                    //Log.i("HFCM", "Lowres bitmap returned by asyncLoad");
                     // moved to finalize
                     //apodItem.setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
                     //        String.valueOf(((Bitmap) output).getHeight()));
@@ -1526,12 +1569,35 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     Log.e("HFCM", "asyncLoad for lowres image did not return a bitmap");
                 }
                 break;
+            /*case "MISSING_THUMBS_RELOAD":
+                if (status == asyncLoad.OK) {
+                    Log.i("HFCM", "Missing thumb reload returned from asyncLoad");
+                }
+                break;*/
             default:
                 new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
                 break;
         }
         // recursive call is a really bad idea :)
         // new asyncLoad(this).execute("some url");
+    }
+
+    /**
+     * Implementation for progress update for asyncLoad run with multiple urls
+     * @param status
+     * @param tag
+     * @param output
+     */
+    @Override
+    public void processProgressUpdate(int status, String tag, Object output) {
+        switch (tag) {
+            /*case "MISSING_THUMBS_RELOAD":
+                Log.i("HFCM", "Returned progess update");
+                break;*/
+            default:
+                new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processProgressUpdate()", "Info for Herbert");
+                break;
+        }
     }
 
 
