@@ -18,7 +18,7 @@
     <SwitchPreference
         android:defaultValue="false"
         android:key="hires_save"
-        android:summary="Keep hires images on SD Card"
+        android:summary="Keep hires images on SD Card (not yet implemented)"
         android:title="Hires Images" />
 
     <SwitchPreference
@@ -30,13 +30,19 @@
     <SwitchPreference
         android:defaultValue="true"
         android:key="get_apod"
-        android:summary="Get APOD on each start of app"
-        android:title="APOD Loader" />
+        android:summary="Try to load APOD on each start of app. Turn this off for debugging purposes only."
+        android:title="Daily Image loading" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="get_apod_simulate"
+        android:summary="Switch over to Daily Image data from Herberts dropbox. Leave off unless Herbert asks you to switch on."
+        android:title="Simulated Daily Image for debugging" />
 
     <SwitchPreference
         android:defaultValue="false"
         android:key="rgb565_thumbs"
-        android:summary="Use lower color resolution Thumbnail pictures to save memory"
+        android:summary="Use lower color resolution Thumbnail pictures to save memory. Check, if you see any difference in the list."
         android:title="Thumbnail color quality" />
 
     <SwitchPreference

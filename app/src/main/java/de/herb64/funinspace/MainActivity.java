@@ -130,7 +130,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     // changed to other location on 13.10.2017 into testing folder on my dropbox
     private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
     private static final String DROPBOX_MINI = "https://dl.dropboxusercontent.com/s/5itsg1bjbytrk6d/nasamini.json";
-    private static final String APOD_SIMULATE = "https://dl.dropboxusercontent.com/s/agfxia2f6or5plk/apod-simulate.json?";
+    // a simulated NASA json file for debugging and testing purpose - enabled as user option
+    private static final String APOD_SIMULATE = "https://dl.dropboxusercontent.com/s/agfxia2f6or5plk/apod-simulate.json";
     // interesting: the name behind the link is not important, notfound.json worked as well, need to change the ID!!
     private static final String APOD_NOTFOUND = "https://dl.dropboxusercontent.com/s/mzidejp3qfnosff/notfound.json";
     //private static final int KIB = 1024;
@@ -470,15 +471,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // Get latest APOD item to append from NASA
             // TODO: reduce these calls to required minimum
             if (sharedPref.getBoolean("get_apod", true)) {
-                //new apodTask().execute(nS());
-                //new apodTask().execute(APOD_SIMULATE); // just for testing - files on dropbox
-                // new version using asyncload - apodTask() is now retired
                 new asyncLoad(MainActivity.this,
                         "APOD_LOAD",
-                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).execute(nS());
-                /*new asyncLoad(MainActivity.this,
-                        "APOD_LOAD",
-                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).execute(APOD_SIMULATE);*/
+                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                        execute(sharedPref.getBoolean("get_apod_simulate", true) ? APOD_SIMULATE : nS());
             } else {
                 new dialogDisplay(this, getString(R.string.warn_apod_disable), getString(R.string.reminder));
             }
@@ -516,8 +512,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         super.onResume();
     }
 
-    // Interface implementation for Rating Dialog result: return from DialogFragment to Activity
-    // This is called, if Rating Dialog OK button has been pressed
+
+    /**
+     * Interface implementation for Rating Dialog result: return from DialogFragment to Activity
+     * This is called, if Rating Dialog OK button has been pressed
+     * @param rating    the rating value to be set
+     * @param selected  the item index, for which the rating has to be set
+     */
     @Override
     public void updateRating(int rating, ArrayList<Integer> selected) {
         HashSet<String> titles = new HashSet<>();
@@ -593,17 +594,26 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             sMediaType = parent.getString("media_type");
             sDate = parent.getString("date");
             // TODO copyright not yet finalized - replace newline or not, limit length
-            sCopyright = "Copyright: " + parent.getString("copyright").
-                    replaceAll(System.getProperty("line.separator"), " ");
-            sTitle = parent.getString("title");
+            if (parent.has("copyright")) {
+                sCopyright = "Copyright: " + parent.getString("copyright").
+                        replaceAll(System.getProperty("line.separator"), " ");
+            }
+            sTitle = parent.getString("title"); // TODO: why not check here for already loaded ??? currently in lowresBitmapOnPostExecuteReplacement()
             imgUrl = parent.getString("url"); // TODO: 11.09.2017 - missing leads to strange effects of missing keys
             resource_uri = Uri.parse(imgUrl);
-            sHiresUrl = parent.getString("hdurl");
+            if (parent.has("hdurl")) {
+                sHiresUrl = parent.getString("hdurl");
+            } else {
+                // actually, we should not get here again after apod is already loaded.
+                if (sMediaType.equals("image")) {
+                    new dialogDisplay(this, "APOD does not have a link to hires image, will need to fallback to lowres", "Herbert TODO");
+                }
+            }
             sExplanation = parent.getString("explanation");
         } catch (JSONException e) {
             e.printStackTrace();
             Log.e("HFCM", e.getMessage());
-            new dialogDisplay(this, e.getMessage(), "APOD Processing error");
+            new dialogDisplay(this, "APOD JSON Exception:\n" + e.getMessage());
         }
 
         if (resource_uri != null) {
@@ -685,16 +695,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-
     // TODO - return values from asynctask - seems to work with execute().get()  but it blocks!!! - search topic: wait for asynctask to complete
     // ++++   >>>  https://stackoverflow.com/questions/12575068/how-to-get-the-result-of-onpostexecute-to-main-activity-because-asynctask-is-a
-    // asyncLoad.java is one of the results of this - now still make sure about memory leaks!!!!
-    //
+    //        >>>  asyncLoad.java is one of the results of this - now still make sure about memory leaks!!!!
     // private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
-    // .. now also retired and replaced by asyncLoad
+    // .. 26.20.2017 - now also retired and replaced by asyncLoad with bitmap support
 
-    // new code on 26.10. to replace imglowrestask with asyncload as well
-    void lowresBitmapOnPostExecuteReplacement(Bitmap bitmap) {
+    void finalizeApodWithLowresImage(Bitmap bitmap) {
         // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
         // item should match anyway, because latest image is on top of the list.
         for(int i=0; i<myList.size();i++) {
@@ -708,6 +715,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
         // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
         if (bitmap != null) {
+            // moved this here...
+            apodItem.setLowSize(String.valueOf(((Bitmap) bitmap).getWidth()) + "x" +
+                    String.valueOf(((Bitmap) bitmap).getHeight()));
             //File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
             Bitmap thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
             Log.i("HFCM", "Calling utils to write thumb for new APOD:" + apodItem.getTitle());
@@ -752,7 +762,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         myItemsLV.setSelection(0);
     }
 
-
     /* N O T E:   T H I S   I S   N O T   A C T I V E
      *Listener for rating bar changes - useless for me, because I use "small" bars
      *style="@style/Widget.AppCompat.RatingBar"       > works
@@ -766,8 +775,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // Listener for clicks on items in the list. This is registered in spaceAdapter.
-    // The adapter sets a Tag, which can be read here and used for further actions.
+    /**
+     * Listener for clicks on items in the list. This is registered in spaceAdapter.
+     * The adapter sets a Tag, which can be read here and used for further actions.
+     */
     private class thumbClickListener implements View.OnClickListener {
         // onClick() gets passed the view in which we store the URL to be opened
         // in a TAG - this happens in getView() in our adapter...
@@ -858,90 +869,36 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // Play a vimeo video for given URL in a WebView
+    /**
+     * Play a vimeo video based on the url passed as string. A lot of experiments have been done.
+     * See lalatex document, chapter "Playing Vimeo videos". Quite some code and remarks have
+     * been moved from this source code to that chapter.
+     * @param url The video url to be played
+     */
     private void playVimeo(String url) {
-        // Play a vimeo video identified by the url string
-        // hmmm, check this, which works: http://vimeo.com/api/v2/video/11386048.json
-        // - this allows for thumbnails...
-        // hmm, this looks not so good: no native play without "pro"
-        // https://vimeo.com/forums/help/topic:280621
-        // Available infos for testing:
-        // String uri = "/videos/11386048";   // 11.09.2017
-        // String uri = "/videos/53641212";   // 20.08.2017
-        /* possible valid vimeo links, from which we might need to extract the id
-        http://vimeo.com/<id>
-        http://player.vimeo.com/video/<id>
-        http://player.vimeo.com/video/<id>?title=0&byline=0&portrait=0
-        http://player.vimeo.com/video/<id>#t=0m58s?color=8BA0FF&portrait=0
-        http://vimeo.com/channels/staffpicks/67019026 */
-        // Check this: https://stackoverflow.com/questions/10488943/easy-way-to-get-vimeo-id-from-a-vimeo-url
-        // need to answer to this post, because newer version does not work as good, while oEmbed  (https://oembed.com) works
-        // we can ask vimeo for the id!!
-        // -> https://developer.vimeo.com/api/endpoints/videos#GET/videos
-        // playground shows, that this cannot resolve "player.vimeo.com" based urls
-        // using the oembed endpoint: even works with full string, e.g.
-        // https://vimeo.com/api/oembed.json?url=https://player.vimeo.com/video/11386048#t=0m58s?color=8BA0FF&portrait=0
-        /*new dialogDisplay(MainActivity.this,
-                getString(R.string.no_video_yet, "vimeo", url),
-                getString(R.string.no_support_yet));*/
-
         Intent vimeoIntent = new Intent(this, VideoActivity.class);
         vimeoIntent.putExtra("vimeourl", url);
         startActivity(vimeoIntent);
-
-        /*
+        /* COMMENT
          * My code for testing with Vimeo API video objects. Actually, this has been abandoned,
-         * because embedding iframes in WebView caused quite some trouble.. to be checked again,
-         * but for now we are just using the NASA link in a webview.
+         * because embedding iframes in WebView caused quite some trouble.. to be checked again.
+         * For now, just use the NASA provided link in a webview. See lalatex doc for removed code
          */
-        /*
-        Configuration.Builder b = new Configuration.Builder(vA());
-        b.setApiVersionString("3.2");       // need 3.3 for the Play object to avoid deprecated video.embed
-        // but 3.3 fails - see below in failure() function. Looks like for public, 3.2 is the
-        // currently supported version, see https://vimeo.com/forums/api/topic:289338, June 2017
-        VimeoClient.initialize(b.build());
-        Configuration cfg = VimeoClient.getInstance().getConfiguration();
-        VimeoClient.getInstance().fetchNetworkContent(uri, new ModelCallback<Video>(Video.class) {
-            @Override
-            public void success(Video video) {
-                int dur = video.duration;
-                String des = video.description;
-                String trail = video.getTrailerUri();
-
-                PictureCollection pc = video.pictures;
-                String pcuri = pc.uri;
-
-                Play pl1 = video.getPlay();  // returns null
-                Play pl = video.play;        // also null, although should be preferred...
-                Embed emb = pl.mEmbed;
-                String sss = emb.toString();
-
-                // hmm, only the deprecated way is working with 3.2 and 3.3 cannot be used.... :(
-                String html = video.embed != null ? video.embed.html : null;
-                if(html != null) {
-                    new dialogDisplay(MainActivity.this, html, "vimeo-embed");
-                    // html is in the form "<iframe .... ></iframe>"
-                    // display the html however you wish
-                }
-            }
-            // with 3.3 set, we get error:
-            // Unsupported response format provided via the accept header. We expected [application/vnd.vimeo.video;version=3.2].
-            @Override
-            public void failure(VimeoError error) {
-                String tt = error.toString();
-                new dialogDisplay(MainActivity.this, tt, "vimeo problem");
-            }
-        });*/
     }
 
-    // Get results from Activities started with startActivityForResult()
-    // 1. image Activity for hires size
-    // 2. GL max texture size query at very first run
-    // 3. Settings dialog
-    // Returned resultCode = 0 (RESULT_CANCELED) after having rotated the phone while
-    // displaying the image in hires ImageActivity
-    // https://stackoverflow.com/questions/32803497/incorrect-activity-result-code-after-rotating-activity
-    // same problem in above post - this was because activity was gone underneath
+    /**
+     * Get results from Activities started with startActivityForResult()
+     * 1. image Activity for hires size
+     * 2. GL max texture size query at very first run
+     * 3. Settings dialog
+     * Returned resultCode = 0 (RESULT_CANCELED) after having rotated the phone while
+     * displaying the image in hires ImageActivity
+     * https://stackoverflow.com/questions/32803497/incorrect-activity-result-code-after-rotating-activity
+     * same problem in above post - this was because activity was gone underneath
+     * @param requestCode   request code
+     * @param resultCode    result code
+     * @param data          intent
+     */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -1030,9 +987,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 }
             };
 
-    /*
+    /**
      * The options menu is the primary Application menu. Do not confuse with "settings" dialog.
      * It is called during startup of the activity once.
+     * @param menu the menu item
+     * @return boolean return value
      */
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -1073,12 +1032,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         return true;
     }
 
-    /*
+    /**
      * This code handles selections from the menu bar. Contents are defined in menu_main.xml.
      * Note, that action_search is defined in menu_main.xml as well, with following parameters:
      * app:showAsAction="ifRoom|collapseActionView"
      * app:actionViewClass="android.support.v7.widget.SearchView"
      * This is handled by actionViewClass
+     * @param item  the menuitem that has been selected
+     * @return      return true, if we handled the event, else false to forward
      */
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
@@ -1112,6 +1073,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             return true;
         }
         if (id == R.id.action_mail) {
+            // TODO AVD failures
+            // https://stackoverflow.com/questions/27528236/mailto-android-unsupported-action-error
+
             //Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto",vE(), null));
             Intent i = new Intent(Intent.ACTION_SENDTO);  // ACTION_SEND - also shows whatsapp etc..
             i.setData(Uri.parse("mailto:" + vE()));
@@ -1194,12 +1158,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     .show();
             return true;
         }
-
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
-        // GOOD return values here:
-        // true  --> Event Consumed here, so should not be forwarded for other event
-        // false --> Forward for other event to get consumed, we use this if we did not handle it
         return false;
     }
 
@@ -1292,9 +1252,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // Check for any missing thumb images. We iterate all items and for those with no bitmap
-    // contained, we kick of a loader thread, which gets the image file from the given lowres
-    // URL and saves a thumbnail file.
+    /**
+     * Check for any missing thumb images. We iterate all items and for those with no bitmap
+     * contained, we kick of a loader thread, which gets the image file from the given lowres
+     * URL and saves a thumbnail file.
+     */
     public void checkMissingThumbs() {
         ArrayList<Integer> missing = new ArrayList<Integer>();
         for(int i=0; i<myList.size(); i++) {
@@ -1313,10 +1275,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    // Load all missing image thumbnails URL contained in "lowres". A list of indices into the
-    // list is passed and images are loaded one after the other. TODO - maybe parallel load?
-    // https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
-    // new: also called for all images, if thumb quality is changed between rgb565 and argb8888
+    /**
+     * Load all missing image thumbnails URL contained in "lowres". A list of indices into the
+     * list is passed and images are loaded one after the other. TODO - maybe parallel load?
+     * https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
+     * new: also called for all images, if thumb quality is changed between rgb565 and argb8888
+     */
     private class thumbLoaderTask extends AsyncTask<ArrayList<Integer>, Integer, Void> {
         private ArrayList<Integer> missing;
 
@@ -1369,11 +1333,12 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-    /*
+    /**
      * Refresh the local json array with contents from the dropbox. The current array is replaced
      * by the new array, which might contain more ore less images as the current array.
      * - Existing rating values in the local array are preserved
      * - Thumbnail files of images are deleted, if they are not referenced any more in the new array
+     * @param dropbox   a JSONArray returned from the call asyncLoad call to dropbox
      */
     private void refreshFromDropbox(JSONArray dropbox) {
         // TODO: filters for things to load and: KEEP NEWER IMAGES already present on device?? (now, apod is removed if not in dropbox and then reloaded)
@@ -1455,17 +1420,20 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         checkMissingThumbs();
         adp.notifyDataSetChanged();
         if (sharedPref.getBoolean("get_apod", true)) {
-            //new apodTask().execute(nS());
             new asyncLoad(MainActivity.this,
                     "APOD_LOAD",
-                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)).execute(nS());
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                    execute(sharedPref.getBoolean("get_apod_simulate", true) ? APOD_SIMULATE : nS());
         }
     }
 
-    /*
-     * Testing asyncLoad class - this is implementation of interface for this class. This is called
-     * when the asyncLoad class has finished retrieving the json data.
+    /**
+     * This is the interface implementation of processFinish() for asyncLoad class. This is called
+     * when the asyncLoad task has finished retrieving the requested data.
      * Note: for parallel asynctask execution (executeonexecutor), see also my lalatex document...
+     * @param status    return status
+     * @param tag       the tag string set by caller to identify the calling procedure
+     * @param output    the returned output (e.g. json string, bitmap)
      */
     @Override
     public void processFinish(int status, String tag, Object output) {
@@ -1523,8 +1491,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 } catch (JSONException e) {
                     e.printStackTrace();
                     Log.e("HFCM", e.getMessage());
-                    new dialogDisplay(this, "Could not load thumbnail for this video\n'" +
-                            e.getMessage() + "'",
+                    new dialogDisplay(this, getString(R.string.no_vimeo_thumb),
                             "VIMEO INFO JSON ERROR");
                 }
                 if (videoId != null) {
@@ -1551,9 +1518,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             case "IMG_LOWRES_LOAD":
                 if (output instanceof Bitmap) {
                     Log.i("HFCM", "Lowres bitmap returned by asyncLoad");
-                    apodItem.setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
-                            String.valueOf(((Bitmap) output).getHeight()));
-                    lowresBitmapOnPostExecuteReplacement((Bitmap) output);
+                    // moved to finalize
+                    //apodItem.setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
+                    //        String.valueOf(((Bitmap) output).getHeight()));
+                    finalizeApodWithLowresImage((Bitmap) output);
                 } else {
                     Log.e("HFCM", "asyncLoad for lowres image did not return a bitmap");
                 }
