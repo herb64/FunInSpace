@@ -1086,6 +1086,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             // https://stackoverflow.com/questions/27528236/mailto-android-unsupported-action-error
             //Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto",vE(), null));
             Intent i = new Intent(Intent.ACTION_SENDTO);  // ACTION_SEND - also shows whatsapp etc..
+            // just info
+            // i.setPackage("com.pkgname"); // see https://faq.whatsapp.com/en/android/28000012
             i.setData(Uri.parse("mailto:" + vE()));
             //i.setType("message/rfc822");    // had to be removed
             //String to[] = {"user@domain.com","user2@domain.com"};

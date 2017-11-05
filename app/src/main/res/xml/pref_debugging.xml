@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="enable_tls_pre_lollipop"
+        android:summary="Enable TLS v1 on Android below 5.0 (disable this one only if asked by Herbert to do so)"
+        android:title="TLS v1 Security" />
+
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="get_apod"
+        android:summary="Try to load APOD on each start of app. Turn this off for debugging purposes only."
+        android:title="Daily Image loading" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="get_apod_simulate"
+        android:summary="Switch over to Daily Image data from Herberts dropbox. Leave off unless Herbert asks you to switch on."
+        android:title="Simulated Daily Image for debugging" />
+
+</PreferenceScreen>

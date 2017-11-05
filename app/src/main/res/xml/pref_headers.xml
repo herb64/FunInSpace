@@ -1,11 +1,19 @@
 <preference-headers xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- These settings headers are only used on tablets. -->
+    <!-- These settings headers are only used on tablets.
+    HMMM, to check...
+    see also
+    https://github.com/google/material-design-icons/tree/master/action/drawable-anydpi-v21-->
 
     <header
         android:fragment="de.herb64.funinspace.SettingsActivity$GeneralPreferenceFragment"
         android:icon="@drawable/ic_info_black_24dp"
         android:title="@string/pref_header_general" />
+
+    <header
+        android:fragment="de.herb64.funinspace.SettingsActivity$DebugPreferenceFragment"
+        android:icon="@drawable/ic_debug_black_24dp"
+        android:title="@string/pref_debug" />
 
     <header
         android:fragment="de.herb64.funinspace.SettingsActivity$NotificationPreferenceFragment"
