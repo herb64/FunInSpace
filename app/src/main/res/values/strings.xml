@@ -30,6 +30,20 @@
         <item>oldest_first</item>
     </string-array>
 
+    <string name="wallpaper_quality">Wallpaper image Quality</string>
+    <string-array name="wp_quality_titles">
+        <item>Low</item>
+        <item>Medium</item>
+        <item>High</item>
+        <item>Excellent</item>
+    </string-array>
+    <string-array name="wp_quality_values">
+        <item>25</item>
+        <item>50</item>
+        <item>80</item>
+        <item>100</item>
+    </string-array>
+
     <!-- Example General settings -->
     <string name="pref_header_general">General</string>
 
@@ -112,4 +126,7 @@
     <string name="no_email_client">Could not find any suitable e-mail client on your device</string>
     <string name="no_vimeo_thumb">Could not create a thumbnail image for this Vimeo video</string>
     <string name="pref_debug"> Debug settings</string>
+    <string name="wallpaper_nothing_to_revert">You did not set any FunInSpace Wallpaper yet, so there\'s nothing to restore</string>
+    <string name="wallpaper_backup_current">You have set a new wallpaper. Saving your current Wallpaper, so that you can restore this by using \'Restore Original Wallpaper\' in Main Menu.\nNote, that this is not possible any more, if you deinstall the App before restoring</string>
+    <string name="restore_original_wallpaper">Restore Original Wallpaper</string>
 </resources>

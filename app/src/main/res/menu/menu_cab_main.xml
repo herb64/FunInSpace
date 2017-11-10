@@ -32,4 +32,11 @@
         android:title="Rating"
         app:showAsAction="ifRoom"
         android:icon="@android:drawable/btn_star" />
+
+    <item
+        android:id="@+id/cab_wallpaper"
+        android:title="Set as wallpaper"
+        app:showAsAction="ifRoom"
+        android:icon="@android:drawable/btn_plus" />
+
 </menu>

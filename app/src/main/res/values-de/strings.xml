@@ -33,9 +33,21 @@
     <string name="no_email_client">Ich konnte leider keinen passenden e-mail Client auf Deinem Phone finden.</string>
     <string name="no_vimeo_thumb">Für dieses Vimeo Video konnte kein Vorschau Bild erstellt werden</string>
     <string name="pref_debug"> Debug Einstellungen</string>
+    <string name="wallpaper_nothing_to_revert">Du hast noch kein FunInSpace HintergrundBild gesetzt, daher ist nichts zurückzusetzen.</string>
+    <string name="wallpaper_backup_current">Du hast ein neues Hintergrundbild ausgewählt. Dein aktuelles Bild wird nun gesichert, so daß Du es über \'Alten Hintergrund wiederherstellen\' im Hauptmenü zurückspielen kannst.\nAchtung, das ist nicht mehr möglich, wenn Du die App deinstallierst, bevor Du Dein altes Wallpaper wiederhergestellt hast.</string>
+    <string name="restore_original_wallpaper">Alten Hintergrund wiederherstellen</string>
     <string-array name="order_titles">
         <item>Neueste zuerst</item>
         <item>Älteste zuerst</item>
+    </string-array>
+
+    <!-- Strings for wallpaper image quality preferences -->
+    <string name="wallpaper_quality">Qualität für Hintergrundbild</string>
+    <string-array name="wp_quality_titles">
+        <item>Niedrig</item>
+        <item>Mittel</item>
+        <item>Hoch</item>
+        <item>Optimal</item>
     </string-array>
 
 </resources>

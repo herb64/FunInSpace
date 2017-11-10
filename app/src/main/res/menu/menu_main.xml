@@ -52,4 +52,12 @@
         android:title="Refresh content"
         app:showAsAction="always"
         android:icon="@android:drawable/ic_popup_sync" />
+
+    <!-- Add restore wallpaper option for test users to be able to revert to their original -->
+    <item
+        android:id="@+id/restore_wallpaper"
+        android:icon="@android:drawable/ic_menu_revert"
+        android:orderInCategory="92"
+        android:title="@string/restore_original_wallpaper"
+        app:showAsAction="ifRoom" />
 </menu>

@@ -27,6 +27,16 @@
         android:summary="Use lower color resolution Thumbnail pictures to save memory. Check, if you see any difference in the list."
         android:title="Thumbnail color quality" />
 
+    <!-- 10.11.2017 - add selection of wallpaper image quality -->
+    <ListPreference
+        android:defaultValue="80"
+        android:entries="@array/wp_quality_titles"
+        android:entryValues="@array/wp_quality_values"
+        android:key="wallpaper_quality"
+        android:negativeButtonText="@null"
+        android:positiveButtonText="@null"
+        android:title="@string/wallpaper_quality" />
+
     <SwitchPreference
         android:defaultValue="true"
         android:key="fallback_to_lowres"
@@ -64,7 +74,7 @@
          dismiss it. -->
     <!-- NOTE: ListPreference's summary should be set to its value by the activity code. -->
     <ListPreference
-        android:defaultValue="-1"
+        android:defaultValue="1"
         android:entries="@array/pref_example_list_titles"
         android:entryValues="@array/pref_example_list_values"
         android:key="example_list"

@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- HFCM: Add this to play with wifi stuff. If not set, elephone P9000 crashes -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
 
     <!-- android:hardwareAccelerated="true"
      in discussion on playing vimeo in webview... added on 13.10.2017-->
@@ -27,9 +28,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- configChanges in imageactivity - needed for onConfigurationChanged() -->
+        <!--android:configChanges="orientation|screenSize|keyboardHidden" -->
         <activity
             android:name=".ImageActivity"
-            android:theme="@style/AppTheme.NoActionBar" />
+            android:theme="@style/AppTheme.NoActionBar"/>
         <activity android:name=".VideoActivity" />
         <activity android:name=".TexSizeActivity" />
         <activity

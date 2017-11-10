@@ -1,5 +1,6 @@
 package de.herb64.funinspace;
 
+import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -7,6 +8,8 @@ import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Rect;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
@@ -21,6 +24,7 @@ import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
@@ -372,6 +376,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         // not from activity as here
                         dlg.show(fm, "RATINGTAG");
                         actionMode.finish();
+                        return true;
+                    case R.id.cab_wallpaper:
+                        // Set this image as wallpaper - bad if multiple are selected... check this
+                        // we might load using asyncLoad from web..
+                        new asyncLoad(MainActivity.this, "WALLPAPER").
+                                execute(myList.get(selected.get(0)).getLowres());
+                        //changeWallpaper(null);
                         return true;
                     default:
                         return false;
@@ -834,17 +845,21 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             int maxAlloc = devInfo.getMaxAllocatable();
             Log.i("HFCM", "maximum alloc:" + String.valueOf(maxAlloc));
             if (media.equals(M_IMAGE)) {
-                    Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
-                    hiresIntent.putExtra("hiresurl", hiresUrl);
-                    hiresIntent.putExtra("listIdx", idx);
-                    hiresIntent.putExtra("maxAlloc", maxAlloc);
-                    hiresIntent.putExtra("maxtexturesize", maxTextureSize);
-                    lastImage = myList.get(idx).getTitle();
-                    hiresIntent.putExtra("imagename", lastImage);
-                    // forResult now ALWAYS to get logstring returned for debugging
-                    // if hires size is already
-                    // TODO: how about running one thread to just query the hires image size
-                    startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
+                Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
+                hiresIntent.putExtra("hiresurl", hiresUrl);
+                hiresIntent.putExtra("listIdx", idx);
+                hiresIntent.putExtra("maxAlloc", maxAlloc);
+                hiresIntent.putExtra("maxtexturesize", maxTextureSize);
+                hiresIntent.putExtra("wallpaper_quality",
+                        sharedPref.getString("wallpaper_quality", "80"));
+                lastImage = myList.get(idx).getTitle();
+                //hiresIntent.putExtra("imagename", lastImage);
+                // wallpaper filename now as imagename
+                hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_","wp_"));
+                // forResult now ALWAYS to get logstring returned for debugging
+                // if hires size is already
+                // TODO: how about running one thread to just query the hires image size
+                startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
             } else if (media.equals(M_YOUTUBE)) {
                 String thumb = myList.get(idx).getThumb();
                 // We get the ID from thumb name - hmmm, somewhat dirty ?
@@ -919,6 +934,47 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 int listidx = data.getIntExtra("lstIdx",0);
                 String logString = data.getStringExtra("logString");
                 new dialogDisplay(this, logString, lastImage);
+
+                // Get the information on any returned wallpaper info. We can read bitmap data from
+                // intent return data or just read a file, which name we get returned instead
+
+                /* CODE USING BYTEARRAY TO READ RESULT BITMAP FROM INTENT DATA
+                // TODO: reading from intent return data stream - quality 90 results in transaction
+                //       size too large, so go for the filename version.
+                // for docu:
+                // Bitmap size not correctly filled in debugger with 4.1: mWidth and mHeight are -1
+                // but: after viewing bmp in debugger, these are suddenly filled on new inspection
+                if (data.getByteArrayExtra("wallpaperbmp") != null) {
+                    Bitmap wallbmp = BitmapFactory.decodeByteArray(
+                            data.getByteArrayExtra("wallpaperbmp"),
+                            0,
+                            data.getByteArrayExtra("wallpaperbmp").length);
+                    changeWallpaper(wallbmp);
+                }*/
+
+                // version to read file instead of getting bitmap in intent return as bytearray
+                if (data.getStringExtra("wallpaperfile") != null) {
+                    File wFile = new File(getApplicationContext().getFilesDir(),
+                            data.getStringExtra("wallpaperfile"));
+                    if (wFile.exists()) {
+                        changeWallpaper(BitmapFactory.decodeFile(wFile.getAbsolutePath()));
+                    }
+                }
+
+                /* OLD CODE USING ASYNCLOAD - to keep for documentation purposes
+                doing an async load just passing region/scale to be loaded from network
+                if (data.getIntegerArrayListExtra("wallpaperregion") != null) {
+                    ArrayList<Integer> lst = data.getIntegerArrayListExtra("wallpaperregion");
+                    Rect myrect = new Rect();
+                    myrect.set(lst.get(0), lst.get(1), lst.get(2), lst.get(3));
+                    new asyncLoad(MainActivity.this,
+                            "WALLPAPER",
+                            true,
+                            myrect,
+                            3)
+                            .execute(myList.get(listidx).getHires());
+                }*/
+
                 if (myList.get(listidx).getHiSize().equals(testsize)) {
                     return;     // no action needed if hires size already in data
                 }
@@ -993,6 +1049,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     if (changed.equals("full_search")) {
                         // this one: just set on each single toggle
                         adp.setFullSearch(sharedPref.getBoolean("full_search", false));
+                    }
+                    if (changed.equals("wallpaper_quality")) {
+                        Log.i("HFCM", "Changed wall paper quality to " + sharedPref.getString("wallpaper_quality", "80"));
                     }
                 }
             };
@@ -1092,8 +1151,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             //i.setType("message/rfc822");    // had to be removed
             //String to[] = {"user@domain.com","user2@domain.com"};
             //i.putExtra(Intent.EXTRA_EMAIL, new String[]{"user@domain.com"});
-            String cc[] = {vKE() + "," + vHH()};
-            i.putExtra(Intent.EXTRA_EMAIL, cc);
+            //String cc[] = {vKE() + "," + vHH()};
+            //i.putExtra(Intent.EXTRA_EMAIL, cc);
             i.putExtra(Intent.EXTRA_SUBJECT, "Greetings from FunInSpace");
             i.putExtra(Intent.EXTRA_TEXT, "Just a test email sent by the famous FunInSpace App. I hope you enjoy the attachment :)");
 
@@ -1168,6 +1227,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     .setIcon(android.R.drawable.ic_dialog_alert)
                     .show();
             return true;
+        }
+
+        if (id == R.id.restore_wallpaper) {
+            new dialogDisplay(MainActivity.this, "Removing FunInSpace Wallpaper and reverting to your original image...", "Info");
+            changeWallpaper(null);
         }
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -1576,6 +1640,13 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     Log.i("HFCM", "Missing thumb reload returned from asyncLoad");
                 }
                 break;*/
+            case "WALLPAPER":
+                if (output instanceof Bitmap) {
+                    changeWallpaper((Bitmap) output);
+                } else {
+                    Log.e("HFCM", "asyncLoad for WALLPAPER did not return a bitmap");
+                }
+                break;
             default:
                 new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
                 break;
@@ -1603,6 +1674,96 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     }
 
 
+    /**
+     * Set wallpaper image to the given bitmap. If the bitmap is null, we revert to the wallpaper
+     * image, that has been saved on first running a wallpaper setting.
+     * @param bmp       The bitmap to be set as wallpaper image
+     */
+    public void changeWallpaper(Bitmap bmp) {
+        // https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/app/WallpaperManager.java
+        // public static final int FLAG_LOCK = 1 << 1;
+        // below: api23+ required
+        //WallpaperManager wpm = (WallpaperManager)getSystemService(WallpaperManager.class);
+        WallpaperManager wpm = WallpaperManager.getInstance(getApplicationContext());
+
+        // If null bitmap is passed, we reset to the current wallpaper, that was present on the
+        // device before setting our first apod image.
+        if (bmp == null) {
+            File cFile = new File(getApplicationContext().getFilesDir(), "w_current.jpg");
+            if (cFile.exists()) {
+                Bitmap wallpaper = BitmapFactory.decodeFile(cFile.getAbsolutePath());
+                try {
+                    wpm.setBitmap(wallpaper);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.e("HFCM", e.toString());
+                }
+            } else {
+                new dialogDisplay(MainActivity.this,
+                        getString(R.string.wallpaper_nothing_to_revert), "Info");
+            }
+            return;
+        }
+
+        // Keep a backup of the current wallpaper, so that we can reset at any time
+        // "builtin" drawable - needs api19+ (KITKAT)
+        // "which" parameter - needs api24+ (NOUGAT)
+        // note: in Android 4.1, we only get the "current" bitmap returned
+        Drawable sysWall = null;
+        Drawable lckWall = null;
+        Drawable builtin = null;
+        Drawable current = wpm.getDrawable();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            //wpm.getWallpaperId(FLAG...);
+            sysWall = wpm.getBuiltInDrawable(WallpaperManager.FLAG_SYSTEM);
+            lckWall = wpm.getBuiltInDrawable(WallpaperManager.FLAG_LOCK);
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                builtin = wpm.getBuiltInDrawable();
+            }
+        }
+
+        // keep a backup copy of current image, if not yet present.
+        if (current != null) {
+            File cFile = new File(getApplicationContext().getFilesDir(), "w_current.jpg");
+            if (!cFile.exists()) {
+                Log.i("HFCM", "Saving current wallpaper bitmap");
+                utils.writeJPG(getApplicationContext(), "w_current.jpg", ((BitmapDrawable) current).getBitmap());
+                new dialogDisplay(MainActivity.this,
+                        getString(R.string.wallpaper_backup_current), "Info");
+            }
+        } else {
+            new dialogDisplay(MainActivity.this,
+                    "No current wallpaper image could be found to save for revert...", "Warning");
+        }
+        // get these as well, if present
+        if (sysWall != null) {
+            utils.writeJPG(getApplicationContext(),
+                    "w_system.jpg", ((BitmapDrawable)sysWall).getBitmap());
+        }
+        if (lckWall != null) {
+            // this one was never encountered during my testing so far
+            utils.writeJPG(getApplicationContext(),
+                    "w_lock.jpg", ((BitmapDrawable)lckWall).getBitmap());
+        }
+        if (builtin != null) {
+            utils.writeJPG(getApplicationContext(),
+                    "w_builtin.jpg", ((BitmapDrawable)builtin).getBitmap());
+        }
+
+        // Finally set the given bitmap as our new wallpaper. The croprect feature is not (yet?)
+        // used, as we create our bitmap using the user selectable region implemented in our code.
+        try {
+            /* Android N - allows to set a croprect
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            wpm.setBitmap(bmp, croprect, true);
+            */
+            wpm.setBitmap(bmp);
+        } catch (IOException e) {
+            e.printStackTrace();
+            Log.e("HFCM", e.toString());
+        }
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     //  O L D    C O D E   J U S T   K E P T   H E R E
@@ -1651,7 +1812,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     };*/
 
-    //////////////////// OLD CODE //////////////////////////////////////////////////
 
 
     // This is the adapter working on ArrayList type object myList...

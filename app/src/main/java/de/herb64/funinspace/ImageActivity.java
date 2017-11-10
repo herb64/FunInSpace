@@ -3,16 +3,20 @@ package de.herb64.funinspace;
 import android.app.ActivityManager;
 import android.app.FragmentManager;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
 import android.graphics.Matrix;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.support.v4.app.Fragment;
+import android.os.Build;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Display;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -22,13 +26,14 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.Scroller;
 import android.widget.Toast;
-
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
-import de.herb64.funinspace.helpers.dialogDisplay;
+import de.herb64.funinspace.helpers.utils;
 
 
 // This activity is now started with startActivityForResult() to return some values
@@ -56,9 +61,10 @@ import de.herb64.funinspace.helpers.dialogDisplay;
 // See also about youtube icon
 // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
 
-public class ImageActivity extends AppCompatActivity implements ImgHiresFragment.myCallbacks{
-    private ImageView ivHires = null;
+public class ImageActivity extends AppCompatActivity implements ImgHiresFragment.myCallbacks {
+    private drawableImageView ivHires = null;
     private Bitmap myBitmap;
+    private Bitmap wallBitmap = null;
     private String strHires;
     private String strSz;
     private int listIdx;
@@ -72,20 +78,31 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     private GestureDetector GDetector;
     private int viewWidth;
     private int viewHeight;
+    private int dispWidth;
+    private int dispHeight;
     private int imgWidth;
     private int imgHeight;
     private float scaledWidth;
     private float scaledHeight;
-    //private int evtCount;
     private Scroller mScroller;
     private int memClass;
     private int maxAlloc;
     private int maxTextureSize;
     private String imageName;
+    private boolean wallPaperSelectMode = false;
+    private Rect wallPaperSelectRect;
+    private int wallPaperQuality;
+    private int wpMinY = 0;
+    private int wpMinX = 0;
+    private int wpMaxY = 0;
+    private int wpMaxX = 0;
+    private boolean isLandScape = false;
 
     private static final String TAG_TASK_FRAGMENT = "img_hires_task_fragment";
     private static final String TAG = "HFCM";
     private static final float DOUBLE_TAP_ZOOMFACTOR = 2.0f;
+    // TODO : make quality selectable - maybe just list preference: low - medium - high - excellent with 25/50/80/100
+    //private static final int DEFAULT_WP_QUALITY = 80;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,7 +117,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         setContentView(R.layout.activity_image);
-        ivHires = (ImageView) findViewById(R.id.iv_large);
+        ivHires = (drawableImageView) findViewById(R.id.iv_large);
         //ivHires.setOnTouchListener(new imgTouchListener());
         SGDetector = new ScaleGestureDetector(this, new imgScaleListener());
         GDetector = new GestureDetector(this, new imgDragListener());
@@ -108,7 +125,39 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         loadingBar = (ProgressBar) findViewById(R.id.pb_loading);
         imgMatrix = new Matrix();
         mValues = new float[9];
-        //evtCount = 0;
+        wallPaperSelectRect = new Rect();
+
+        // Fix: get viewWidth and Height on each create instead of using savedInstanceState
+        // TODO: check if this is correct using DisplayMetrics
+        DisplayMetrics metrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(metrics);
+        viewWidth = metrics.widthPixels;
+        viewHeight = metrics.heightPixels;
+
+        // Get the "real" display values (e.g. 1920x1080) - need this for wallpaper stuff
+        // Unfortunately, only SDK 17+ supports this in a nice way
+        // TODO: find solution for lower sdk levels, for now the range is not perfect
+        //WindowManager wm = (WindowManager) getApplicationContext().getSystemService(WINDOW_SERVICE);
+        //Display disp = wm.getDefaultDisplay();
+        Display disp = getWindowManager().getDefaultDisplay();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            DisplayMetrics realmetrics = new DisplayMetrics();
+            disp.getRealMetrics(realmetrics);
+            dispWidth = realmetrics.widthPixels;
+            dispHeight = realmetrics.heightPixels;
+        } else {
+            // TODO: This is BAD and does not return the real screen pixels - below api 17
+            // there seems to be no way to get the real pixels without doing many calculations
+            Point dispsize = new Point();
+            disp.getSize(dispsize);
+            dispWidth = dispsize.x;
+            dispHeight = dispsize.y;
+        }
+        // Get orientation: see https://developer.android.com/reference/android/view/Display.html
+        isLandScape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+        wallPaperSelectMode = false;
+        //wallPaperQuality = DEFAULT_WP_QUALITY;
+        ivHires.setSelectRect(null);
 
         // Get info on memoryClass - needed for bitmap loading to avoid OOM situations
         ActivityManager activityManager = (ActivityManager) this.getSystemService(ACTIVITY_SERVICE);
@@ -128,19 +177,17 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             //noinspection ResourceType -> this flag hides warnings in setVisibility() below
             loadingBar.setVisibility(visibility);
             returnIntent = savedInstanceState.getParcelable("returnintent");
-
             // Rotation for image - during onCreate() the imageview does not yet report width and
             // height information and returns 0 for getWidth()/Height(). This is only available
             // after attach. We could override onWindowFocusChanged()
-            // MY SOLUTIION: just keep values and restore them exchanged (this is possible, because
-            // we only use fullscreen, so x/y can be interchanged for each rotation
-            viewHeight = savedInstanceState.getInt("viewWidth");
-            viewWidth = savedInstanceState.getInt("viewHeight");
+            // Use Display getSize() / getRealMetrics() (before, storing in savedInstanceState and
+            // exchanging values was a quick and dirty solution)
             imgHeight = savedInstanceState.getInt("imgHeight");
             imgWidth = savedInstanceState.getInt("imgWidth");
             maxAlloc = savedInstanceState.getInt("maxAlloc");
             maxTextureSize = savedInstanceState.getInt("maxtexturesize");
             imageName = savedInstanceState.getString("imagename");
+            wallPaperQuality = savedInstanceState.getInt("wallpaper_quality");
             if (myBitmap != null) {
                 initializeMatrix();
             }
@@ -154,6 +201,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             maxAlloc = intent.getIntExtra("maxAlloc", 0);
             maxTextureSize = intent.getIntExtra("maxtexturesize",0);
             imageName = intent.getStringExtra("imagename");
+            wallPaperQuality = Integer.parseInt(intent.getStringExtra("wallpaper_quality"));
             returnIntent = new Intent();
 
             // TODO Docu
@@ -174,12 +222,25 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 fragArguments.putInt("memclass", memClass);
                 fragArguments.putInt("maxAlloc", maxAlloc);
                 fragArguments.putInt("maxTextureSize", maxTextureSize);
-                fragArguments.putString("imageName", imageName);
+                fragArguments.putString("imageName", "not used any more"); //imageName);
                 mHiresFragment.setArguments(fragArguments);
                 fm.beginTransaction().add(mHiresFragment, TAG_TASK_FRAGMENT).commit();
             }
         }
+        Log.i("HFCM", "Finished oncreate in imageactivity with quality " + wallPaperQuality);
     }
+
+    /*@Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        // and see manifest:
+        // android.util.SuperNotCalledException: Activity ImageActivity did not call through to super.onConfigurationChanged()
+        super.onConfigurationChanged(newConfig);
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            Toast.makeText(this, "landscape", Toast.LENGTH_SHORT).show();
+        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT){
+            Toast.makeText(this, "portrait", Toast.LENGTH_SHORT).show();
+        }
+    }*/
 
     // HFCM Add for state saving for rotation
     // see http://www.androiddesignpatterns.com/2013/08/fragment-transaction-commit-state-loss.html
@@ -193,13 +254,12 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         outState.putInt("loading", loadingBar.getVisibility());
         outState.putInt("lstidx", listIdx);
         outState.putParcelable("returnintent", returnIntent);
-        outState.putInt("viewWidth", viewWidth);
-        outState.putInt("viewHeight", viewHeight);
         outState.putInt("imgWidth", imgWidth);
         outState.putInt("imgHeight", imgHeight);
         outState.putInt("maxAlloc", maxAlloc);
         outState.putInt("maxtexturesize", maxTextureSize);
         outState.putString("imagename", imageName);
+        outState.putInt("wallpaper_quality", wallPaperQuality);
     }
 
     // Code to calculate stuff for rotation. Note, that imageview size is stored in instance state
@@ -273,6 +333,36 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             //return super.onScroll(e1, e2, distanceX, distanceY);
             float transX;
             float transY;
+
+            // Intercept, if we are in wallpaper selection mode and adjust the wallpaper selection
+            // rectangle according to the user drag operations
+            if (wallPaperSelectMode) {
+                // for now, only moving left to right for images with larger aspect than screen!
+                Log.i("HFCM", "Having distance in select mode: " + distanceX + " / " + distanceY);
+                if (wallPaperSelectRect.top - (int)distanceY >= wpMinY &&       // 0
+                        wallPaperSelectRect.bottom - (int)distanceY <= wpMaxY) { // viewHeight
+                    wallPaperSelectRect.set(
+                            wallPaperSelectRect.left,
+                            wallPaperSelectRect.top - (int) distanceY,
+                            wallPaperSelectRect.right,
+                            wallPaperSelectRect.bottom - (int) distanceY);
+                }
+
+                if (wallPaperSelectRect.left - (int)distanceX >= wpMinX &&      // 0
+                        wallPaperSelectRect.right - (int)distanceX <= wpMaxX) {  // viewWidth
+                    wallPaperSelectRect.set(
+                            wallPaperSelectRect.left - (int) distanceX,
+                            wallPaperSelectRect.top,
+                            wallPaperSelectRect.right - (int) distanceX,
+                            wallPaperSelectRect.bottom);
+                }
+                if (distanceX != 0f || distanceY != 0f) {
+                    ivHires.setSelectRect(wallPaperSelectRect);
+                    ivHires.invalidate();
+                }
+                return true;
+            }
+
             // e1 is the first down motion event that started the scrolling (this usually stays
             // constant during the scroll) while e2 is the move motion event that triggered
             // the current onScroll
@@ -313,17 +403,184 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             return true;
         }
 
-        // reset the matrix if doubletap is done
-        // TODO does not work on Elephone P9000 - how to check this?
+        /**
+         * Double Tap: performs a zoom in fullscreen
+         * TODO: doubletap does not work on my elephone, so how to do it ?
+         * @param e     motion event
+         * @return      boolean
+         */
         @Override
         public boolean onDoubleTap(MotionEvent e) {
             //return super.onDoubleTap(e);
-            //initializeMatrix();
-            adjustMatrixForScaling(e.getAxisValue(MotionEvent.AXIS_X),
-                    e.getAxisValue(MotionEvent.AXIS_Y),
-                    DOUBLE_TAP_ZOOMFACTOR);
-            ivHires.setImageMatrix(imgMatrix);
-            return true;
+            if (wallPaperSelectMode) {
+                return true;
+            } else {
+                adjustMatrixForScaling(e.getAxisValue(MotionEvent.AXIS_X),
+                        e.getAxisValue(MotionEvent.AXIS_Y),
+                        DOUBLE_TAP_ZOOMFACTOR);
+                ivHires.setImageMatrix(imgMatrix);
+                return true;
+            }
+        }
+
+        /**
+         * We use a long press to activate wallpaper selection mode from fullscreen display.
+         * First long press enables, second long press disables and creates the wallpaper.
+         * Rotation of phone disables selection mode with no action. Wallpapers are always generated
+         * for the standard rotation of the phone (portrait). Check for tablets...
+         * TODO; how does the user know that this is the way to create wallpapers?
+         * @param e     MotionEvent to be processed
+         */
+        @Override
+        public void onLongPress(MotionEvent e) {
+            // TODO: REAL display size information for Android < api17
+            // https://stackoverflow.com/questions/35780980/getting-the-actual-screen-height-android
+            // https://developer.android.com/guide/practices/screens_support.html
+
+            // for docu: debugger showing -1 for bitmap variable mWidth/mHeight - seems to be no
+            // problem. After showing image in debugger and opening variable view again, it even
+            // shows the correct values then! (observed with 4.1 avd test)
+            float aspectWall = (float) dispWidth / (float) dispHeight;
+            if (isLandScape) {
+                aspectWall = 1f / aspectWall;
+            }
+            int wallWidth = isLandScape ? dispHeight : dispWidth;
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
+                aspectWall *= 2f;
+                wallWidth *= 2;
+            }
+            float aspectBitmap = (float) imgWidth / (float) imgHeight;
+
+            // Set wallpapper selection rectangle size and bounds withing view
+            float wallSelectHeight;
+            float wallSelectWidth;
+            if (aspectBitmap >= aspectWall) {
+                wallSelectHeight = scaledHeight;
+                wallSelectWidth = wallSelectHeight * aspectWall;
+            } else {
+                wallSelectWidth = scaledWidth;
+                wallSelectHeight = wallSelectWidth / aspectWall;
+                // TODO BIG PROBLEM: Great Gig in the Sky, 07.09.2017 - rectangle height too large (width * aspectwall - far too large!!!)
+                // TODO: Check, Orion after Easter Island (17.09) get's bad range selected...
+            }
+            wpMinX = (int) (((float)viewWidth - scaledWidth) / 2f);
+            wpMaxX = (int) (((float)viewWidth + scaledWidth) / 2f);
+            wpMinY = (int) (((float)viewHeight - scaledHeight) / 2f);
+            wpMaxY = (int) (((float)viewHeight + scaledHeight) / 2f);
+
+            // While in wallpaper select mode, the second long press ends this mode and uses
+            // the selected range to create the wallpaper bitmap
+            if (wallPaperSelectMode) {
+                wallPaperSelectMode = false;
+                ivHires.setSelectRect(null);
+
+                // Map wallPaperSelectRect to a hires bitmap region and use BitmapRegionDecoder
+                // to cut this range + apply scaling for the wallpaper bitmap object
+                // TODO: correct mapping to bitmap for landscape!!!
+                Rect region = new Rect();
+                float scale;
+                if (aspectBitmap >= aspectWall) {
+                    scale = (imgHeight > dispHeight) ? (float) imgHeight / (float) dispHeight : 1f;
+                    region.set(
+                            //(int) ((float) wallPaperSelectRect.left / imgScale), // FIX
+                            (int) ((float) (wallPaperSelectRect.left - wpMinX) / imgScale),
+                            0,
+                            //(int) ((float) wallPaperSelectRect.right / imgScale), // FIX
+                            (int) ((float) (wallPaperSelectRect.right - wpMinX) / imgScale),
+                            imgHeight
+                    );
+                } else {
+                    scale = (imgWidth > dispWidth) ? (float) imgWidth / (float) dispWidth : 1f;
+                    region.set(
+                            0,
+                            (int) ((float) wallPaperSelectRect.top / imgScale),
+                            imgWidth,
+                            (int) ((float) wallPaperSelectRect.bottom / imgScale)
+                    );
+                }
+
+                // Use decodeRegion() and streams to directly decode from hires image bitmap.
+                // TODO - what about memory consumption, JPEG vs. PNG, JPEG quality (config option?)
+                // slider in preferences screen?
+                // https://stackoverflow.com/questions/24793465/how-to-set-a-slider-in-preferencescreen-of-android
+                // https://stackoverflow.com/questions/1974193/slider-on-my-preferencescreen?answertab=oldest#tab-top
+                // BAD news on inScaled option: BitmapRegionDecoder ignores this flag, so we go
+                // with createScaledBitmap(), using BitmapRegionDecoder output as source
+                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                myBitmap.compress(Bitmap.CompressFormat.JPEG, wallPaperQuality, os);
+                ByteArrayInputStream is = new ByteArrayInputStream(os.toByteArray());
+                try {
+                    BitmapRegionDecoder rD = BitmapRegionDecoder.newInstance(is, false);
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inSampleSize = Integer.highestOneBit((int)scale);
+                    //options.inScaled = true;            // IGNORED IN REGIONDECODER!!!!
+                    //options.inDensity = imgHeight;
+                    //options.inTargetDensity = viewHeight * options.inSampleSize;
+                    //wallBitmap = rD.decodeRegion(region, options);
+                    // TODO: avoid scaleup for small images - keep original region size (in this case it will be scaled by the system internally, anyway)
+                    //int hgt = isLandScape ? dispWidth : dispHeight;
+                    wallBitmap = Bitmap.createScaledBitmap(rD.decodeRegion(region, options),
+                            wallWidth,
+                            //hgt, //dispHeight,
+                            isLandScape ? dispWidth : dispHeight,
+                            false
+                            );
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+
+                // Save a jpeg file of the wallpaper bitmap
+                Log.i("HFCM", "Saving wallpaper image into " + imageName + ", Quality: " + wallPaperQuality);
+                utils.writeJPG(getApplicationContext(),
+                        imageName,  // w_cropped.jpg
+                        wallBitmap);
+
+                // Return the resulting bitmap via the intent - hmm, maybe just use the written file
+                // instead... this code shows, how to return a bitmap to a calling activity
+                // via ByteArrayOutputStream converted with toByteArray()
+                // Storing bitmap stream - does this cause memory to be used? Bad in terms of
+                // transaction size limits... AS SUSPECTED, QUALITY 90 RESULTS IN TX TOO LARGE!!!
+                // android.os.TransactionTooLargeException
+                // Now using the stored file, which even allows to keep files with disctinct names,
+                // allowing for some APOD gallery from which we can select our prepared wallpapers.
+                // Also, a "random" paper from within the app is possible this way...
+                ByteArrayOutputStream ws = new ByteArrayOutputStream();
+                if (wallBitmap != null) {
+                    wallBitmap.compress(Bitmap.CompressFormat.JPEG, wallPaperQuality, ws);
+                    //returnIntent.putExtra("wallpaperbmp", ws.toByteArray());
+                    returnIntent.putExtra("wallpaperfile", imageName);
+                }
+                // TODO : better might be rect flattenToString / unflatten and pass string instead
+                // anyway, code no longer used, we pass the bitmap object via intent return value
+                /*ArrayList<Integer> reg = new ArrayList<>();
+                reg.add(region.left);
+                reg.add(region.top);
+                reg.add(region.right);
+                reg.add(region.bottom);
+                returnIntent.putIntegerArrayListExtra("wallpaperregion", reg);*/
+
+            } else {
+                // Initialize wallpaper selection mode - create a centered rectangle
+                String toaster = "Starting wallpaper selection mode ...";
+                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
+                wallPaperSelectMode = true;
+
+                // Reset view matrix to initial fullscreen view for selection of wallpaper range
+                initializeMatrix();
+                ivHires.setImageMatrix(imgMatrix);
+
+                // Calculate starting wallpaper selection Rectangle
+                wallPaperSelectRect.set(
+                        (int) (((float)viewWidth - wallSelectWidth) / 2f),
+                        (int) (((float)viewHeight - wallSelectHeight) / 2f),
+                        (int) (((float)viewWidth + wallSelectWidth) / 2f),
+                        (int) (((float)viewHeight + wallSelectHeight) / 2f)
+                );
+
+                ivHires.setSelectRect(wallPaperSelectRect);
+            }
+            ivHires.invalidate();
+            super.onLongPress(e);
         }
 
         // TODO: implement smoother scrolling - Scroller might be your friend :)
@@ -338,10 +595,12 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         }
     }
 
-    // ScaleGestureDetector: since android 2.2 - multiple fingers (pinch zoom)
-    // return true, if we handle the event, false if not
-    // see also interesting internal
-    // https://stackoverflow.com/questions/30414892/how-does-matrix-postscale-sx-sy-px-py-work
+    /**
+     * ScaleGestureDetector: since android 2.2 - multiple fingers (pinch zoom)
+     * return true, if we handle the event, false if not
+     * see also interesting internal
+     * https://stackoverflow.com/questions/30414892/how-does-matrix-postscale-sx-sy-px-py-work
+     */
     private class imgScaleListener extends ScaleGestureDetector.SimpleOnScaleGestureListener {
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
@@ -355,7 +614,15 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         }
     }
 
-    // Helper function to calculate scaling matrix. Used by pinch zoom and doubletap zoom
+    /**
+     * Adjust the matrix for scaling operations. This is used by pinch zoom and doubletap zoom.
+     * After the scaling operation is done, an adjustment via post translation follows to
+     * - keep the image in the view bounds
+     * - keep the image centered, if one edge is getting smaller than corresponding view size
+     * @param focX      x focus
+     * @param focY      y focus
+     * @param factor    factor
+     */
     private void adjustMatrixForScaling(float focX, float focY, float factor) {
         float originalfactor = factor;
         // TODO: factor sometimes < 1.0 during scaleup - possible bug?
@@ -442,6 +709,11 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         Log.d(TAG, "Reached onCancelled() in ImageActivity");
     }
 
+    /**
+     * @param bitmap        Bitmap
+     * @param teststring    String
+     * @param originalSize  Size
+     */
     @Override
     public void onPostExecute(Bitmap bitmap, String teststring, String originalSize) {
         myBitmap = bitmap;
@@ -508,7 +780,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     */
 
     // Just for debugging problems - make a bitmap file copy
-    private void saveBmpTest(Bitmap bmp, String filename) {
+    /*private void saveBmpTest(Bitmap bmp, String filename) {
         // And write the thumbnail to internal storage
         File testFile = new File(getApplicationContext().getFilesDir(), filename);
         FileOutputStream outstream = null;
@@ -526,7 +798,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
+    }*/
 
     // HFCM - was just some test
     @Override

@@ -2,6 +2,8 @@ package de.herb64.funinspace;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
+import android.graphics.Rect;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.preference.PreferenceManager;
@@ -9,6 +11,7 @@ import android.util.Log;
 import android.webkit.MimeTypeMap;
 import android.webkit.URLUtil;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -54,6 +57,8 @@ import javax.net.ssl.SSLSocketFactory;
  //new asyncLoad(this, "JPEG_TEST").execute("https://apod.nasa.gov/apod/image/1710/M51_KerryLeckyHepburn_1024.jpg");
 
  * Change to support a list of urls and use publishprogress to return one after the other..
+ *
+ * 07.11.2017 - adding constructor to pass region/scale values in conjunction with wallpaper tests
  */
 
 // params, progress, result
@@ -65,6 +70,8 @@ public class asyncLoad extends AsyncTask {
     protected static final int OK = 0;
     protected static final int FILENOTFOUND = 1;
     private boolean preLollipopTLS = true;
+    private Rect region = null;         // for testing bitmap region decode
+    private int scale = 1;              // region decode with insamplesize
 
     /*
      * Interfaces
@@ -101,6 +108,22 @@ public class asyncLoad extends AsyncTask {
     }
 
     /**
+     * This constructor is used to pass a region/scale value for a bitmap load - experimental
+     * @param delegate
+     * @param tag
+     * @param preLollipopTLS
+     * @param region
+     */
+    public asyncLoad(AsyncResponse delegate, String tag, boolean preLollipopTLS, Rect region, int scale) {
+        this.delegate = delegate;
+        this.tag = tag;
+        status = OK;
+        this.preLollipopTLS = preLollipopTLS;
+        this.region = region;
+        this.scale = scale;
+    }
+
+    /**
      * The background thread.
      * @param params    Array of objects passed by call to execute()
      * @return          Return of the object
@@ -126,7 +149,7 @@ public class asyncLoad extends AsyncTask {
             }
         }
 
-        // check params in case we get a list of multiple urls
+        // check params in case we get a list of multiple urls - not used any more for now
         if (params[0] instanceof ArrayList) {
             int len = ((ArrayList) params[0]).size();
             Log.i("HFCM", "Called asyncLoad() with a list of " + len + " URLs");
@@ -139,87 +162,6 @@ public class asyncLoad extends AsyncTask {
         } else {
             Log.e("HFCM", "Called asyncLoad().execute() with bad type");
         }
-
-        /*HttpsURLConnection conn = null;
-        BufferedReader reader = null;
-        // Just some test for asynctask parallel execution
-        //Log.i("HFCM", "going to sleep:" + this.tag);
-        //SystemClock.sleep(10000);
-
-        try {
-            // checking, if https or http - use andrid webkit classes
-            //URLUtil.isHttpUrl((String) params[0]);    // TODO - determine type of url and put TLS stuff in here!!
-            URL url = new URL((String) params[0]);
-            conn = (HttpsURLConnection) url.openConnection();
-            // conn.setInstanceFollowRedirects(true);
-            try {
-                conn.connect();
-            } catch (Exception e) {
-                e.printStackTrace();
-                Log.e("HFCM", e.getMessage());
-                return e.getMessage();
-            }
-            // Read data from this connection into an input stream
-            InputStream istream = conn.getInputStream();
-            String contenttype = conn.getContentType();
-            String type = MimeTypeMap.getFileExtensionFromUrl(contenttype);
-            Log.i("HFCM", "URL: " + params[0] + ", Content type: " + contenttype + ", Typemap info" + type);
-            // URL: https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY, Content type: application/json
-            // URL: https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json, Content type: text/plain; charset=utf-8
-            // URL: https://apod.nasa.gov/apod/image/1710/M51_KerryLeckyHepburn_1024.jpg, Content type: image/jpeg
-            //InputStream istream = (InputStream) url.getContent();
-
-            // we could now determine what to return: image or text?
-            // test
-            if (contenttype.startsWith("image")) {
-                Bitmap bitmap = BitmapFactory.decodeStream(istream);
-                int i = bitmap.getHeight();
-                return bitmap;
-            } else {
-                reader = new BufferedReader(new InputStreamReader(istream));
-                //StringBuffer jsonbuffer = new StringBuffer();
-                StringBuilder mybuilder = new StringBuilder();
-                String jsonstring;
-
-                while ((jsonstring = reader.readLine()) != null) {
-                    mybuilder.append(jsonstring);
-                    //jsonbuffer.append(jsonstring);
-                }
-                //return jsonbuffer.toString();   // returned to onPostExecute
-                return mybuilder.toString();
-            }
-
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-            return e.getMessage();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-            status = FILENOTFOUND;
-            return "FILENOTFOUND";
-        } catch (IOException e) {
-            // Running into this because of DNS problems in AVD device. Seems to be because
-            // of LAN card and Wifi present in host - only on Win10 Android Studio installation
-            e.printStackTrace();
-            return e.getMessage();
-        } finally {
-            // return within finally - should not use it!
-            if(conn != null) {
-                try {
-                    conn.disconnect();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    //return e.getMessage();
-                }
-            }
-            try {
-                if(reader != null) {
-                    reader.close();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-                //return e.getMessage();
-            }
-        }*/
         return null;
     }
 
@@ -248,22 +190,27 @@ public class asyncLoad extends AsyncTask {
                 Log.e("HFCM", e.getMessage());
                 return e.getMessage();
             }
-            // Read data from this connection into an input stream
+            // Read data from this connection into a buffered input stream
             InputStream istream = conn.getInputStream();
+            //InputStream istream = (InputStream) url.getContent();
+            BufferedInputStream bStream = new BufferedInputStream(istream);  // default 8192 buffer
             String contenttype = conn.getContentType();
             String type = MimeTypeMap.getFileExtensionFromUrl(contenttype);
             Log.i("HFCM", "URL: " + url2load + ", Content type: " + contenttype + ", Typemap info" + type);
             // URL: https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY, Content type: application/json
             // URL: https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json, Content type: text/plain; charset=utf-8
             // URL: https://apod.nasa.gov/apod/image/1710/M51_KerryLeckyHepburn_1024.jpg, Content type: image/jpeg
-            //InputStream istream = (InputStream) url.getContent();
 
-            // we could now determine what to return: image or text?
-            // test
+            // TODO this must be done better (image/*) etc...
             if (contenttype.startsWith("image")) {
-                Bitmap bitmap = BitmapFactory.decodeStream(istream);
-                int i = bitmap.getHeight();
-                return bitmap;
+                if (region != null) {
+                    BitmapRegionDecoder rD = BitmapRegionDecoder.newInstance(istream, false);
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inSampleSize = scale;
+                    return rD.decodeRegion(region, options);
+                } else {
+                    return BitmapFactory.decodeStream(istream);
+                }
             } else {
                 reader = new BufferedReader(new InputStreamReader(istream));
                 //StringBuffer jsonbuffer = new StringBuffer();
