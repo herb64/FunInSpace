@@ -16,6 +16,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
@@ -29,7 +30,9 @@ import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.ViewGroup;
 import android.widget.AbsListView;
+import android.widget.AdapterView;
 import android.widget.ListView;
 import android.widget.RatingBar;
 import android.support.v7.widget.SearchView;
@@ -152,6 +155,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     private static final int MAX_LINES = 1000;      // hmm, ridiculous, but safe // TODO think
     protected static final int MAX_ITEMS = 10000;     // limit of items - for id handling
 
+    private static final String WP_CURRENT_BACKUP = "w_current.jpg";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -244,6 +249,31 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 v.setSelected(true);
                 return true;
             }});*/
+
+        // Allow click on items in listview without disrupting MultiChoiceModeListener for
+        // contextual action bar handling. This is a better solution for expanding explanation text.
+        // Important: id reports what is set in my space adapter via overwritten getItemId()
+        myItemsLV.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
+                // Just reset the maxlines to a larger limit and remove the ellipse stuff. This
+                // is only temporarily and automatically disappears when scrolling or when clicking
+                // again.
+                // TODO - at background load of thumbs, the full text always disappears on refreshs
+                // TODO - do not ellipsize if explanation matches into minimum lines
+                TextView v = myItemsLV.findViewWithTag(position + MAX_ITEMS);
+                if (v.getMaxLines() == MAX_ELLIPSED_LINES) {
+                    v.setMaxLines(MAX_LINES);
+                    v.setEllipsize(null);
+                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);
+                } else {
+                    v.setEllipsize(TextUtils.TruncateAt.END);
+                    v.setMaxLines(MAX_ELLIPSED_LINES);
+                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
+                }
+                myItemsLV.setSelection(position);
+            }
+        });
 
         // --------  Option 2 for  contextual action mode with multiple selections ---------
         // Handling multiple choices - add another listener. Note, that this responds to long clicks
@@ -380,9 +410,10 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                     case R.id.cab_wallpaper:
                         // Set this image as wallpaper - bad if multiple are selected... check this
                         // we might load using asyncLoad from web..
-                        new asyncLoad(MainActivity.this, "WALLPAPER").
-                                execute(myList.get(selected.get(0)).getLowres());
-                        //changeWallpaper(null);
+                        // TODO: asyncload will not be used, we might open hires task here
+                        //new asyncLoad(MainActivity.this, "WALLPAPER").
+                        //        execute(myList.get(selected.get(0)).getLowres());
+                        new dialogDisplay(MainActivity.this, "Please have a long click on the image in fullscreen mode, which allows to select a wallpaper range. Using this menu does not currently allow to set a wallpaper", "Info");
                         return true;
                     default:
                         return false;
@@ -784,9 +815,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     }
 
     /* N O T E:   T H I S   I S   N O T   A C T I V E
-     *Listener for rating bar changes - useless for me, because I use "small" bars
-     *style="@style/Widget.AppCompat.RatingBar"       > works
-     *style="@style/Widget.AppCompat.RatingBar.Small" > fails
+     * Listener for rating bar changes - useless for me, because I use "small" bars
+     * style="@style/Widget.AppCompat.RatingBar"       > works
+     * style="@style/Widget.AppCompat.RatingBar.Small" > fails
      * >> "small" versions are designed to ignore any interaction, see Android docs
      */
     private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
@@ -801,42 +832,27 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
      * The adapter sets a Tag, which can be read here and used for further actions.
      */
     private class thumbClickListener implements View.OnClickListener {
-        // onClick() gets passed the view in which we store the URL to be opened
-        // in a TAG - this happens in getView() in our adapter...
-        // passing multiple tags? we could just combine this in a single string of special format
-        // See https://developer.android.com/training/basics/firstapp/starting-activity.html
+        /**
+         * onClick() gets passed the view in which we store the URL to be opened in a TAG. This
+         * happens in getView() in our adapter...
+         * passing multiple tags? we could just combine this in a single string of special format
+         * see https://developer.android.com/training/basics/firstapp/starting-activity.html
+         * @param view The view
+         */
         @Override
         public void onClick(View view) {
+            // if (view.getTag() instanceof View) {}  // JUST FOR DOCU - tag can be a view as well
             int idx = (int) view.getTag();  // for "filtered" view - index into full list!
             /* Can't use this, because "small" ratingbars do not support interaction. So going
                for a separate dialog to set rating for items selected via contextual action mode
             if (idx >= 2*MAX_ITEMS) {
                 RatingBar rb = (RatingBar) view;
             }*/
-            // bad hack: index i+MAX_ITEMS is corresponding textview for thumbnail on index i
-            if (idx >= MAX_ITEMS) {
-                // we just reset the maxlines to a larger limit and remove the ellipse stuff. This
-                // is only temporarily and automatically disappears when scrolling or when clicking
-                // again.
-                // TODO - during background load of thumbs, the full text always
-                //        disappears on refreshs.
-                TextView v = (TextView) view;
-                if (v.getMaxLines() == MAX_ELLIPSED_LINES) {
-                    v.setMaxLines(MAX_LINES);
-                    v.setEllipsize(null);
-                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);
-                } else {
-                    v.setEllipsize(TextUtils.TruncateAt.END);
-                    v.setMaxLines(MAX_ELLIPSED_LINES);
-                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
-                }
-                myItemsLV.setSelection(idx-MAX_ITEMS);  // selected item to top of view
-                return;
-            }
+            // 11.11.2017 - moved ellipsized explanation text handling to OnItemClickListener()
 
-            // here, we decide, if we want to proceed with wifi only
+            // Decide, if we want to proceed if no WiFi is active
             if (sharedPref.getBoolean("wifi_switch", false) && !devInfo.isWifiActive()) {
-                new dialogDisplay(MainActivity.this, "WiFi connection not active, will not load video or hires now, please check settings", "No Wifi");
+                new dialogDisplay(MainActivity.this, getString(R.string.hires_no_wifi), "No Wifi");
                 return;
             }
             String hiresUrl = myList.get(idx).getHires();
@@ -949,16 +965,20 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                             data.getByteArrayExtra("wallpaperbmp"),
                             0,
                             data.getByteArrayExtra("wallpaperbmp").length);
-                    changeWallpaper(wallbmp);
+                    changeWallpaper2(wallbmp);
                 }*/
 
                 // version to read file instead of getting bitmap in intent return as bytearray
                 if (data.getStringExtra("wallpaperfile") != null) {
-                    File wFile = new File(getApplicationContext().getFilesDir(),
+
+                    // test using wallpaper changer in separate thread
+                    changeWallpaper(data.getStringExtra("wallpaperfile"));
+
+                    /*File wFile = new File(getApplicationContext().getFilesDir(),
                             data.getStringExtra("wallpaperfile"));
                     if (wFile.exists()) {
-                        changeWallpaper(BitmapFactory.decodeFile(wFile.getAbsolutePath()));
-                    }
+                        changeWallpaper2(BitmapFactory.decodeFile(wFile.getAbsolutePath()));
+                    }*/
                 }
 
                 /* OLD CODE USING ASYNCLOAD - to keep for documentation purposes
@@ -1231,7 +1251,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
 
         if (id == R.id.restore_wallpaper) {
             new dialogDisplay(MainActivity.this, "Removing FunInSpace Wallpaper and reverting to your original image...", "Info");
-            changeWallpaper(null);
+            changeWallpaper("");
         }
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -1642,7 +1662,8 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 break;*/
             case "WALLPAPER":
                 if (output instanceof Bitmap) {
-                    changeWallpaper((Bitmap) output);
+                    Log.w("HFCM", "Disabled wallpaperload returning from asyncload - processfinish");
+                    //changeWallpaper2((Bitmap) output);
                 } else {
                     Log.e("HFCM", "asyncLoad for WALLPAPER did not return a bitmap");
                 }
@@ -1673,48 +1694,66 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         }
     }
 
-
     /**
-     * Set wallpaper image to the given bitmap. If the bitmap is null, we revert to the wallpaper
-     * image, that has been saved on first running a wallpaper setting.
-     * @param bmp       The bitmap to be set as wallpaper image
+     * Set wallpaper image to the given image. If the filename is empty, we revert to the wallpaper
+     * image, that has been saved on very first setting of a FunInSpace wallpaper.
+     * @param filename  JPG file to be set as wallpaper
      */
-    public void changeWallpaper(Bitmap bmp) {
+    public void changeWallpaper(String filename) {
         // https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/app/WallpaperManager.java
         // public static final int FLAG_LOCK = 1 << 1;
         // below: api23+ required
+        String wpToSet = filename;
         //WallpaperManager wpm = (WallpaperManager)getSystemService(WallpaperManager.class);
+        //wpm.getWallpaperId(FLAG...);
         WallpaperManager wpm = WallpaperManager.getInstance(getApplicationContext());
 
-        // If null bitmap is passed, we reset to the current wallpaper, that was present on the
+        // If empty filename is passed, we reset to the current wallpaper, that was present on the
         // device before setting our first apod image.
-        if (bmp == null) {
-            File cFile = new File(getApplicationContext().getFilesDir(), "w_current.jpg");
+        if (filename.equals("")) {
+            File cFile = new File(getApplicationContext().getFilesDir(), WP_CURRENT_BACKUP);
             if (cFile.exists()) {
-                Bitmap wallpaper = BitmapFactory.decodeFile(cFile.getAbsolutePath());
-                try {
-                    wpm.setBitmap(wallpaper);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Log.e("HFCM", e.toString());
-                }
+                wpToSet = "w_current.jpg";
             } else {
                 new dialogDisplay(MainActivity.this,
                         getString(R.string.wallpaper_nothing_to_revert), "Info");
+                return;
             }
-            return;
+        } else {
+            // Keep a backup of the current wallpaper if not yet present (only on first time change)
+            // "builtin" drawable - needs api19+ (KITKAT)
+            // "which" parameter - needs api24+ (NOUGAT)
+            // note: in Android 4.1, we only get the "current" bitmap returned
+            Drawable current = wpm.getDrawable();
+            if (current != null) {
+                File cFile = new File(getApplicationContext().getFilesDir(), WP_CURRENT_BACKUP);
+                if (!cFile.exists()) {
+                    Log.i("HFCM", "Saving current wallpaper bitmap");
+                    utils.writeJPG(getApplicationContext(),
+                            WP_CURRENT_BACKUP,
+                            ((BitmapDrawable) current).getBitmap());
+                    new dialogDisplay(MainActivity.this,
+                            getString(R.string.wallpaper_backup_current), "Info");
+                }
+            } else {
+                // actually, we should never reach this point...
+                new dialogDisplay(MainActivity.this,
+                        "No current wallpaper image could be found to save for later revert...");
+                return;
+            }
         }
 
-        // Keep a backup of the current wallpaper, so that we can reset at any time
-        // "builtin" drawable - needs api19+ (KITKAT)
-        // "which" parameter - needs api24+ (NOUGAT)
-        // note: in Android 4.1, we only get the "current" bitmap returned
+        // Kick off thread which runs the wallpaper change in background
+        wallPaperActivator wpact = new wallPaperActivator(getApplicationContext(), wpToSet);
+        Thread activator = new Thread(wpact);
+        Log.w("HFCM", "Starting wallpaper thread...");
+        activator.start();  // of course, we do not join() :)
+
+        // Get these as well, if present - actually, we do not need this...
         Drawable sysWall = null;
         Drawable lckWall = null;
         Drawable builtin = null;
-        Drawable current = wpm.getDrawable();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            //wpm.getWallpaperId(FLAG...);
             sysWall = wpm.getBuiltInDrawable(WallpaperManager.FLAG_SYSTEM);
             lckWall = wpm.getBuiltInDrawable(WallpaperManager.FLAG_LOCK);
         } else {
@@ -1722,21 +1761,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 builtin = wpm.getBuiltInDrawable();
             }
         }
-
-        // keep a backup copy of current image, if not yet present.
-        if (current != null) {
-            File cFile = new File(getApplicationContext().getFilesDir(), "w_current.jpg");
-            if (!cFile.exists()) {
-                Log.i("HFCM", "Saving current wallpaper bitmap");
-                utils.writeJPG(getApplicationContext(), "w_current.jpg", ((BitmapDrawable) current).getBitmap());
-                new dialogDisplay(MainActivity.this,
-                        getString(R.string.wallpaper_backup_current), "Info");
-            }
-        } else {
-            new dialogDisplay(MainActivity.this,
-                    "No current wallpaper image could be found to save for revert...", "Warning");
-        }
-        // get these as well, if present
         if (sysWall != null) {
             utils.writeJPG(getApplicationContext(),
                     "w_system.jpg", ((BitmapDrawable)sysWall).getBitmap());
@@ -1749,19 +1773,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         if (builtin != null) {
             utils.writeJPG(getApplicationContext(),
                     "w_builtin.jpg", ((BitmapDrawable)builtin).getBitmap());
-        }
-
-        // Finally set the given bitmap as our new wallpaper. The croprect feature is not (yet?)
-        // used, as we create our bitmap using the user selectable region implemented in our code.
-        try {
-            /* Android N - allows to set a croprect
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            wpm.setBitmap(bmp, croprect, true);
-            */
-            wpm.setBitmap(bmp);
-        } catch (IOException e) {
-            e.printStackTrace();
-            Log.e("HFCM", e.toString());
         }
     }
 

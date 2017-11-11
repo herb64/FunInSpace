@@ -43,6 +43,7 @@
 
     <!-- Strings for wallpaper image quality preferences -->
     <string name="wallpaper_quality">Qualität für Hintergrundbild</string>
+    <string name="hires_no_wifi">WiFi ist nicht aktiv, daher werden keine hochauflösenden Bilder und Videos geladen. Du kannst die Einstellungen anpassen.</string>
     <string-array name="wp_quality_titles">
         <item>Niedrig</item>
         <item>Mittel</item>

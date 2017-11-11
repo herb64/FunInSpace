@@ -129,4 +129,5 @@
     <string name="wallpaper_nothing_to_revert">You did not set any FunInSpace Wallpaper yet, so there\'s nothing to restore</string>
     <string name="wallpaper_backup_current">You have set a new wallpaper. Saving your current Wallpaper, so that you can restore this by using \'Restore Original Wallpaper\' in Main Menu.\nNote, that this is not possible any more, if you deinstall the App before restoring</string>
     <string name="restore_original_wallpaper">Restore Original Wallpaper</string>
+    <string name="hires_no_wifi">WiFi connection not active, will not load video or hires now. Please check settings.</string>
 </resources>

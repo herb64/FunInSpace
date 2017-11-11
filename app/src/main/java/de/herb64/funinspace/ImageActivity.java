@@ -2,6 +2,7 @@ package de.herb64.funinspace;
 
 import android.app.ActivityManager;
 import android.app.FragmentManager;
+import android.app.WallpaperManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -12,6 +13,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
+import android.os.SystemClock;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -214,7 +216,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             // If the Fragment is non-null, it is currently being retained across a config change.
             if (mHiresFragment == null) {
                 String toaster = "<" + String.valueOf(listIdx) + "> " + strHires;
-                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
+                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
                 mHiresFragment = new ImgHiresFragment();
                 // setArguments is the way to go, do NOT use non default constructor with fragments!
                 Bundle fragArguments = new Bundle();
@@ -470,10 +472,14 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
 
             // While in wallpaper select mode, the second long press ends this mode and uses
             // the selected range to create the wallpaper bitmap
+            // TODO: invalidation with optimized regions...
             if (wallPaperSelectMode) {
                 wallPaperSelectMode = false;
                 ivHires.setSelectRect(null);
 
+                Log.w("HFCM", "Wallpaper processing start...");
+
+                //SystemClock.sleep(3000);
                 // Map wallPaperSelectRect to a hires bitmap region and use BitmapRegionDecoder
                 // to cut this range + apply scaling for the wallpaper bitmap object
                 // TODO: correct mapping to bitmap for landscape!!!
@@ -550,6 +556,11 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                     //returnIntent.putExtra("wallpaperbmp", ws.toByteArray());
                     returnIntent.putExtra("wallpaperfile", imageName);
                 }
+
+                Log.w("HFCM", "Wallpaper processing finished");
+                String toaster = "Wallpaper has been created ...";
+                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
+
                 // TODO : better might be rect flattenToString / unflatten and pass string instead
                 // anyway, code no longer used, we pass the bitmap object via intent return value
                 /*ArrayList<Integer> reg = new ArrayList<>();
@@ -562,24 +573,24 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             } else {
                 // Initialize wallpaper selection mode - create a centered rectangle
                 String toaster = "Starting wallpaper selection mode ...";
-                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
+                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
                 wallPaperSelectMode = true;
 
                 // Reset view matrix to initial fullscreen view for selection of wallpaper range
                 initializeMatrix();
                 ivHires.setImageMatrix(imgMatrix);
 
-                // Calculate starting wallpaper selection Rectangle
+                // Calculate starting wallpaper selection Rectangle for image view
                 wallPaperSelectRect.set(
                         (int) (((float)viewWidth - wallSelectWidth) / 2f),
                         (int) (((float)viewHeight - wallSelectHeight) / 2f),
                         (int) (((float)viewWidth + wallSelectWidth) / 2f),
                         (int) (((float)viewHeight + wallSelectHeight) / 2f)
                 );
-
                 ivHires.setSelectRect(wallPaperSelectRect);
             }
             ivHires.invalidate();
+            //loadingBar.setVisibility(View.GONE);
             super.onLongPress(e);
         }
 
@@ -804,6 +815,10 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     @Override
     public void onBackPressed() {
         super.onBackPressed();
+        //loadingBar.setVisibility(View.VISIBLE);
+        //SystemClock.sleep(10000);
+
+
         // TODO: shouldn't we remove the fragment? verify !!!
         /*FragmentManager fm = getFragmentManager();
         mHiresFragment = (ImgHiresFragment) fm.findFragmentByTag(TAG_TASK_FRAGMENT);

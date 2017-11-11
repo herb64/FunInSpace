@@ -129,7 +129,11 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         holder.ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
         holder.ivThumb.setVisibility(View.VISIBLE);
 
-        // Rating bar - unfortunately, the "small" versions do not support interaction
+        // setting onclicklistener prevents cab selection with multichoicemodelistener. No need
+        // to set an onclicklistener for the views. This only is done for the thumbnail.
+        // https://stackoverflow.com/questions/39057161/onclicklistener-in-getview-method-messes-up-multichoicemodelistener
+
+        // Rating bar - unfortunately, the "small" versions do not support any interaction
         // https://developer.android.com/reference/android/widget/RatingBar.html
         // My initial idea was to make the stars below the thumbnail clickable directly within
         // the list, but these ratingbars even do not respond do a simple onClick()
@@ -172,7 +176,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         // and here, we have a friendly listener, which temporarily overwrites that stuff, when
         // we click on the text view content - We reuse the existing listener for the thumbs
         // and distinguish views by ID ranges
-        holder.tvExplanation.setOnClickListener(act.myThumbClickListener);
+        //holder.tvExplanation.setOnClickListener(act.myThumbClickListener);
         holder.tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, act.expl_points);
 
         // Note: setText and concat is bad, use resources and format string instead!
