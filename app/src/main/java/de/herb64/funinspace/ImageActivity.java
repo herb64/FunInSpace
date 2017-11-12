@@ -453,7 +453,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             }
             float aspectBitmap = (float) imgWidth / (float) imgHeight;
 
-            // Set wallpapper selection rectangle size and bounds withing view
+            // Set wallpapper selection rectangle size and moving bounds within the image view
             float wallSelectHeight;
             float wallSelectWidth;
             if (aspectBitmap >= aspectWall) {
@@ -462,8 +462,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             } else {
                 wallSelectWidth = scaledWidth;
                 wallSelectHeight = wallSelectWidth / aspectWall;
-                // TODO BIG PROBLEM: Great Gig in the Sky, 07.09.2017 - rectangle height too large (width * aspectwall - far too large!!!)
-                // TODO: Check, Orion after Easter Island (17.09) get's bad range selected...
             }
             wpMinX = (int) (((float)viewWidth - scaledWidth) / 2f);
             wpMaxX = (int) (((float)viewWidth + scaledWidth) / 2f);
@@ -558,7 +556,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 }
 
                 Log.w("HFCM", "Wallpaper processing finished");
-                String toaster = "Wallpaper has been created ...";
+                String toaster = getString(R.string.toast_wp_select_finished);
                 Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
 
                 // TODO : better might be rect flattenToString / unflatten and pass string instead
@@ -572,7 +570,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
 
             } else {
                 // Initialize wallpaper selection mode - create a centered rectangle
-                String toaster = "Starting wallpaper selection mode ...";
+                String toaster = getString(R.string.toast_wp_start_select);
                 Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
                 wallPaperSelectMode = true;
 
@@ -730,10 +728,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         myBitmap = bitmap;
         Log.i(TAG, teststring);
         if(myBitmap != null) {
-
-            // some testing here
-            //saveBmpTest(myBitmap, "herbert2.jpg");
-
             //I/HFCM: Displaymetrics = DisplayMetrics{density=2.625, width=1080, height=1794, scaledDensity=2.625, xdpi=420.0, ydpi=420.0}
             DisplayMetrics metrics = new DisplayMetrics();
             getWindowManager().getDefaultDisplay().getMetrics(metrics);
@@ -811,7 +805,11 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         }
     }*/
 
-    // HFCM - was just some test
+
+    /**
+     * We do not necessarily longpress twice, if selection is done, the wallpaper gets prepared
+     * on leaving as well - resulting in dialogbox shown for confirmation
+     */
     @Override
     public void onBackPressed() {
         super.onBackPressed();

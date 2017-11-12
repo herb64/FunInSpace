@@ -13,17 +13,23 @@ import android.widget.ProgressBar;
 // https://stackoverflow.com/questions/36947709/how-do-i-fix-or-correct-the-default-file-template-warning-in-intellij-idea
 // TODO: include option for rating
 
-// 18.09.2017 - implement Parcelable to be able to add to savedInstanceSTate in MainActivity
-// see lalatex doc and
-// https://stackoverflow.com/questions/12503836/how-to-save-custom-arraylist-on-android-screen-rotate
-
+/* 18.09.2017 - implement Parcelable to be able to add to savedInstanceSTate in MainActivity
+ * see lalatex doc and
+ * https://stackoverflow.com/questions/12503836/how-to-save-custom-arraylist-on-android-screen-rotate
+ * 12.11.2017 - add wpFlag flag: 0: no wallpaper, 1: defined, 3: active
+ */
 public class spaceItem implements Parcelable {
 
+    /**
+     * This constructor was found to be needed, if the other constructor with parcel is present
+     */
     public spaceItem() {
-        // need to add this constructor, if the other constructor with parcel is present
     }
 
-    // constructor needed to be called from Parcelable.creator...
+    /**
+     * constructor needed to be called from Parcelable.creator...
+     * @param in
+     */
     private spaceItem(Parcel in) {
         bmpThumb = CREATOR.createFromParcel(in).getBmpThumb();
     }
@@ -43,6 +49,7 @@ public class spaceItem implements Parcelable {
     private Integer ThumbLoadingState = View.INVISIBLE;
     private int maxLines = 3;
     private boolean isSelected = false;
+    private int wpFlag = 0;
 
     public String getTitle() {
         return Title;
@@ -162,6 +169,14 @@ public class spaceItem implements Parcelable {
 
     public void setSelected(boolean selected) {
         isSelected = selected;
+    }
+
+    public int getWpFlag() {
+        return wpFlag;
+    }
+
+    public void setWpFlag(int wpFlag) {
+        this.wpFlag = wpFlag;
     }
 
     // -------------------------------------------------------

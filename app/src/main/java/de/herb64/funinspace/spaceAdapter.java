@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.support.annotation.LayoutRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.content.ContextCompat;
 import android.text.TextUtils;
 import android.util.SparseIntArray;
 import android.view.LayoutInflater;
@@ -48,6 +49,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     private spaceItemFilter filter;
     private SparseIntArray idxMap;      // mapping of filtered/unfiltered index values
     private boolean bFullSearch;
+    private int wpActiveIdx;            // idx into spaceitem list for current wallpaper (-1=none)
 
     // Constructor (add via alt+insert) and adjust to our list of type spaceItem
     spaceAdapter(@NonNull Context context,
@@ -66,6 +68,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         inflater = (LayoutInflater) act.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         idxMap = new SparseIntArray();
         idxMap.clear();
+        //wpActiveIdx = -1;
     }
 
     // adding getView() by alt-insert - override methods - the "NonNull" stuff seems to be new
@@ -101,6 +104,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
             holder = new ViewHolder();
             holder.ivThumb = convertView.findViewById(R.id.iv_thumb);
             holder.ivYoutube = convertView.findViewById(R.id.iv_youtube);   // TODO: rename
+            holder.ivWallpaper = convertView.findViewById(R.id.iv_wallpaper);
             holder.rbRating = convertView.findViewById(R.id.id_rating);
             holder.tvTitle = convertView.findViewById(R.id.tv_title);
             holder.tvExplanation = convertView.findViewById(R.id.tv_explanation);
@@ -128,6 +132,27 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         holder.ivThumb.setTag(id);                                          // important!
         holder.ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
         holder.ivThumb.setVisibility(View.VISIBLE);
+
+        // Update the small wallpaper indicator within the thumbnail to current status
+        switch (iList.get(position).getWpFlag()) {
+            case MainActivity.WP_NONE:
+                holder.ivWallpaper.setVisibility(View.INVISIBLE);
+                break;
+            case MainActivity.WP_EXISTS:
+                holder.ivWallpaper.setColorFilter(ContextCompat.getColor(ctx, android.R.color.darker_gray));
+                //holder.ivWallpaper.setColorFilter(ctx.getResources().getColor(android.R.color.holo_blue_light));
+                holder.ivWallpaper.setVisibility(View.VISIBLE);
+                break;
+            case MainActivity.WP_ACTIVE:
+                holder.ivWallpaper.setColorFilter(ContextCompat.getColor(ctx, R.color.color_hfcm_yellow_bright));
+                //holder.ivWallpaper.setColorFilter(ctx.getResources().getColor(android.R.color.holo_red_light));
+                holder.ivWallpaper.setVisibility(View.VISIBLE);
+                break;
+            default:
+                break;
+        }
+
+        //iv.setColorFilter(getResources().getColor(android.R.color.black), PorterDuff.Mode.SRC_IN);
 
         // setting onclicklistener prevents cab selection with multichoicemodelistener. No need
         // to set an onclicklistener for the views. This only is done for the thumbnail.
@@ -247,4 +272,12 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     public boolean getFullSearch() {
         return bFullSearch;
     }
+
+    /*public int getWpActiveIdx() {
+        return wpActiveIdx;
+    }
+
+    public void setWpActiveIdx(int wpActive) {
+        this.wpActiveIdx = wpActive;
+    }*/
 }

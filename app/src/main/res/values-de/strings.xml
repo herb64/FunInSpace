@@ -44,6 +44,16 @@
     <!-- Strings for wallpaper image quality preferences -->
     <string name="wallpaper_quality">Qualität für Hintergrundbild</string>
     <string name="hires_no_wifi">WiFi ist nicht aktiv, daher werden keine hochauflösenden Bilder und Videos geladen. Du kannst die Einstellungen anpassen.</string>
+    <string name="wp_no_delete_active">Das Bild \'%s\' ist Dein aktuelles Hintergrundbild. Es wird nicht gelöscht.</string>
+    <string name="wp_confirm_dlg_msg">Möchtest Du \'%s\' als neues Hintergrundbild setzen?</string>
+    <string name="wp_confirm_dlg_title">Hintergrund ändern?</string>
+    <string name="wp_confirm_dlg_pos_button">JA</string>
+    <string name="wp_confirm_dlg_neg_button">NEIN</string>
+    <string name="dlg_title_info">Info</string>
+    <string name="temp_wp_dialog_info">In diesem Menue kann noch kein Hintergrundbild gesetzt werden. Bitte in der Vollbildanzeige einfach lange klicken, um ein Hintergrundbild zu erstellen.</string>
+    <string name="toast_wp_start_select">Start der Hintergrundbild Auswahl…</string>
+    <string name="toast_wp_select_finished">Hintergrundbild wurde ausgewählt…</string>
+    <string name="wp_select_rect_string">Hintergrund Auswahl</string>
     <string-array name="wp_quality_titles">
         <item>Niedrig</item>
         <item>Mittel</item>

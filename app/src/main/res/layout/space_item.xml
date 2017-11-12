@@ -72,6 +72,8 @@
         android:layout_marginTop="8dp"
         app:layout_constraintTop_toBottomOf="@+id/id_rating" />
 
+    <!-- Adding a wallpaper present symbol, maybe in different color
+    see https://material.io/icons/ -->
     <FrameLayout
         android:id="@+id/fl_thumb"
         android:layout_width="120dp"
@@ -88,6 +90,15 @@
             android:layout_height="match_parent"
             android:background="@android:color/black"
             app:srcCompat="@mipmap/ic_launcher" />
+
+        <ImageView
+            android:id="@+id/iv_wallpaper"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_gravity="right|bottom"
+            android:visibility="visible"
+            app:srcCompat="@drawable/ic_heart_black_24dp"
+            tools:layout_width="wrap_content" />
 
         <ImageView
             android:id="@+id/iv_youtube"

@@ -130,4 +130,14 @@
     <string name="wallpaper_backup_current">You have set a new wallpaper. Saving your current Wallpaper, so that you can restore this by using \'Restore Original Wallpaper\' in Main Menu.\nNote, that this is not possible any more, if you deinstall the App before restoring</string>
     <string name="restore_original_wallpaper">Restore Original Wallpaper</string>
     <string name="hires_no_wifi">WiFi connection not active, will not load video or hires now. Please check settings.</string>
+    <string name="wp_no_delete_active">Image \'%s\' is your current wallpaper. This will not be deleted.</string>
+    <string name="wp_confirm_dlg_msg">Do you want to set \'%s\' as your new wallpaper?</string>
+    <string name="wp_confirm_dlg_title">Change wallpaper?</string>
+    <string name="wp_confirm_dlg_pos_button">YES</string>
+    <string name="wp_confirm_dlg_neg_button">NO</string>
+    <string name="dlg_title_info">Info</string>
+    <string name="temp_wp_dialog_info">Please have a long click on the image in fullscreen mode, which allows to select a wallpaper range. Using this menu does not currently allow to set a wallpaper</string>
+    <string name="toast_wp_start_select">Starting wallpaper selection mode …</string>
+    <string name="toast_wp_select_finished">Wallpaper has been created …</string>
+    <string name="wp_select_rect_string">Wallpaper select</string>
 </resources>

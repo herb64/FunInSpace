@@ -8,15 +8,12 @@ import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
@@ -25,12 +22,10 @@ import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.ViewGroup;
 import android.widget.AbsListView;
 import android.widget.AdapterView;
 import android.widget.ListView;
@@ -45,18 +40,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
-
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -65,10 +49,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
 
 import de.herb64.funinspace.helpers.deviceInfo;
 import de.herb64.funinspace.helpers.dialogDisplay;
@@ -94,7 +74,8 @@ import de.herb64.funinspace.models.spaceItem;
 /*
  * The MainActivity Class for FunInSpace
  */
-public class MainActivity extends AppCompatActivity implements ratingDialog.RatingListener,asyncLoad.AsyncResponse {
+public class MainActivity extends AppCompatActivity
+        implements ratingDialog.RatingListener, asyncLoad.AsyncResponse, confirmDialog.ConfirmListener {
 
     private spaceItem apodItem;                     // the latest item to be fetched
     private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
@@ -114,6 +95,7 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     //private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
     private boolean thumbQualityChanged = false;    // indicate preference setting change
+    private int currentWallpaperIndex = -1;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
@@ -156,7 +138,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
     protected static final int MAX_ITEMS = 10000;     // limit of items - for id handling
 
     private static final String WP_CURRENT_BACKUP = "w_current.jpg";
-
+    protected static final int WP_NONE = 0;
+    protected static final int WP_EXISTS = 1 << 1;
+    protected static final int WP_ACTIVE = 1 << 2;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -322,8 +306,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             public boolean onActionItemClicked(android.view.ActionMode actionMode, MenuItem menuItem) {
                 switch (menuItem.getItemId()) {
                     case R.id.cab_delete:
-                        //new dialogDisplay(MainActivity.this, "This currently only deletes items for testing from the shown list. " +
-                        //        "This is not yet persistent, and restart of the App loads all deleted items again.", "Don't panic...");
                         // Within ArrayList - removal from back to front is essential!!
                         Collections.sort(selected, Collections.<Integer>reverseOrder());
                         for (int idx : selected) {
@@ -335,14 +317,30 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                                         parent.length() + ") vs. list (" + myList.size() +
                                         ") size", "Info for Herbert");
                             }
-                            // Remove thumbfile, BEFORE indexed item gets deleted from list
-                            Log.i("HFCM", "Delete: " + myList.get(idx).getThumb());
-                            File thdel = new File(getApplicationContext().getFilesDir(), myList.get(idx).getThumb());
-                            if (!thdel.delete()) {
-                                Log.i("HFCM", "File delete did not return true");
+                            // Remove images BEFORE indexed item gets deleted from list. If the item
+                            // holds the active wallpaper, deletion is skipped
+                            Log.i("HFCM", "Attempting to delete: " + myList.get(idx).getThumb() +
+                                    " for '" + myList.get(idx).getTitle() + "'");
+                            if (myList.get(idx).getWpFlag() == WP_EXISTS) {
+                                File wpdel = new File(getApplicationContext().getFilesDir(),
+                                        myList.get(idx).getThumb().replace("th_", "wp_"));
+                                if (!wpdel.delete()) {
+                                    Log.i("HFCM", "File delete for wallpaper did not return true");
+                                }
+                            } else if (myList.get(idx).getWpFlag() == WP_ACTIVE) {
+                                Log.i("HFCM", "File delete skipped for active wallpaper");
+                                new dialogDisplay(MainActivity.this,
+                                        getString(R.string.wp_no_delete_active,
+                                                myList.get(idx).getTitle()), "Warning");
+                                continue;
                             }
-                            //new File(getApplicationContext().getFilesDir(),
-                            //        myList.get(idx).getThumb()).delete();
+                            // Remove the thumbnail image
+                            File thdel = new File(getApplicationContext().getFilesDir(),
+                                    myList.get(idx).getThumb());
+                            if (!thdel.delete()) {
+                                Log.i("HFCM", "File delete for thumbnail did not return true");
+                            }
+
                             // delete the json object from json array
                             try {
                                 JSONObject obj = (JSONObject) parent.get(parent.length() - 1 - idx);
@@ -413,7 +411,9 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                         // TODO: asyncload will not be used, we might open hires task here
                         //new asyncLoad(MainActivity.this, "WALLPAPER").
                         //        execute(myList.get(selected.get(0)).getLowres());
-                        new dialogDisplay(MainActivity.this, "Please have a long click on the image in fullscreen mode, which allows to select a wallpaper range. Using this menu does not currently allow to set a wallpaper", "Info");
+                        new dialogDisplay(MainActivity.this,
+                                getString(R.string.temp_wp_dialog_info),
+                                getString(R.string.dlg_title_info));
                         return true;
                     default:
                         return false;
@@ -814,6 +814,26 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         myItemsLV.setSelection(0);
     }
 
+    /**
+     * Implementation of interface ConfirmListener in confirmDialog class. This class allows to
+     * have a dialog's result to be processed only, if the Positive Button has been pressed.
+     * For now, it's only used for wallpaper change confirmation.
+     */
+    @Override
+    public void processConfirmation(int idx) {
+        String wpfile = myList.get(idx).getThumb().replace("th_", "wp_");
+        Log.i("HFCM", "Reached confirmation: " + wpfile);
+        if (!wpfile.equals("")) {
+            // update index values
+            if (currentWallpaperIndex >= 0) {
+                myList.get(currentWallpaperIndex).setWpFlag(WP_EXISTS);
+            }
+            myList.get(idx).setWpFlag(WP_ACTIVE);
+            currentWallpaperIndex = idx;
+            changeWallpaper(wpfile);
+        }
+    }
+
     /* N O T E:   T H I S   I S   N O T   A C T I V E
      * Listener for rating bar changes - useless for me, because I use "small" bars
      * style="@style/Widget.AppCompat.RatingBar"       > works
@@ -951,35 +971,33 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
                 String logString = data.getStringExtra("logString");
                 new dialogDisplay(this, logString, lastImage);
 
-                // Get the information on any returned wallpaper info. We can read bitmap data from
-                // intent return data or just read a file, which name we get returned instead
+                // Get the wallpaper info from returned intent. Several options tested
+                // - return bitmap bytearray ( - transaction size problems with high quality)
+                //   see getByteArrayExtra() doc in lalatex
+                // - just return a file name ( + allows for multiple images, e.g. 'shuffle' option)
 
-                /* CODE USING BYTEARRAY TO READ RESULT BITMAP FROM INTENT DATA
-                // TODO: reading from intent return data stream - quality 90 results in transaction
-                //       size too large, so go for the filename version.
-                // for docu:
-                // Bitmap size not correctly filled in debugger with 4.1: mWidth and mHeight are -1
-                // but: after viewing bmp in debugger, these are suddenly filled on new inspection
-                if (data.getByteArrayExtra("wallpaperbmp") != null) {
-                    Bitmap wallbmp = BitmapFactory.decodeByteArray(
-                            data.getByteArrayExtra("wallpaperbmp"),
-                            0,
-                            data.getByteArrayExtra("wallpaperbmp").length);
-                    changeWallpaper2(wallbmp);
-                }*/
-
-                // version to read file instead of getting bitmap in intent return as bytearray
+                // Show a dialog to have user confirm, that he wants to set this wallpaper image
                 if (data.getStringExtra("wallpaperfile") != null) {
-
-                    // test using wallpaper changer in separate thread
-                    changeWallpaper(data.getStringExtra("wallpaperfile"));
-
-                    /*File wFile = new File(getApplicationContext().getFilesDir(),
-                            data.getStringExtra("wallpaperfile"));
-                    if (wFile.exists()) {
-                        changeWallpaper2(BitmapFactory.decodeFile(wFile.getAbsolutePath()));
-                    }*/
+                    Bundle fragArguments = new Bundle();
+                    //fragArguments.putString("RESULT", data.getStringExtra("wallpaperfile"));
+                    fragArguments.putInt("IDX", listidx);
+                    fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
+                    fragArguments.putString("EXPL", getString(R.string.wp_confirm_dlg_msg,
+                            myList.get(listidx).getTitle()));
+                    fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
+                    fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
+                    FragmentManager fm = getSupportFragmentManager();
+                    confirmDialog dlg = new confirmDialog();
+                    dlg.setArguments(fragArguments);
+                    // dlg.setTargetFragment(); // only when calling from fragment, not from activity as here
+                    dlg.show(fm, "CONFIRMTAG");
                 }
+
+                // the following code to change the wp should then be called from listener
+                // ImageActivity returns the filename of the newly created wallpaper jpeg file
+                /*if (data.getStringExtra("wallpaperfile") != null) {
+                    changeWallpaper(data.getStringExtra("wallpaperfile"));
+                }*/
 
                 /* OLD CODE USING ASYNCLOAD - to keep for documentation purposes
                 doing an async load just passing region/scale to be loaded from network
@@ -1283,6 +1301,11 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         String strHiSize = "";
         String strLowSize = "";
 
+        // Get current wallpaper filename, if any has been set
+        SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
+        String wpFileCurrent = shPref.getString("CURRENT_WALLPAPER_FILE", "");
+
+        int count = 0;
         for (int i = parent.length()-1; i >=0 ; i--)
         {
             try {
@@ -1343,7 +1366,23 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             } else {
                 newitem.setBmpThumb(null);
             }
+            // Wallpaper filename is just derived from thumb filename, no extra storage space used
+            String wpName = strThumb.replace("th_", "wp_");
+            File wpFile = new File(getApplicationContext().getFilesDir(), wpName);
+            if (wpFile.exists()) {
+                if (wpName.equals(wpFileCurrent)) {
+                    Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found AS ACTIVE");
+                    newitem.setWpFlag(WP_ACTIVE);
+                    currentWallpaperIndex = count;
+                } else {
+                    Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found");
+                    newitem.setWpFlag(WP_EXISTS);
+                }
+            } else {
+                newitem.setWpFlag(WP_NONE);
+            }
             myList.add(newitem);
+            count++;
         }
     }
 
@@ -1663,7 +1702,6 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
             case "WALLPAPER":
                 if (output instanceof Bitmap) {
                     Log.w("HFCM", "Disabled wallpaperload returning from asyncload - processfinish");
-                    //changeWallpaper2((Bitmap) output);
                 } else {
                     Log.e("HFCM", "asyncLoad for WALLPAPER did not return a bitmap");
                 }
@@ -1748,6 +1786,14 @@ public class MainActivity extends AppCompatActivity implements ratingDialog.Rati
         Thread activator = new Thread(wpact);
         Log.w("HFCM", "Starting wallpaper thread...");
         activator.start();  // of course, we do not join() :)
+
+        // Store filename of current wallpaper into shared preferences
+        SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = shPref.edit();
+        editor.putString("CURRENT_WALLPAPER_FILE", wpToSet);
+        editor.apply(); // apply is recommended by inspection instead of commit()
+        // Refresh adapter (to update wp symbols on thumbnails)
+        adp.notifyDataSetChanged();
 
         // Get these as well, if present - actually, we do not need this...
         Drawable sysWall = null;
