@@ -3,23 +3,32 @@ package de.herb64.funinspace;
 import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.view.WindowManager;
 import android.webkit.JsResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
+/**
+ * This class is used to play VIMEO videos in a simple Webview
+ */
 public class VideoActivity extends AppCompatActivity {
 
     WebView vimeoView;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Make any bars invisible - call before setContentView()
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        // + XML def in manifest: android:theme="@style/AppTheme.NoActionBar"
         setContentView(R.layout.activity_video);
 
         // also see
         // https://stackoverflow.com/questions/15768837/playing-html5-video-on-fullscreen-in-android-webview/
 
         vimeoView = (WebView) findViewById(R.id.wv_vimeo);
+        vimeoView.setBackgroundColor(getResources().getColor(android.R.color.black));
         vimeoView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
@@ -64,9 +73,11 @@ public class VideoActivity extends AppCompatActivity {
         // find: https://bugs.chromium.org/p/chromium/issues/detail?id=400145
     }
 
-    // TODO: rotation of phone disturbs playback (music remains, but video hangs). This
-    // one here just reloads and also avoids, that music keeps playing after webview is closed
-    // needs a solution here for todo
+    /**
+     * TODO: rotation of phone disturbs playback (music remains, but video hangs). This
+     * one here just reloads and also avoids, that music keeps playing after webview is closed
+     * needs a solution here for
+     */
     @Override
     protected void onDestroy() {
         super.onDestroy();
