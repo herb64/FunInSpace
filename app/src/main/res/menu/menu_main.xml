@@ -10,28 +10,34 @@
         app:showAsAction="ifRoom" />
     <item
         android:id="@+id/action_debuginfo"
-        android:orderInCategory="98"
+        android:orderInCategory="90"
         android:title="Debuginfo"
         android:icon="@android:drawable/ic_menu_info_details"
         app:showAsAction="ifRoom" />
+
     <item
-        android:id="@+id/action_settings"
-        android:orderInCategory="96"
-        android:title="@string/action_settings"
-        android:icon="@android:drawable/ic_menu_preferences"
-        app:showAsAction="always" />
-    <item
-        android:id="@+id/action_help"
-        android:orderInCategory="99"
-        android:title="About"
-        android:icon="@android:drawable/ic_menu_help"
+        android:id="@+id/action_search_apod"
+        android:orderInCategory="94"
+        android:title="Search NASA Archive"
+        android:icon="@drawable/ic_archive_black_24px"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_mail"
-        android:orderInCategory="99"
-        android:title="Email test"
         android:icon="@android:drawable/ic_dialog_email"
+        android:orderInCategory="95"
+        android:title="Email test" />
+    <item
+        android:id="@+id/action_about"
+        android:icon="@android:drawable/ic_menu_info_details"
+        android:orderInCategory="99"
+        android:title="About"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_help"
+        android:icon="@android:drawable/ic_menu_help"
+        android:orderInCategory="100"
+        android:title="Help"
         app:showAsAction="ifRoom" />
 
     <!-- Some code to make searchview appear as menu item
@@ -44,13 +50,29 @@
         app:showAsAction="always|collapseActionView"
         app:actionViewClass="android.support.v7.widget.SearchView"/>
 
+    <!-- 13.11.2017 - adding filter icon - not yet nice. TODO: Need to check license
+         or better design my own -->
+    <item
+        android:id="@+id/action_filter"
+        android:orderInCategory="5"
+        android:title="@string/action_filter"
+        android:icon="@drawable/ic_filter"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_settings"
+        android:orderInCategory="10"
+        android:title="@string/action_settings"
+        android:icon="@android:drawable/ic_menu_preferences"
+        app:showAsAction="always" />
+
     <!-- This is for resync with dropbox metadata json. Most likely not part of final version
          but useful to resync stuff without new installation -->
     <item
         android:id="@+id/dropbox_sync"
-        android:orderInCategory="92"
-        android:title="Refresh content"
-        app:showAsAction="always"
+        android:orderInCategory="90"
+        android:title="@string/refresh_content"
+        app:showAsAction="ifRoom"
         android:icon="@android:drawable/ic_popup_sync" />
 
     <!-- Add restore wallpaper option for test users to be able to revert to their original -->

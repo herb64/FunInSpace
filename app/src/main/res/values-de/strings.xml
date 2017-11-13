@@ -54,6 +54,9 @@
     <string name="toast_wp_start_select">Start der Hintergrundbild Auswahl…</string>
     <string name="toast_wp_select_finished">Hintergrundbild wurde ausgewählt…</string>
     <string name="wp_select_rect_string">Hintergrund Auswahl</string>
+    <string name="dlg_revert_wp">Aktuelles Hintergrundbild wird entfernt und Dein ursprüngliches Bild wird wiederhergestellt…</string>
+    <string name="action_filter">Filter</string>
+    <string name="refresh_content">Refresh Bilderliste</string>
     <string-array name="wp_quality_titles">
         <item>Niedrig</item>
         <item>Mittel</item>

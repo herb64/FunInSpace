@@ -140,4 +140,7 @@
     <string name="toast_wp_start_select">Starting wallpaper selection mode …</string>
     <string name="toast_wp_select_finished">Wallpaper has been created …</string>
     <string name="wp_select_rect_string">Wallpaper select</string>
+    <string name="dlg_revert_wp">Removing FunInSpace Wallpaper and reverting to your original image…</string>
+    <string name="action_filter">Filter</string>
+    <string name="refresh_content">Refresh image list</string>
 </resources>

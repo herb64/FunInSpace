@@ -23,7 +23,7 @@ public class confirmDialog extends AppCompatDialogFragment {
 
         // Set values
         final String title = getArguments().getString("TITLE");
-        final String expl = getArguments().getString("EXPL");
+        final String msg = getArguments().getString("MESSAGE");
         final String pos = getArguments().getString("POS");
         final String neg = getArguments().getString("NEG");
         final int idx = getArguments().getInt("IDX");
@@ -40,10 +40,13 @@ public class confirmDialog extends AppCompatDialogFragment {
         };
 
         AlertDialog.Builder builder = new AlertDialog.Builder(getActivity())
-                .setTitle(title);
-        builder.setMessage(expl);
-        builder.setPositiveButton(pos, listener);
-        builder.setNegativeButton(neg, listener);
+                .setTitle(title)
+                .setMessage(msg)
+                .setPositiveButton(pos, listener)
+                .setNegativeButton(neg, listener);
+        //builder.setMessage(msg);
+        //builder.setPositiveButton(pos, listener);
+        //builder.setNegativeButton(neg, listener);
         //builder.setView(v);
         return builder.create();
     }

@@ -20,6 +20,7 @@ import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.view.menu.MenuBuilder;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
@@ -113,6 +114,8 @@ public class MainActivity extends AppCompatActivity
 
     // We go for our CONSTANTS here, this is similar to #define in C for a constant
     //public static String TAG = MainActivity.class.getSimpleName();
+    private static final String ABOUT_VERSION = "0.3.5b (alpha), Build Date 2017-11-13";
+
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
@@ -130,6 +133,7 @@ public class MainActivity extends AppCompatActivity
     private static final String M_IMAGE = "image";
     private static final String M_YOUTUBE = "youtube";
     private static final String M_VIMEO = "vimeo";
+    private static final String M_MP4 = "mp4";      // first mp4 on 13.11.2017
     private static final String M_VIDEO_UNKNOWN = "unknown-video";
 
     // dealing with the number of displayed lines in the Explanation text view
@@ -141,6 +145,7 @@ public class MainActivity extends AppCompatActivity
     protected static final int WP_NONE = 0;
     protected static final int WP_EXISTS = 1 << 1;
     protected static final int WP_ACTIVE = 1 << 2;
+    private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers                  !!!!! TODO: cleanup and shuffle option
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -668,7 +673,11 @@ public class MainActivity extends AppCompatActivity
             new dialogDisplay(this, "APOD JSON Exception:\n" + e.getMessage());
         }
 
+        // At this point sMediaType contains the NASA delivered string. This gets changed now to
+        // a more specific media type information. It's a little bit messy, because NASA delivered
+        // an MP4 stream as media type "image" on 13.11.2017... need to catch that error situation
         if (resource_uri != null) {
+            String hiresPS = Uri.parse(sHiresUrl).getLastPathSegment();
             if (sMediaType.equals("video")) {
                 // note, that this rewrites sMediaType variable!
                 String host = resource_uri.getHost();
@@ -695,13 +704,24 @@ public class MainActivity extends AppCompatActivity
                     // Note: this needs a REST API call to gather the required infos..
                     apodItem.setLowres("");     // will hold thumbnail url
                 } else {
-                    sMediaType = M_VIDEO_UNKNOWN;
-                    apodItem.setThumb("th_UNKNOWN.jpg");
+                    // TODO: MP4 handling for correct media type video
+                    if (hiresPS.endsWith(".mp4") || hiresPS.endsWith(".MP4")) {
+                        sMediaType = M_MP4;
+                        apodItem.setThumb("th_" + resource_uri.getLastPathSegment());
+                        //apodItem.setHires(sHiresUrl);
+                        apodItem.setLowres(imgUrl);
+                    } else {
+                        sMediaType = M_VIDEO_UNKNOWN;
+                        apodItem.setThumb("th_UNKNOWN.jpg");
+                    }
                 }
             } else {
-                // thumbnail gets name of lowres image with prefix 'th_'
+                // FIX for NASA sending wrong media type 'image' for MP4 video (13.11.2017)
+                if (hiresPS.endsWith(".mp4") || hiresPS.endsWith(".MP4")) {
+                    sMediaType = M_MP4;
+                }
                 apodItem.setThumb("th_" + resource_uri.getLastPathSegment());
-                apodItem.setHires(sHiresUrl);
+                //apodItem.setHires(sHiresUrl);
                 apodItem.setLowres(imgUrl);
             }
         }
@@ -880,6 +900,7 @@ public class MainActivity extends AppCompatActivity
             // get maximum allocatable heap mem at time of pressing the button
             int maxAlloc = devInfo.getMaxAllocatable();
             Log.i("HFCM", "maximum alloc:" + String.valueOf(maxAlloc));
+            // This checks our own media type, which has been set in createApodFromJson()
             if (media.equals(M_IMAGE)) {
                 Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
                 hiresIntent.putExtra("hiresurl", hiresUrl);
@@ -900,8 +921,12 @@ public class MainActivity extends AppCompatActivity
                 String thumb = myList.get(idx).getThumb();
                 // We get the ID from thumb name - hmmm, somewhat dirty ?
                 playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
-            } else {
+            } else if (media.equals(M_VIMEO)){
                 playVimeo(hiresUrl);
+            } else if (media.equals(M_MP4)) {
+                playMP4(hiresUrl);
+            } else {
+                new dialogDisplay(MainActivity.this, "Unknown media: " + media, "Warning");
             }
         }
     }
@@ -948,6 +973,18 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
+     * Play an MP4 stream from the given URL
+     * @param url The video mp4 url to be played
+     */
+    private void playMP4(String url) {
+        //new dialogDisplay(MainActivity.this, "MP4 video cannot yet be shown: " + url, "TODO");
+        Intent mp4Intent = new Intent(this, MP4Activity.class);
+        mp4Intent.setType("video/mp4");
+        mp4Intent.putExtra("mp4url", url);
+        startActivity(mp4Intent);
+    }
+
+    /**
      * Get results from Activities started with startActivityForResult()
      * 1. image Activity for hires size
      * 2. GL max texture size query at very first run
@@ -982,7 +1019,7 @@ public class MainActivity extends AppCompatActivity
                     //fragArguments.putString("RESULT", data.getStringExtra("wallpaperfile"));
                     fragArguments.putInt("IDX", listidx);
                     fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
-                    fragArguments.putString("EXPL", getString(R.string.wp_confirm_dlg_msg,
+                    fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
                             myList.get(listidx).getTitle()));
                     fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
                     fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
@@ -1097,6 +1134,7 @@ public class MainActivity extends AppCompatActivity
     /**
      * The options menu is the primary Application menu. Do not confuse with "settings" dialog.
      * It is called during startup of the activity once.
+     * Note the code to make icons visible in overflow menu.
      * @param menu the menu item
      * @return boolean return value
      */
@@ -1104,6 +1142,15 @@ public class MainActivity extends AppCompatActivity
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
+
+        // 13.11.2017 - menu icons in overflow menu are visible now as well
+        // https://stackoverflow.com/questions/18374183/how-to-show-icons-in-overflow-menu-in-actionbar
+        if(menu instanceof MenuBuilder){
+            MenuBuilder m = (MenuBuilder) menu;
+            //noinspection RestrictedApi
+            m.setOptionalIconsVisible(true);
+        }
+
         MenuItem searchItem = menu.findItem(R.id.action_search); // 22.10.2017 - add
         //SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem); // deprecated
         SearchView sv = (SearchView) searchItem.getActionView();
@@ -1176,6 +1223,11 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_help) {
+            new dialogDisplay(MainActivity.this, "Help page not yet available, to be done soon...", "TODO");
+            return true;
+        }
+        if (id == R.id.action_about) {
+            new dialogDisplay(MainActivity.this, "Version: " + ABOUT_VERSION, "About FunInSpace");
             return true;
         }
         if (id == R.id.action_mail) {
@@ -1268,8 +1320,15 @@ public class MainActivity extends AppCompatActivity
         }
 
         if (id == R.id.restore_wallpaper) {
-            new dialogDisplay(MainActivity.this, "Removing FunInSpace Wallpaper and reverting to your original image...", "Info");
+            new dialogDisplay(MainActivity.this, getString(R.string.dlg_revert_wp),
+                    getString(R.string.dlg_title_info));
             changeWallpaper("");
+        }
+        if (id == R.id.action_search_apod) {
+            new dialogDisplay(MainActivity.this, "Searching the NASA APOD Archive is not yet available.", "TODO");
+        }
+        if (id == R.id.action_filter) {
+            new dialogDisplay(MainActivity.this, "Filter List by Rating, wallpaper status, image size, video is not yet available.", "TODO");
         }
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -1646,7 +1705,6 @@ public class MainActivity extends AppCompatActivity
                 }
                 break;
             case "VIMEO_INFO":
-                //JSONObject parent = null;
                 String thumbUrl = "n/a";
                 String videoId = null;
                 if (status == asyncLoad.FILENOTFOUND) {
@@ -1666,7 +1724,6 @@ public class MainActivity extends AppCompatActivity
                     apodItem.setThumb("th_" + videoId + ".jpg");   // thumb filename
                 }
                 apodItem.setLowres(thumbUrl);
-                //new ImgLowresTask().execute(thumbUrl);
                 new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(thumbUrl);
                 break;
             case "APOD_LOAD":

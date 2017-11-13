@@ -33,7 +33,13 @@
         <activity
             android:name=".ImageActivity"
             android:theme="@style/AppTheme.NoActionBar"/>
+
         <activity android:name=".VideoActivity" />
+
+        <activity
+            android:name=".MP4Activity"
+            android:theme="@style/AppTheme.NoActionBar"/>
+
         <activity android:name=".TexSizeActivity" />
         <activity
             android:name=".SettingsActivity"
