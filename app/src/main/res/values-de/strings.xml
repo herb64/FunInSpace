@@ -19,9 +19,8 @@
     <string name="sorry">Entschuldigung,</string>
     <string name="no_support_yet">Medium zur Zeit noch nicht unterstützt.</string>
 
-    <string name="pref_description_wifi_required">Hires Bilder nur laden, wenn WiFi verfügbar</string>
-    <string name="pref_title_wifi_required">WiFi benötigt für Hires Bilder</string>
-
+    <string name="pref_description_wifi_required">Hires Bilder und Videos nur laden, wenn WiFi verfügbar ist.</string>
+    <string name="pref_title_wifi_required">WiFi benötigt für Hires Bilder/Videos</string>
 
     <string name="item_order">Sortierung (inaktiv)</string>
     <string name="newest_first">newest_first</string>
@@ -43,7 +42,7 @@
 
     <!-- Strings for wallpaper image quality preferences -->
     <string name="wallpaper_quality">Qualität für Hintergrundbild</string>
-    <string name="hires_no_wifi">WiFi ist nicht aktiv, daher werden keine hochauflösenden Bilder und Videos geladen. Du kannst die Einstellungen anpassen.</string>
+    <string name="hires_no_wifi">WiFi ist nicht aktiv, daher werden keine hochauflösenden Bilder und Videos geladen. Du kannst das in den Einstellungen ändern.</string>
     <string name="wp_no_delete_active">Das Bild \'%s\' ist Dein aktuelles Hintergrundbild. Es wird nicht gelöscht.</string>
     <string name="wp_confirm_dlg_msg">Möchtest Du \'%s\' als neues Hintergrundbild setzen?</string>
     <string name="wp_confirm_dlg_title">Hintergrund ändern?</string>
@@ -57,6 +56,12 @@
     <string name="dlg_revert_wp">Aktuelles Hintergrundbild wird entfernt und Dein ursprüngliches Bild wird wiederhergestellt…</string>
     <string name="action_filter">Filter</string>
     <string name="refresh_content">Refresh Bilderliste</string>
+    <string name="refresh_dropbox_title">Bilderliste aktualisieren</string>
+    <string name="refresh_dropbox_message">Möchtest Du Deine Bilderliste mit meiner (Herbert\'s) Dropbox aktualisieren? Bilder, die nicht in der Liste der Dropbox vorhanden sind
+    werden dabei entfernt. Deine persönlichen Bewertungen für Bilder bleiben erhalten. Falls Bilder fehlen sollten, versuche es zu einem anderen Zeitpunkt nochmal, da die
+    Dropbox Liste nicht unbedingt täglich aktualisiert wird.</string>
+    <string name="search_option">Vollsuche</string>
+    <string name="full_search_explain">Suche in Titel und zusätzlich in Beschreibungstext</string>
     <string-array name="wp_quality_titles">
         <item>Niedrig</item>
         <item>Mittel</item>

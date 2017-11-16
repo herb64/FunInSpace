@@ -20,7 +20,7 @@
     <string name="title_activity_settings">Settings</string>
 
     <!-- Strings related to Settings -->
-    <string name="item_order">Item order (inactive)</string>
+    <string name="item_order">Item order - DEPRECATED!!!</string>
     <string-array name="order_titles">
         <item>Newest first</item>
         <item>Oldest first</item>
@@ -44,6 +44,18 @@
         <item>100</item>
     </string-array>
 
+    <!-- Date format to be displayed in listview for each item - derived from epoch -->
+    <string name="date_format">Date Format - INACTIVE!!!</string>
+    <string name="df_dd_mm_yyyy">ddmmyyyy</string>
+    <string-array name="df_titles">
+        <item>15.03.1964</item>
+        <item>15. März 1964</item>
+    </string-array>
+    <string-array name="df_values">
+        <item>0</item>
+        <item>1</item>
+    </string-array>
+
     <!-- Example General settings -->
     <string name="pref_header_general">General</string>
 
@@ -52,7 +64,7 @@
         based on your message history
     </string>
 
-    <string name="pref_title_display_name">Display name</string>
+    <string name="pref_title_display_name">Display name - UNUSED </string>
     <string name="pref_default_display_name">John Smith</string>
 
     <string name="pref_title_add_friends_to_messages">Add friends to messages</string>
@@ -115,8 +127,8 @@
     <string name="pref_title_vibrate">Vibrate</string>
     <string name="no_support_yet">Media not yet supported</string>
 
-    <string name="pref_description_wifi_required"> Hires images only load if Wifi connection is available </string>
-    <string name="pref_title_wifi_required"> Load Hires with Wifi only</string>
+    <string name="pref_description_wifi_required"> Hires images and videos only load if Wifi connection is available.</string>
+    <string name="pref_title_wifi_required"> Load Hires/Video with Wifi only</string>
     <string name="newest_first">newest_first</string>
     <string name="enable_tls"><![CDATA[Please enable TLS v1 in Settings > General]]></string>
     <string name="lowres_fallback">Fall back to lower resolution image if NASA has a bad link for hires image, which happens from time to time</string>
@@ -136,11 +148,17 @@
     <string name="wp_confirm_dlg_pos_button">YES</string>
     <string name="wp_confirm_dlg_neg_button">NO</string>
     <string name="dlg_title_info">Info</string>
-    <string name="temp_wp_dialog_info">Please have a long click on the image in fullscreen mode, which allows to select a wallpaper range. Using this menu does not currently allow to set a wallpaper</string>
+    <string name="temp_wp_dialog_info">Please have a long click on the image in fullscreen mode, which allows to select a wallpaper range. Using this menu does
+        not currently allow to set a wallpaper</string>
     <string name="toast_wp_start_select">Starting wallpaper selection mode …</string>
     <string name="toast_wp_select_finished">Wallpaper has been created …</string>
     <string name="wp_select_rect_string">Wallpaper select</string>
     <string name="dlg_revert_wp">Removing FunInSpace Wallpaper and reverting to your original image…</string>
     <string name="action_filter">Filter</string>
     <string name="refresh_content">Refresh image list</string>
+    <string name="refresh_dropbox_title">Refresh of image list</string>
+    <string name="refresh_dropbox_message">Do you want to refresh your list with my (Herbert\'s) Dropbox informations? Images not found on the Dropbox are deleted.
+    Your personal ratings for remaining images will not be changed. If images are missing, just try to reload later, as dropbox might not be updated every day.</string>
+    <string name="search_option">Full Search</string>
+    <string name="full_search_explain">Search in explanation text in addition to title only</string>
 </resources>

@@ -15,6 +15,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Filter;
 import android.widget.Filterable;
 
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -167,12 +168,16 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         //rbRating.setOnClickListener(myThumbClickListener);
         //rbRating.setOnRatingBarChangeListener(myRatingChangeListener);
 
-        if (iList.get(position).getMedia().equals("youtube")) {
+        if (iList.get(position).getMedia().equals(MainActivity.M_YOUTUBE)) {
             // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
             holder.ivYoutube.setImageResource(R.drawable.youtube_social_icon_red);
             holder.ivYoutube.setVisibility(View.VISIBLE);
-        } else if(iList.get(position).getMedia().equals("vimeo")) {
+        } else if(iList.get(position).getMedia().equals(MainActivity.M_VIMEO)) {
             holder.ivYoutube.setImageResource(R.drawable.vimeo_icon);
+            holder.ivYoutube.setVisibility(View.VISIBLE);
+        } else if(iList.get(position).getMedia().endsWith(MainActivity.M_MP4)) {
+            // TODO : check license with flaticon com - how to add into credits
+            holder.ivYoutube.setImageResource(R.drawable.movie_other_64);
             holder.ivYoutube.setVisibility(View.VISIBLE);
         } else {
             holder.ivYoutube.setVisibility(View.INVISIBLE);
@@ -181,9 +186,13 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         //noinspection ResourceType
         holder.lbThumb.setVisibility(iList.get(position).getThumbLoadingState());
         holder.tvTitle.setText(iList.get(position).getTitle());
-        Date iDate = new Date(iList.get(position).getDateTime());
-        // TODO - make display format of date configurable in settings
-        String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);
+        /*Date iDate = new Date(iList.get(position).getDateTime());
+        String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);*/
+
+        // New: use formatter defined in activity which is based on NASA server time
+        // Also we do not need to create a date object - pass the epoch value
+        String formattedDate = act.formatter.format(iList.get(position).getDateTime());
+
         holder.tvDate.setText(formattedDate);
         holder.tvCopyright.setText(iList.get(position).getCopyright());
 

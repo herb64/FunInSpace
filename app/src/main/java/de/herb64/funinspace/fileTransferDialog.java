@@ -61,11 +61,13 @@ public class fileTransferDialog extends AppCompatDialogFragment {
         // some testing here for directory iteration
         String xferFiles = "";
         File appdir = getActivity().getFilesDir();
+        // change to omit wp_xxx.jpg - the wallpaper files
         FileFilter myfilter = new FileFilter() {
             @Override
             public boolean accept(File file) {
                 if (file.toString().endsWith(".json") ||
-                        file.toString().endsWith(".jpg")) {
+                        (file.toString().endsWith(".jpg") && !file.toString().contains("files/wp_"))
+                        ) {
                     return true;
                 }
                 return false;

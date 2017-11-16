@@ -70,6 +70,9 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
                 if (listPreference.getKey().equals("wallpaper_quality")) {
                     returnIntent.putExtra("wallpaper_quality", listPreference.getValue());
                 }
+                if (listPreference.getKey().equals("date_format")) {
+                    //returnIntent.putExtra("wallpaper_quality", listPreference.getValue());
+                }
 
                 // Set the summary to reflect the new value.
                 preference.setSummary(

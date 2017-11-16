@@ -30,7 +30,6 @@ import android.view.MenuItem;
 import android.widget.AbsListView;
 import android.widget.AdapterView;
 import android.widget.ListView;
-import android.widget.RatingBar;
 import android.support.v7.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -45,11 +44,13 @@ import java.io.File;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 import de.herb64.funinspace.helpers.deviceInfo;
 import de.herb64.funinspace.helpers.dialogDisplay;
@@ -79,24 +80,26 @@ public class MainActivity extends AppCompatActivity
         implements ratingDialog.RatingListener, asyncLoad.AsyncResponse, confirmDialog.ConfirmListener {
 
     private spaceItem apodItem;                     // the latest item to be fetched
-    private ArrayList<spaceItem> myList;            // to be replaced by LinkedHashMap
-    //private LinkedHashMap<String, spaceItem> myMap; // replacement for myList - abandoned
+    private ArrayList<spaceItem> myList;
+    //private LinkedHashMap<String, spaceItem> myMap; // abandoned, old class file still present
     private spaceAdapter adp;
     private JSONArray parent;
     private String jsonData;
     private String localJson = "nasatest.json";
     protected thumbClickListener myThumbClickListener;
-    private ratingChangeListener myRatingChangeListener;
+    //private ratingChangeListener myRatingChangeListener;
     private ListView myItemsLV;
     private deviceInfo devInfo;
     private int maxTextureSize = 999;   // TODO clean this, just to check the 999 was ok - still seems to be found, see Nathan
     private String lastImage;           // for log dialog title
     private Locale loc;
     protected Drawable expl_points;
-    //private ActionMode mActionMode = null;
     private SharedPreferences sharedPref;
     private boolean thumbQualityChanged = false;    // indicate preference setting change
     private int currentWallpaperIndex = -1;
+    protected TimeZone tzNASA;
+    protected Calendar cNASA;
+    protected SimpleDateFormat formatter;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
@@ -104,36 +107,31 @@ public class MainActivity extends AppCompatActivity
     }
     public native String yT();
     public native String nS();
-    public native String vA();                      // vimeo
     public native String vE();
-    public native String vKE();
-    public native String vHH();
 
-    // App settings variables from preferences dialog
-    //private boolean needWifi = false;               // hires loading - only with wifi?
-
-    // We go for our CONSTANTS here, this is similar to #define in C for a constant
+    // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
-    private static final String ABOUT_VERSION = "0.3.5b (alpha), Build Date 2017-11-13";
+
+    private static final String ABOUT_VERSION = "0.3.7 (alpha),\nBuild Date 2017-11-16\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
-    // changed to other location on 13.10.2017 into testing folder on my dropbox
+
     private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
-    private static final String DROPBOX_MINI = "https://dl.dropboxusercontent.com/s/5itsg1bjbytrk6d/nasamini.json";
-    // a simulated NASA json file for debugging and testing purpose - enabled as user option
+    // a simulated NASA json file for debugging and testing purpose - enabled as debug user option
     private static final String APOD_SIMULATE = "https://dl.dropboxusercontent.com/s/agfxia2f6or5plk/apod-simulate.json";
     // interesting: the name behind the link is not important, notfound.json worked as well, need to change the ID!!
-    private static final String APOD_NOTFOUND = "https://dl.dropboxusercontent.com/s/mzidejp3qfnosff/notfound.json";
+    //private static final String APOD_NOTFOUND = "https://dl.dropboxusercontent.com/s/mzidejp3qfnosff/notfound.json";
     //private static final int KIB = 1024;
     //private static final int MIB = 1024 * KIB;
     //private static final int GIB = 1024 * MIB;
+
     // strings for media type classification
     private static final String M_IMAGE = "image";
-    private static final String M_YOUTUBE = "youtube";
-    private static final String M_VIMEO = "vimeo";
-    private static final String M_MP4 = "mp4";      // first mp4 on 13.11.2017
+    protected static final String M_YOUTUBE = "youtube";
+    protected static final String M_VIMEO = "vimeo";
+    protected static final String M_MP4 = "mp4";      // first nasa mp4 on 13.11.2017
     private static final String M_VIDEO_UNKNOWN = "unknown-video";
 
     // dealing with the number of displayed lines in the Explanation text view
@@ -145,7 +143,7 @@ public class MainActivity extends AppCompatActivity
     protected static final int WP_NONE = 0;
     protected static final int WP_EXISTS = 1 << 1;
     protected static final int WP_ACTIVE = 1 << 2;
-    private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers                  !!!!! TODO: cleanup and shuffle option
+    //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers                  !!!!! TODO: used for cleanup and shuffle option
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -161,6 +159,14 @@ public class MainActivity extends AppCompatActivity
             //noinspection deprecation
             loc = getResources().getConfiguration().locale;
         }
+
+        // Timezone and Calendar objects used to base our timestamps on NASA Time
+        tzNASA = TimeZone.getTimeZone("America/New_York"); // Same as Washington (only Arizona does not use DST)
+        cNASA = Calendar.getInstance(tzNASA);
+        // TODO - make display format of date configurable in settings
+        formatter = new SimpleDateFormat("dd. MMM yyyy");
+        formatter.setTimeZone(tzNASA);
+        formatter.setCalendar(cNASA);
 
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // TODO check, if this is rotation proof, or if we bettger should get prefs each time
@@ -411,14 +417,30 @@ public class MainActivity extends AppCompatActivity
                         actionMode.finish();
                         return true;
                     case R.id.cab_wallpaper:
-                        // Set this image as wallpaper - bad if multiple are selected... check this
-                        // we might load using asyncLoad from web..
-                        // TODO: asyncload will not be used, we might open hires task here
-                        //new asyncLoad(MainActivity.this, "WALLPAPER").
-                        //        execute(myList.get(selected.get(0)).getLowres());
-                        new dialogDisplay(MainActivity.this,
-                                getString(R.string.temp_wp_dialog_info),
-                                getString(R.string.dlg_title_info));
+                        // for now: if a wallpaper already had been selected for this image, it is
+                        // just reloaded. else, just a hint is given. TODO - change that behaviour and offer a chance to change the "old" range
+                        if (selected.size() == 1) {
+                            String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
+                            Log.i("HFCM", "File: " + wpfn);
+                            File wp = new File(getApplicationContext().getFilesDir(), wpfn);
+                            if (wp.exists()) {
+                                new dialogDisplay(MainActivity.this, "Setting this selected wp to your previously selected range of image: " + myList.get(selected.get(0)).getTitle());
+                                Log.i("HFCM", "Setting wallpaper to " + wpfn);
+                                changeWallpaper(wpfn.replace("th_", "wp_"));
+                            } else {
+                                // TODO - here, we could allow a new dialog to be shown -- img hiresload with options
+                                new dialogDisplay(MainActivity.this, "No wallpaper has been selected up to now for this image. Go into fullscreen display" +
+                                        "for this image and select your display range", "Herbert TODO");
+                            }
+                        } else {
+                            // TODO - multiple are selectes - actually this is an error - but we
+                            //        should not offer the CAB option at all in that case
+                            new dialogDisplay(MainActivity.this, "You have selected multiple items - not possible. Working on how to suppress the option at all", "Herbert TODO");
+
+                            /*new dialogDisplay(MainActivity.this,
+                                    getString(R.string.temp_wp_dialog_info),
+                                    getString(R.string.dlg_title_info));*/
+                        }
                         return true;
                     default:
                         return false;
@@ -436,7 +458,7 @@ public class MainActivity extends AppCompatActivity
 
         // Create a listeners for handling clicks on the thumbnail image and for rating changes
         myThumbClickListener = new thumbClickListener();
-        myRatingChangeListener = new ratingChangeListener();
+        //myRatingChangeListener = new ratingChangeListener();
 
         myList = new ArrayList<> ();
         adp = new spaceAdapter(getApplicationContext(), MainActivity.this,
@@ -518,14 +540,11 @@ public class MainActivity extends AppCompatActivity
             }
 
             // Get latest APOD item to append from NASA (or a simulation item from dropbox)
-            if (sharedPref.getBoolean("get_apod", true)) {
-                new asyncLoad(MainActivity.this,
-                        "APOD_LOAD",
-                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                        execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
-            } else {
-                new dialogDisplay(this, getString(R.string.warn_apod_disable), getString(R.string.reminder));
-            }
+            getLatestAPOD();
+
+            // JUST A CONVERSION UTILITY USED DURING DEVELOPMENT - CONVERTED EPOCH VALUES INTO A NEW
+            // JSON FILE FOR UPLOAD TO DROPBOX - NEW TIMEZONE HANDLING NEEDS THIS CHANGE
+            //updateEpochsInJsonDEVEL();
         }
     }
 
@@ -629,7 +648,6 @@ public class MainActivity extends AppCompatActivity
      * Code has been moved to asyncLoad and orignal code now at end of this file... 26.10.2017
      */
 
-
     // CODE for processing apod json returned from asyncLoad...  former onpostexecute from apodtask
     /*
      * Create a new spaceItem from information returned in daily JSON
@@ -687,6 +705,8 @@ public class MainActivity extends AppCompatActivity
                     // TODO: now we just assume 'embed' link - might not be true always ??
                     // url> https://www.youtube.com/embed/" + path.get(1) + "?rel=0
                     // img> https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
+                    // TODO : MediaMetadataRetriever - also can retrieve image from video - FYI
+                    // it's not sure, if this works with youtube, but what about vimeo?
                     sMediaType = M_YOUTUBE;
                     apodItem.setThumb("th_" + path.get(1) + ".jpg");
                     sHiresUrl = imgUrl;
@@ -700,6 +720,7 @@ public class MainActivity extends AppCompatActivity
                     // URL is the link that can be played in a WebView, just not using
                     // iframe embed at all... doing it like this for now
                     // TODO: extract video ID and thumbnail url from given video url
+                    // is solved now, but what about "MediaMetadataRetriever"
                     // thumbnail image name: th_<video-id>.jpg
                     // Note: this needs a REST API call to gather the required infos..
                     apodItem.setLowres("");     // will hold thumbnail url
@@ -738,6 +759,8 @@ public class MainActivity extends AppCompatActivity
         // DateFormat dF = SimpleDateFormat.getDateInstance();
         long epoch = 0;
         try {
+            dF.setTimeZone(tzNASA);
+            dF.setCalendar(cNASA);      // not really needed here...
             epoch = dF.parse(sDate).getTime();
         } catch (ParseException e) {
             e.printStackTrace();
@@ -756,6 +779,8 @@ public class MainActivity extends AppCompatActivity
 
         // For VIMEO, "insert" an extra thread using oembed API to determine infos about the
         // thumbnail image URL before calling the imgLowResTask thread to load thumbnail bitmap
+        // hmm, MediaMetadataRetriever might also be able to retrieve a thumbnail, but it is better
+        // and also faster to retrieve the "offical" thumb...
         if (sMediaType.equals(M_VIMEO)) {   // TODO: test this
             //new vimeoInfoTask().execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
             Log.i("HFCM", "Launching asyncLoad for VIMEO info: " + sHiresUrl);
@@ -860,12 +885,12 @@ public class MainActivity extends AppCompatActivity
      * style="@style/Widget.AppCompat.RatingBar.Small" > fails
      * >> "small" versions are designed to ignore any interaction, see Android docs
      */
-    private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
+    /*private class ratingChangeListener implements RatingBar.OnRatingBarChangeListener {
         @Override
         public void onRatingChanged(RatingBar ratingBar, float v, boolean b) {
             Toast.makeText(MainActivity.this, "Have rating" + v, Toast.LENGTH_SHORT).show();
         }
-    }
+    }*/
 
     /**
      * Listener for clicks on items in the list. This is registered in spaceAdapter.
@@ -901,7 +926,8 @@ public class MainActivity extends AppCompatActivity
             int maxAlloc = devInfo.getMaxAllocatable();
             Log.i("HFCM", "maximum alloc:" + String.valueOf(maxAlloc));
             // This checks our own media type, which has been set in createApodFromJson()
-            if (media.equals(M_IMAGE)) {
+            /*  TODO: just changed to switch/case - just keep some time in case problems occur
+                if (media.equals(M_IMAGE)) {
                 Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
                 hiresIntent.putExtra("hiresurl", hiresUrl);
                 hiresIntent.putExtra("listIdx", idx);
@@ -927,6 +953,40 @@ public class MainActivity extends AppCompatActivity
                 playMP4(hiresUrl);
             } else {
                 new dialogDisplay(MainActivity.this, "Unknown media: " + media, "Warning");
+            }*/
+
+            switch (media) {
+                case M_IMAGE:
+                    Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
+                    hiresIntent.putExtra("hiresurl", hiresUrl);
+                    hiresIntent.putExtra("listIdx", idx);
+                    hiresIntent.putExtra("maxAlloc", maxAlloc);
+                    hiresIntent.putExtra("maxtexturesize", maxTextureSize);
+                    hiresIntent.putExtra("wallpaper_quality",
+                            sharedPref.getString("wallpaper_quality", "80"));
+                    lastImage = myList.get(idx).getTitle();
+                    //hiresIntent.putExtra("imagename", lastImage);
+                    // wallpaper filename now as imagename
+                    hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_","wp_"));
+                    // forResult now ALWAYS to get logstring returned for debugging
+                    // if hires size is already
+                    // TODO: how about running one extra thread to just query the hires image size, using MediaMetadataRetriever - would avoid startForResult...
+                    startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
+                    break;
+                case M_YOUTUBE:
+                    String thumb = myList.get(idx).getThumb();
+                    // We get the ID from thumb name - hmmm, somewhat dirty ?
+                    playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
+                    break;
+                case M_VIMEO:
+                    playVimeo(hiresUrl);
+                    break;
+                case M_MP4:
+                    playMP4(hiresUrl);
+                    break;
+                default:
+                    new dialogDisplay(MainActivity.this, "Unknown media: " + media, "Warning");
+                    break;
             }
         }
     }
@@ -951,7 +1011,8 @@ public class MainActivity extends AppCompatActivity
         try {
             startActivity(youtube_intent);
         } catch(Exception e) {
-            new dialogDisplay(this, getString(R.string.no_youtube), getString(R.string.sorry));
+            new dialogDisplay(this, getString(R.string.no_youtube),
+                    getString(R.string.sorry));
         }
     }
 
@@ -973,15 +1034,47 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * Play an MP4 stream from the given URL
+     * TODO: still issues with some type of videos
+     * Play an MP4 stream from the given URL. This might cause real trouble, if having quicktime
+     * video type as found with NASA mp4 on 13.11.2017. Other test videos play perfectly. Although
+     * the NASA video also reports MIME type video/mp4, there seems to be some problems. The
+     * NASA video reports 54Mbit/s bitrate! But this is not the only issue, also in local network,
+     * it does not render ok.
      * @param url The video mp4 url to be played
      */
     private void playMP4(String url) {
-        //new dialogDisplay(MainActivity.this, "MP4 video cannot yet be shown: " + url, "TODO");
-        Intent mp4Intent = new Intent(this, MP4Activity.class);
-        mp4Intent.setType("video/mp4");
+        Intent mp4Intent = new Intent(MainActivity.this, MP4Activity.class);
         mp4Intent.putExtra("mp4url", url);
         startActivity(mp4Intent);
+
+        // D O C U    S T U F F !!!
+        // TODO: check https://developer.android.com/reference/android/media/MediaCodec.html
+        /*
+         * TEST: also starting nasa video via system intent does not work
+         * Intent test = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+         * test.setDataAndType(Uri.parse(url), "video/mp4");
+         * startActivity(test);
+        */
+        /*
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        retriever.setDataSource(Uri.parse(url).toString(), new HashMap<String, String>());
+        Bitmap bmp = retriever.getFrameAtTime(0);  // TODO; other option to create thumbnail
+        */
+
+        /*
+        ContentResolver cR = getApplicationContext().getContentResolver();
+        String mime = cR.getType(Uri.parse(url));
+        File test = new File("/data/data/de.herb64.funinspace/files/nasatest.json");
+        String mime2 = cR.getType(Uri.fromFile(test));
+        */
+
+        /*
+         * Trying a load with my asyncLoad class, which checks mime type of the stream:
+         * new asyncLoad(MainActivity.this, "TTT").execute(url);
+         * Called asyncLoad() with a single URL
+         * URL: https://apod.nasa.gov/apod/image/1711/CometMachholz2017_SOHO_big.mp4,
+         * Content type: video/mp4, Typemap info - NASA video reports video/mp4, which is ok.
+        */
     }
 
     /**
@@ -1126,7 +1219,8 @@ public class MainActivity extends AppCompatActivity
                         adp.setFullSearch(sharedPref.getBoolean("full_search", false));
                     }
                     if (changed.equals("wallpaper_quality")) {
-                        Log.i("HFCM", "Changed wall paper quality to " + sharedPref.getString("wallpaper_quality", "80"));
+                        Log.i("HFCM", "Changed wall paper quality to " +
+                                sharedPref.getString("wallpaper_quality", "80"));
                     }
                 }
             };
@@ -1145,6 +1239,7 @@ public class MainActivity extends AppCompatActivity
 
         // 13.11.2017 - menu icons in overflow menu are visible now as well
         // https://stackoverflow.com/questions/18374183/how-to-show-icons-in-overflow-menu-in-actionbar
+        // TODO: how to do that for contextual action bar overflow menu as well?
         if(menu instanceof MenuBuilder){
             MenuBuilder m = (MenuBuilder) menu;
             //noinspection RestrictedApi
@@ -1227,7 +1322,9 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_about) {
-            new dialogDisplay(MainActivity.this, "Version: " + ABOUT_VERSION, "About FunInSpace");
+            new dialogDisplay(MainActivity.this, "Version: " + ABOUT_VERSION +
+                    "\nTODO credits:\nflaticons.com for movie_other_64.png",
+                    "Infos (still development)");
             return true;
         }
         if (id == R.id.action_mail) {
@@ -1299,8 +1396,8 @@ public class MainActivity extends AppCompatActivity
             // - only videos, no videos, only youtube or vimeo
             // - only images newer than, older than, timerange
             // - only images larger than given size
-            builder.setTitle("Refresh of image list")
-                    .setMessage("Do you want to refresh your list with Herbert's Dropbox informations?")
+            builder.setTitle(R.string.refresh_dropbox_title)
+                    .setMessage(R.string.refresh_dropbox_message)
                     .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                         public void onClick(DialogInterface dialog, int which) {
                             // asyncload requires an implementation of processFinish(), which is
@@ -1328,7 +1425,7 @@ public class MainActivity extends AppCompatActivity
             new dialogDisplay(MainActivity.this, "Searching the NASA APOD Archive is not yet available.", "TODO");
         }
         if (id == R.id.action_filter) {
-            new dialogDisplay(MainActivity.this, "Filter List by Rating, wallpaper status, image size, video is not yet available.", "TODO");
+            new dialogDisplay(MainActivity.this, "Filter List by Rating, wallpaper status, image size, video is not yet implemented.", "TODO");
         }
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -1421,7 +1518,6 @@ public class MainActivity extends AppCompatActivity
                     thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
                 }
                 newitem.setBmpThumb(thumb);
-                //Log.i("HFCM", "Thumbnail size: " + strThumb + " = " + utils.getBMPBytes(thumb));
             } else {
                 newitem.setBmpThumb(null);
             }
@@ -1451,14 +1547,10 @@ public class MainActivity extends AppCompatActivity
      * URL and saves a thumbnail file.
      */
     public void checkMissingThumbs() {
-        //ArrayList<Integer> missing = new ArrayList<Integer>();
-        //ArrayList<String> missingurls = new ArrayList<>();
         int count = 0;
         for(int i=0; i<myList.size(); i++) {
             if (myList.get(i).getBmpThumb() == null && !myList.get(i).getLowres().equals("")) {
                 // TODO unknown not yet checked...
-                //missing.add(i);
-                //missingurls.add(myList.get(i).getLowres());
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
                 // TODO: check parallel execution - seems to not load all images / and duplicates
                 new asyncLoad(MainActivity.this,
@@ -1472,75 +1564,7 @@ public class MainActivity extends AppCompatActivity
             Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, count),
                     Toast.LENGTH_LONG).show();
         }
-        /*if (missing.size() > 0) {
-            Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, missing.size()),
-                    Toast.LENGTH_LONG).show();
-            // kick off a new thread for loading from network, because this function is called
-            // from within onPostExecute()
-            //new thumbLoaderTask().execute(missing);
-            // TODO: asyncLoad with multiple links - makes things just complicated... drop again
-            //new asyncLoad(MainActivity.this, "MISSING_THUMBS_RELOAD").execute(missingurls);
-        }*/
     }
-
-    /**
-     * Load all missing image thumbnails URL contained in "lowres". A list of indices into the
-     * list is passed and images are loaded one after the other. TODO - maybe parallel load?
-     * https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
-     * new: also called for all images, if thumb quality is changed between rgb565 and argb8888
-     */
-    /*
-    private class thumbLoaderTask extends AsyncTask<ArrayList<Integer>, Integer, Void> {
-        private ArrayList<Integer> missing;
-
-        @Override
-        protected Void doInBackground(ArrayList<Integer>... params) {
-            Bitmap bitmap = null;
-            Bitmap thumbnail = null;
-            //File thumbFile = null;
-            spaceItem wkItem;
-            missing = params[0];
-            for (int i=0; i < missing.size(); i++) {
-                wkItem = myList.get(missing.get(i));
-                String lowresurl = wkItem.getLowres();
-                try {
-                    URL imgurl = new URL(lowresurl);
-                    bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-                if (bitmap != null) {
-                    wkItem.setLowSize(String.valueOf(bitmap.getWidth()) + "x" +
-                            String.valueOf(bitmap.getHeight()));
-                    // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
-                    //thumbFile = new File(getApplicationContext().getFilesDir(), wkItem.getThumb());
-                    thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
-                    wkItem.setBmpThumb(thumbnail);
-                }
-                // TODO DOCU: adp.notifyDataSetChanged() fails with following exception:
-                // Caused by: android.view.ViewRootImpl$CalledFromWrongThreadException:
-                // >> Only the original thread that created a view hierarchy can touch its views. <<
-                // Therefore use the progress update mechanism for this.
-                // https://stackoverflow.com/questions/6450275/android-how-to-work-with-asynctasks-progressdialog
-                publishProgress(missing.get(i));
-
-                // Write the thumbnail as small jpeg file to internal storage
-                utils.writeJPG(getApplicationContext(), wkItem.getThumb(), thumbnail);
-            }
-            return null;
-        }
-
-        // For each loaded thumbnail, we receive a progress update and notify the adapter to update
-        // the view, if the image has been loaded. We might run this in parallel for multiple images
-        // triggered by publishProgress() within doInBackground()
-        @Override
-        protected void onProgressUpdate(Integer... values) {
-            super.onProgressUpdate(values);
-            myList.get(values[0]).setThumbLoadingState(View.INVISIBLE);
-            adp.notifyDataSetChanged();
-        }
-    }*/
 
     /**
      * Refresh the local json array with contents from the dropbox. The current array is replaced
@@ -1554,8 +1578,6 @@ public class MainActivity extends AppCompatActivity
         // for now, just overwrite existing data by brute force, which means
         // 1. metadata on the device which is not on dropbox is lost - could be restored from local nasa json info, if already stored (timestamp.json)
         // 2. deleted items are loaded again - no problem, because deletes are not yet persistent yet, but also later: how to determine, why not to restore an item?
-        // 3. personal ratings stored on device are overwritten with dropbox content - easy to solve
-        // 4. what about thumbnail images in internal storage?
         JSONObject obj = null;
         JSONObject content = null;
         HashMap<String, Integer> ratings;
@@ -1566,10 +1588,6 @@ public class MainActivity extends AppCompatActivity
         thumbsToDelete = new HashMap<>();
         for (int i = 0; i < parent.length(); i++) {
             try {
-                /*obj = parent.getJSONObject(i);
-                if (obj != null) {
-                    content = obj.getJSONObject("Content");
-                }*/
                 content = parent.getJSONObject(i).getJSONObject("Content");
                 if (content != null) {
                     ratings.put(content.getString("Title"), content.getInt("Rating"));
@@ -1615,10 +1633,22 @@ public class MainActivity extends AppCompatActivity
                 e.printStackTrace();
             }
         }
-        // Remove remaining thumbnails which have no reference any more in the new json array
+        // Remove remaining thumbs/wallpapers which have no reference any more in the new json array
+        // thumbnails are always present, so use them as filename stem. For wallpapers, just check
+        // by exchanging th_ by wp_.
         for (String key : thumbsToDelete.keySet()) {
             Log.i("HFCM", "Delete thumb: " + thumbsToDelete.get(key));
             new File(getApplicationContext().getFilesDir(), thumbsToDelete.get(key)).delete();
+            // remove orphaned wallpapers as well...
+            // TODO: maybe use more unique prefidx, e.g. th__ and wp__ just to avoid conflicts...
+            //       new app version should clean old files, or just require new install
+            String wpFileName = thumbsToDelete.get(key).replace("th_", "wp_");
+            File wpFile = new File(wpFileName);
+            if (wpFile.exists()) {
+                Log.i("HCFM", "Removing wallpaper orphan " + wpFileName);
+                // TODO: should we remove the active one as well?
+                wpFile.delete();        // TODO check returncode
+            }
         }
 
         // Activate the contents of the new json array
@@ -1628,11 +1658,34 @@ public class MainActivity extends AppCompatActivity
         addItems();
         checkMissingThumbs();
         adp.notifyDataSetChanged();
+        getLatestAPOD();
+    }
+
+    /**
+     * Try to get the latest APOD. This is called on each start of the app and after a refresh from
+     * dropbox (while the latter should not be needed, if dropbox reload does a merge, which is not
+     * (yet?) the case.
+     * 14.11.2017 - this function has been created to put the load in a single place and to enable
+     * a check based on nasa server time, if a reload is really needed...
+     */
+    private void getLatestAPOD() {
+        // TODO: add code to check, if latest apod is already in, so no call is needed at all
+        // utils function "needAPODRefresh" as base... doing the timezone stuff
+        ArrayList<Long> epochs = utils.getNASAEpoch(loc);
+        // we check the first image in list: if it's epoch is same as current NASA 00:00:00 epoch,
+        // we do not call the apod loader at all.
+        /*if (myList.get(0).getDateTime() == epochs.get(0)) {
+            new dialogDisplay(MainActivity.this, "Image already loaded for this epoch...");
+        } else {
+            new dialogDisplay(MainActivity.this, "NASA Epoch: " + epochs.get(0));
+        }*/
         if (sharedPref.getBoolean("get_apod", true)) {
             new asyncLoad(MainActivity.this,
                     "APOD_LOAD",
                     sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
                     execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
+        } else {
+            new dialogDisplay(this, getString(R.string.warn_apod_disable), getString(R.string.reminder));
         }
     }
 
@@ -1648,7 +1701,7 @@ public class MainActivity extends AppCompatActivity
     public void processFinish(int status, String tag, Object output) {
         // switch-case for String type available since Java version 7
 
-        // no switch-case with string segments, so first check this...
+        // no switch-case with string "segments", so first check this...
         if (tag.startsWith("THUMB_")) {
             int idx = Integer.parseInt(tag.replace("THUMB_",""));
             Log.i("HFCM", "Returned from asyncLoad() THUMB with index " + idx);
@@ -1773,9 +1826,9 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * Implementation for progress update for asyncLoad run with multiple urls
-     * @param status
-     * @param tag
-     * @param output
+     * @param status status
+     * @param tag tag
+     * @param output output
      */
     @Override
     public void processProgressUpdate(int status, String tag, Object output) {
@@ -1877,6 +1930,78 @@ public class MainActivity extends AppCompatActivity
             utils.writeJPG(getApplicationContext(),
                     "w_builtin.jpg", ((BitmapDrawable)builtin).getBitmap());
         }
+    }
+
+    /**
+     * CHANGE IN EPOCH VALUE CALCULATION - JUST TO BE RUN ONCE ON A WELL PREAPARED JSON FILE
+     * Helper function for updating epoch values - 15.11.2017 - need to change all values for stored
+     * items to the new epoch value. Getting base infos in 'epoch-update' file, derived from NASA
+     * https://apod.nasa.gov/apod/archivepix.html, in one line per entry, e.g.:
+     * 2017 July 24: A Hybrid Solar Eclipse over Kenya
+     * This function now iterates all items in the local json and rewrites epoch values based on the
+     * information in 'epoch-update'
+     */
+    @SuppressWarnings("unused")
+    public void updateEpochsInJsonDEVEL() {
+        HashMap<String, Long> epochMap = new HashMap<>();
+        String filecontents = utils.readf(getApplicationContext(),"epoch-update");
+        if (filecontents == null) {
+            return;
+        }
+        String[] contents = filecontents.split("\n");
+        SimpleDateFormat formatter = new SimpleDateFormat("yyyy MMM dd", loc);
+        formatter.setTimeZone(tzNASA);
+        formatter.setCalendar(cNASA);
+        for (String line : contents) {
+            String[] splt = line.split(":", 2);
+            String datum = splt[0];
+            String title = splt[1].trim();
+            try {
+                long epoch = formatter.parse(datum).getTime();
+                epochMap.put(title, epoch);
+                Log.i("HFCM", epoch + " (" + formatter.format(epoch) + ") >> " + title);
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+        }
+        JSONObject obj = null;
+        JSONObject content = null;
+        for (int i = 0; i < parent.length(); i++) {
+            try {
+                obj = parent.getJSONObject(i);
+            } catch (JSONException e) {
+                e.printStackTrace();
+                Log.e("HFCM", e.getMessage());
+                new dialogDisplay(this, "Rating JSON Exception:\n" + e.getMessage());
+            }
+            try {
+                if (obj != null) {
+                    content = obj.getJSONObject("Content");
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+                Log.e("HFCM", e.getMessage());
+                new dialogDisplay(this, "Rating JSON Exception:\n" + e.getMessage());
+            }
+            // update the values
+            try {
+                if (content != null) {
+                    String strTitle = content.getString("Title");
+                    if (epochMap.containsKey(strTitle)) {
+                        long newEpoch = epochMap.get(strTitle);
+                        Log.i("HFCM", "Exchanging: " + content.getLong("DateTime") +
+                                " > " + newEpoch + " (" + strTitle + ")");
+                        content.put("DateTime", newEpoch);
+                    }
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+                Log.e("HFCM", e.getMessage());
+                new dialogDisplay(this, "Rating JSON Exception:\n" + e.getMessage());
+            }
+        }
+        // Rewrite local json file
+        utils.writeJson(getApplicationContext(), localJson, parent);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2285,7 +2410,7 @@ public class MainActivity extends AppCompatActivity
         protected String doInBackground(String... params) {
             apodItem = new spaceItem();
 
-            // Enable TLSv1 below 5.0 (Lollipop) TODO: TLS > 1.0 / move to oncreate / android 7
+            // Enable TLSv1 below 5.0 (Lollipop)
             // https://blog.dev-area.net/2015/08/13/android-4-1-enable-tls-1-1-and-tls-1-2/
             // https://developer.android.com/about/versions/nougat/android-7.0-changes.html#tls-ssl
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
@@ -2322,7 +2447,6 @@ public class MainActivity extends AppCompatActivity
                 e.printStackTrace();
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
-                // TODO : handle over rate limit here
                 // OVER_RATE_LIMIT
                 // You have exceeded your rate limit. Try again later or contact us at https://api.nasa.gov/contact/ for assistance
                 return "FILENOTFOUND";
@@ -2363,7 +2487,6 @@ public class MainActivity extends AppCompatActivity
             Uri resource_uri = null;
             if(s != null) {
                 if (s.equals("FILENOTFOUND")) {
-                    // TODO: this is not necessarily the case...
                     Log.e("HFCM", "FILENOTFOUND - MAYBE API RATE LIMIT EXCEEDED ??");
                     new dialogDisplay(MainActivity.this, getString(R.string.rate_limit_exceeded),
                             getString(R.string.no_apod));
@@ -2614,6 +2737,65 @@ public class MainActivity extends AppCompatActivity
             Toast.makeText(MainActivity.this, R.string.apod_load,
                     Toast.LENGTH_LONG).show();
             myItemsLV.setSelection(0);
+        }
+    }*/
+
+    /*
+     * Load all missing image thumbnails URL contained in "lowres". A list of indices into the
+     * list is passed and images are loaded one after the other. TODO - maybe parallel load?
+     * https://stackoverflow.com/questions/6053602/what-arguments-are-passed-into-asynctaskarg1-arg2-arg3
+     * new: also called for all images, if thumb quality is changed between rgb565 and argb8888
+     */
+    /*
+    private class thumbLoaderTask extends AsyncTask<ArrayList<Integer>, Integer, Void> {
+        private ArrayList<Integer> missing;
+
+        @Override
+        protected Void doInBackground(ArrayList<Integer>... params) {
+            Bitmap bitmap = null;
+            Bitmap thumbnail = null;
+            //File thumbFile = null;
+            spaceItem wkItem;
+            missing = params[0];
+            for (int i=0; i < missing.size(); i++) {
+                wkItem = myList.get(missing.get(i));
+                String lowresurl = wkItem.getLowres();
+                try {
+                    URL imgurl = new URL(lowresurl);
+                    bitmap = BitmapFactory.decodeStream((InputStream)imgurl.getContent());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                if (bitmap != null) {
+                    wkItem.setLowSize(String.valueOf(bitmap.getWidth()) + "x" +
+                            String.valueOf(bitmap.getHeight()));
+                    // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
+                    //thumbFile = new File(getApplicationContext().getFilesDir(), wkItem.getThumb());
+                    thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
+                    wkItem.setBmpThumb(thumbnail);
+                }
+                // TODO DOCU: adp.notifyDataSetChanged() fails with following exception:
+                // Caused by: android.view.ViewRootImpl$CalledFromWrongThreadException:
+                // >> Only the original thread that created a view hierarchy can touch its views. <<
+                // Therefore use the progress update mechanism for this.
+                // https://stackoverflow.com/questions/6450275/android-how-to-work-with-asynctasks-progressdialog
+                publishProgress(missing.get(i));
+
+                // Write the thumbnail as small jpeg file to internal storage
+                utils.writeJPG(getApplicationContext(), wkItem.getThumb(), thumbnail);
+            }
+            return null;
+        }
+
+        // For each loaded thumbnail, we receive a progress update and notify the adapter to update
+        // the view, if the image has been loaded. We might run this in parallel for multiple images
+        // triggered by publishProgress() within doInBackground()
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            super.onProgressUpdate(values);
+            myList.get(values[0]).setThumbLoadingState(View.INVISIBLE);
+            adp.notifyDataSetChanged();
         }
     }*/
 }

@@ -196,6 +196,7 @@ public class asyncLoad extends AsyncTask {
             BufferedInputStream bStream = new BufferedInputStream(istream);  // default 8192 buffer
             String contenttype = conn.getContentType();
             String type = MimeTypeMap.getFileExtensionFromUrl(contenttype);
+            // MediaMetadataRetriever also provides MIME information and more...
             Log.i("HFCM", "URL: " + url2load + ", Content type: " + contenttype + ", Typemap info" + type);
             // URL: https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY, Content type: application/json
             // URL: https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json, Content type: text/plain; charset=utf-8

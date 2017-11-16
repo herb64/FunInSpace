@@ -18,7 +18,7 @@
     <SwitchPreference
         android:defaultValue="false"
         android:key="hires_save"
-        android:summary="Keep hires images on SD Card (not yet implemented)"
+        android:summary="Keep hires images on SD Card (not yet implemented) \nNote:_Videos will always be streamed and never stored locally"
         android:title="Hires Images" />
 
     <SwitchPreference
@@ -37,6 +37,22 @@
         android:positiveButtonText="@null"
         android:title="@string/wallpaper_quality" />
 
+    <!-- 16.11.2017 - add selection for date format -->
+    <ListPreference
+        android:defaultValue="@string/df_dd_mm_yyyy"
+        android:entries="@array/df_titles"
+        android:entryValues="@array/df_values"
+        android:key="date_format"
+        android:negativeButtonText="@null"
+        android:positiveButtonText="@null"
+        android:title="@string/date_format" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="wallpaper_shuffle"
+        android:summary="Daily shuffle between the FunInSpace wallpapers you previously selected. This should be available soon - please recheck after updates"
+        android:title="Wallpaper shuffle (not yet implemented)" />
+
     <SwitchPreference
         android:defaultValue="true"
         android:key="fallback_to_lowres"
@@ -46,8 +62,8 @@
     <SwitchPreference
         android:defaultValue="false"
         android:key="full_search"
-        android:summary="Search in explanation text in addition to title only"
-        android:title="Full Search" />
+        android:summary="@string/full_search_explain"
+        android:title="@string/search_option" />
 
     <!--
     <SwitchPreference

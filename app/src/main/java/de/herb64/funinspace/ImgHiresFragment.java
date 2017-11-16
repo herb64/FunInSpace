@@ -24,6 +24,7 @@ import java.net.URL;
 import java.util.Locale;
 
 import de.herb64.funinspace.helpers.dialogDisplay;
+import de.herb64.funinspace.helpers.utils;
 
 /**
  * Created by herbert on 7/22/17.
@@ -332,19 +333,21 @@ public class ImgHiresFragment extends Fragment {
                     //bmp = BitmapFactory.decodeStream((InputStream) imgurl.getContent(), null, options);
                     if (bmp != null) {
                         bmp.setDensity(Bitmap.DENSITY_NONE);        // to FIX problems in imageview
-                        int allocByteCount;
+                        //int allocByteCount = utils.getBMPBytes(bmp);
+                        /*int allocByteCount;
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                             allocByteCount = bmp.getAllocationByteCount();
                         } else {
                             allocByteCount = bmp.getByteCount();
-                        }
+                        }*/
                         logString += String.format(loc, "\n\nResulting Bitmap:\n" +
                                         "Scaled Size: %d/%d\n" +
                                         "Used Memory: %.2f MiB\n" +
                                         "Byte Count: %d",
                                 bmp.getWidth(), bmp.getHeight(),
                                 (float) bmp.getWidth() * (float) bmp.getHeight() * 4f / (float) MIB,
-                                allocByteCount);
+                                utils.getBMPBytes(bmp));
+                                //allocByteCount);
                     } else {
                         logString += "\n\nA problem occurred while decoding the bitmap stream for this image";
                     }
