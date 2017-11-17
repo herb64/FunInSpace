@@ -15,6 +15,13 @@
         android:title="Delete"
         app:showAsAction="ifRoom" />
 
+    <!-- Read item -->
+    <item
+        android:id="@+id/cab_read"
+        android:icon="@android:drawable/ic_lock_silent_mode_off"
+        android:title="@string/cab_read"
+        app:showAsAction="ifRoom" />
+
     <item
         android:id="@+id/cab_share"
         android:title="Share"

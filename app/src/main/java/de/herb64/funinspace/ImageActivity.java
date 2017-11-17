@@ -728,14 +728,15 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     }
 
     /**
-     * @param bitmap        Bitmap
-     * @param teststring    String
-     * @param originalSize  Size
+     * This gets called when the hires image loader thread has finished.
+     * @param bitmap        Bitmap object that has been read
+     * @param logstring     String containing logging infos
+     * @param originalSize  Size of the image as it is provided by NASA (unscaled)
      */
     @Override
-    public void onPostExecute(Bitmap bitmap, String teststring, String originalSize) {
+    public void onPostExecute(Bitmap bitmap, String logstring, String originalSize) {
         myBitmap = bitmap;
-        Log.i(TAG, teststring);
+        Log.i(TAG, logstring);
         if(myBitmap != null) {
             //I/HFCM: Displaymetrics = DisplayMetrics{density=2.625, width=1080, height=1794, scaledDensity=2.625, xdpi=420.0, ydpi=420.0}
             DisplayMetrics metrics = new DisplayMetrics();
@@ -780,12 +781,16 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         returnIntent.putExtra("sizeHires", originalSize);
         returnIntent.putExtra("lstIdx", listIdx);
         returnIntent.putExtra("hiresurl", strHires);
-        returnIntent.putExtra("logString", teststring);
+        returnIntent.putExtra("logString", logstring);
         setResult(RESULT_OK,returnIntent);
 
         // Initialize wallpaper selection rectangle, if we already started in active selection mode
         if (wallPaperSelectMode) {
             initWPSelect();
+        } else {
+            // Display a toast as TIP to the user how to enable wp selection mode
+            String toaster = getString(R.string.wp_tip_long_press);
+            Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
         }
     }
 

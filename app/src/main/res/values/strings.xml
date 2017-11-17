@@ -167,4 +167,8 @@
     <string name="rating">Rating</string>
     <string name="set_as_wallpaper">Set as wallpaper</string>
     <string name="reselect_wallpaper">Choose new wallpaper range</string>
+    <string name="wp_tip_long_press">TIP\nLong Press on image for wallpaper selection</string>
+    <string name="pref_summary_read_text">Read out the explanation on each foldout of the explanation text. The context menu also offers a \'read out\' option.</string>
+    <string name="pref_title_read_text">Read explanation</string>
+    <string name="cab_read">Read out</string>
 </resources>

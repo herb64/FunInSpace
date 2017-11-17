@@ -27,6 +27,12 @@
         android:summary="Use lower color resolution Thumbnail pictures to save memory. Check, if you see any difference in the list."
         android:title="Thumbnail color quality" />
 
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="read_out"
+        android:summary="@string/pref_summary_read_text"
+        android:title="@string/pref_title_read_text" />
+
     <!-- 10.11.2017 - add selection of wallpaper image quality -->
     <ListPreference
         android:defaultValue="80"

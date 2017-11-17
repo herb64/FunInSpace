@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.speech.tts.TextToSpeech;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
@@ -100,6 +101,8 @@ public class MainActivity extends AppCompatActivity
     protected TimeZone tzNASA;
     protected Calendar cNASA;
     protected SimpleDateFormat formatter;
+
+    private TextToSpeech tts;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
@@ -255,14 +258,23 @@ public class MainActivity extends AppCompatActivity
                 // TODO - at background load of thumbs, the full text always disappears on refreshs
                 // TODO - do not ellipsize if explanation matches into minimum lines
                 TextView v = myItemsLV.findViewWithTag(position + MAX_ITEMS);
+                boolean read = sharedPref.getBoolean("read_out", false);
                 if (v.getMaxLines() == MAX_ELLIPSED_LINES) {
                     v.setMaxLines(MAX_LINES);
                     v.setEllipsize(null);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);
+                    if (read) {
+                        tts.speak(myList.get(position).getExplanation(),
+                                TextToSpeech.QUEUE_FLUSH,
+                                null);
+                    }
                 } else {
                     v.setEllipsize(TextUtils.TruncateAt.END);
                     v.setMaxLines(MAX_ELLIPSED_LINES);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
+                    if (read) {
+                        tts.stop();
+                    }
                 }
                 myItemsLV.setSelection(position);
             }
@@ -291,6 +303,12 @@ public class MainActivity extends AppCompatActivity
                     selected.remove(Integer.valueOf((int) id));
                 }
                 myList.get((int) id).setSelected(checked);
+
+                // Dynamically change action bar depending on selections
+                MenuItem readitem = actionMode.getMenu().findItem(R.id.cab_read);
+                readitem.setEnabled(!(selected.size() > 1));
+                readitem.setVisible(!(selected.size() > 1));
+
                 adp.notifyDataSetChanged();
             }
 
@@ -326,12 +344,15 @@ public class MainActivity extends AppCompatActivity
                 item.setEnabled(!(selected.size() > 1));
                 MenuItem item2 = menu.findItem(R.id.cab_wp_reselect);
                 item2.setEnabled(!(selected.size() > 1));
+                // TODO: how can the "read" icon be "shown as inactive"? - move into on item checkedstatechange
 
                 // Disable wallpaper menu item if currently active one is selected. This might only
                 // be changed in rectangle selection, but not set again...
                 // Important: onPrepareActionMode is called at different times:
                 // 1. if the FIRST space item is selected - selected array is empty at that time!!!
                 // 2. when clicking on the action bar - selected array is now filled with data
+                // 3. it is NOT called, if an action item on the bar is clicked, i.e. no overflow
+                // 4. it is NOT called on subsequent item selections
                 if (selected.size() == 1) {
                     if (!myList.get(selected.get(0)).getMedia().equals(M_IMAGE)) {
                         item.setEnabled(false);
@@ -495,6 +516,33 @@ public class MainActivity extends AppCompatActivity
                             startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
                         }
                         return true;
+                    case R.id.cab_read:
+                        if (!tts.isSpeaking()) {
+                            tts.speak("Title",
+                                    TextToSpeech.QUEUE_ADD,
+                                    null);
+                            tts.playSilence(500L,
+                                    TextToSpeech.QUEUE_ADD,
+                                    null);
+                            tts.speak(myList.get(selected.get(0)).getTitle(),
+                                    TextToSpeech.QUEUE_ADD,
+                                    null);
+                            tts.playSilence(500L,
+                                    TextToSpeech.QUEUE_ADD,
+                                    null);
+                            tts.speak("Explanation",
+                                    TextToSpeech.QUEUE_ADD,
+                                    null);
+                            tts.playSilence(500L,
+                                    TextToSpeech.QUEUE_ADD,
+                                    null);
+                            tts.speak(myList.get(selected.get(0)).getExplanation(),
+                                    TextToSpeech.QUEUE_ADD,
+                                    null);
+                        } else {
+                            tts.stop();
+                        }
+                        return true;
                     default:
                         return false;
                 }
@@ -598,9 +646,32 @@ public class MainActivity extends AppCompatActivity
             // JUST A CONVERSION UTILITY USED DURING DEVELOPMENT - CONVERTED EPOCH VALUES INTO A NEW
             // JSON FILE FOR UPLOAD TO DROPBOX - NEW TIMEZONE HANDLING NEEDS THIS CHANGE
             //updateEpochsInJsonDEVEL();
+
+            tts = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
+                @Override
+                public void onInit(int status) {
+                    if(status != TextToSpeech.ERROR) {
+                        tts.setLanguage(Locale.UK);
+                    }
+                }
+            });
         }
     }
 
+    /**
+     * Stop text to speech, if any active playback is running.
+     */
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (tts.isSpeaking()) {
+            tts.stop();
+        }
+    }
+
+    /**
+     * @param outState
+     */
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
@@ -627,6 +698,9 @@ public class MainActivity extends AppCompatActivity
         //       onResume/onPause: register/deregister listener!!
     }*/
 
+    /**
+     *
+     */
     @Override
     protected void onResume() {
         super.onResume();
@@ -702,7 +776,7 @@ public class MainActivity extends AppCompatActivity
      */
 
     // CODE for processing apod json returned from asyncLoad...  former onpostexecute from apodtask
-    /*
+    /**
      * Create a new spaceItem from information returned in daily JSON
      * @params String
      */
