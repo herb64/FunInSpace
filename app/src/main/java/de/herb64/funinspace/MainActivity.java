@@ -112,7 +112,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.3.7 (alpha),\nBuild Date 2017-11-16\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.3.8 (alpha),\nBuild Date 2017-11-17\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
@@ -160,11 +160,11 @@ public class MainActivity extends AppCompatActivity
             loc = getResources().getConfiguration().locale;
         }
 
-        // Timezone and Calendar objects used to base our timestamps on NASA Time
-        tzNASA = TimeZone.getTimeZone("America/New_York"); // Same as Washington (only Arizona does not use DST)
+        // Timezone and Calendar objects used to base our timestamps on current NASA TimeZone
+        tzNASA = TimeZone.getTimeZone("America/New_York"); // NASA server is within this TZ
         cNASA = Calendar.getInstance(tzNASA);
         // TODO - make display format of date configurable in settings
-        formatter = new SimpleDateFormat("dd. MMM yyyy");
+        formatter = new SimpleDateFormat("dd. MMM yyyy", loc);
         formatter.setTimeZone(tzNASA);
         formatter.setCalendar(cNASA);
 
@@ -172,10 +172,8 @@ public class MainActivity extends AppCompatActivity
         // TODO check, if this is rotation proof, or if we bettger should get prefs each time
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
         sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
-        //newestFirst = sharedPref.getString("item_order", "newest_first").equals("newest_first");
-        //newestFirst = true; // we go and remove that, newest always on top!!!
 
-        // TODO solve issue with vector on 4.1 (4.x?) - for now, just dirty workaround...
+        // TODO solve issue with vectorgraphics on 4.1 (4.x?) - for now, just dirty workaround...
         // arrow_down_float image only - don't like that, but do it now
         // Drawable for textview - use builtin in "android.R...." - now use SVG graphic via xml
         // https://stackoverflow.com/questions/29041027/android-getresources-getdrawable-deprecated-api-22
@@ -306,9 +304,54 @@ public class MainActivity extends AppCompatActivity
                 return true; // important, otherwise no selection of items!
             }
 
+            /**
+             * Dynamically enable/disable menu items depending on current state of selection. E.g.
+             * disable the wallpaper menu item, if more than one space item is selected.
+             * TODO: how could we show icons left to text in overflow, as done with main menu?
+             * @param actionMode the action mode
+             * @param menu the menu
+             * @return return true
+             */
             @Override
             public boolean onPrepareActionMode(android.view.ActionMode actionMode, Menu menu) {
-                return false;
+                // Trick for menu to show the icons within overflow menu does not work
+                /*if(menu instanceof MenuBuilder){  // false
+                    MenuBuilder m = (MenuBuilder) menu;
+                    //noinspection RestrictedApi
+                    m.setOptionalIconsVisible(true);
+                }*/
+                //item.setIcon(android.R.drawable.btn_plus); // also does not work
+
+                MenuItem item = menu.findItem(R.id.cab_wallpaper);
+                item.setEnabled(!(selected.size() > 1));
+                MenuItem item2 = menu.findItem(R.id.cab_wp_reselect);
+                item2.setEnabled(!(selected.size() > 1));
+
+                // Disable wallpaper menu item if currently active one is selected. This might only
+                // be changed in rectangle selection, but not set again...
+                // Important: onPrepareActionMode is called at different times:
+                // 1. if the FIRST space item is selected - selected array is empty at that time!!!
+                // 2. when clicking on the action bar - selected array is now filled with data
+                if (selected.size() == 1) {
+                    if (!myList.get(selected.get(0)).getMedia().equals(M_IMAGE)) {
+                        item.setEnabled(false);
+                        item2.setEnabled(false);
+                        return true;
+                    }
+                    String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
+                    SharedPreferences shPref = getPreferences(Context.MODE_PRIVATE);
+                    String wpFileCurrent = shPref.getString("CURRENT_WALLPAPER_FILE", "");
+                    if (wpfn.equals(wpFileCurrent)) {
+                        item.setEnabled(false);
+                    }
+                    File wpfile = new File(getApplicationContext().getFilesDir(), wpfn);
+                    if (!wpfile.exists()) {
+                        item2.setEnabled(false);
+                    }
+                }
+
+                return true;        // ???
+                //return false;
             }
 
             // Now we did click on an action item in our CAB and need to process actions on all
@@ -417,29 +460,39 @@ public class MainActivity extends AppCompatActivity
                         actionMode.finish();
                         return true;
                     case R.id.cab_wallpaper:
-                        // for now: if a wallpaper already had been selected for this image, it is
-                        // just reloaded. else, just a hint is given. TODO - change that behaviour and offer a chance to change the "old" range
-                        if (selected.size() == 1) {
-                            String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
-                            Log.i("HFCM", "File: " + wpfn);
-                            File wp = new File(getApplicationContext().getFilesDir(), wpfn);
-                            if (wp.exists()) {
-                                new dialogDisplay(MainActivity.this, "Setting this selected wp to your previously selected range of image: " + myList.get(selected.get(0)).getTitle());
-                                Log.i("HFCM", "Setting wallpaper to " + wpfn);
-                                changeWallpaper(wpfn.replace("th_", "wp_"));
-                            } else {
-                                // TODO - here, we could allow a new dialog to be shown -- img hiresload with options
-                                new dialogDisplay(MainActivity.this, "No wallpaper has been selected up to now for this image. Go into fullscreen display" +
-                                        "for this image and select your display range", "Herbert TODO");
-                            }
+                    case R.id.cab_wp_reselect:
+                        // We only get here, if there's ONE SINGLE selected space item.
+                        String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
+                        File wp = new File(getApplicationContext().getFilesDir(), wpfn);
+                        if (wp.exists() && menuItem.getItemId()==R.id.cab_wallpaper) {
+                            // Calling confirm dialog - this will set the wallpaper in callback
+                            fragArguments = new Bundle();
+                            fragArguments.putInt("IDX", selected.get(0));
+                            fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
+                            fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
+                                    myList.get(selected.get(0)).getTitle()));
+                            fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
+                            fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
+                            fm = getSupportFragmentManager();
+                            confirmDialog confirmdlg = new confirmDialog();
+                            confirmdlg.setArguments(fragArguments);
+                            confirmdlg.show(fm, "CONFIRMTAG");
                         } else {
-                            // TODO - multiple are selectes - actually this is an error - but we
-                            //        should not offer the CAB option at all in that case
-                            new dialogDisplay(MainActivity.this, "You have selected multiple items - not possible. Working on how to suppress the option at all", "Herbert TODO");
-
-                            /*new dialogDisplay(MainActivity.this,
-                                    getString(R.string.temp_wp_dialog_info),
-                                    getString(R.string.dlg_title_info));*/
+                            int maxAlloc = devInfo.getMaxAllocatable();
+                            Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
+                            hiresIntent.putExtra("hiresurl", myList.get(selected.get(0)).getHires());
+                            hiresIntent.putExtra("listIdx", selected.get(0));
+                            hiresIntent.putExtra("maxAlloc", maxAlloc);
+                            hiresIntent.putExtra("maxtexturesize", maxTextureSize);
+                            hiresIntent.putExtra("wallpaper_quality",
+                                    sharedPref.getString("wallpaper_quality", "80"));
+                            lastImage = myList.get(selected.get(0)).getTitle();
+                            // wallpaper filename now as imagename
+                            hiresIntent.putExtra("imagename", wpfn);
+                            // call image activity with wallpaper selection mode at startup
+                            hiresIntent.putExtra("wpselect", true);
+                            Log.i("HFCM", "Changing wallpaper '" + wpfn + "'");
+                            startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
                         }
                         return true;
                     default:
@@ -1195,13 +1248,15 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    // Listener for changed preferences. This is called after each single change IMMEDIATELY!
-    // This means, if changing a preference that might trigger a more expensive action, it could
-    // get bad if user toggles that switch and in the end closes the dialog without any effective
-    // change.
-    // The onActivityResult() method reacting on SETTINGS_REQUEST is called AFTER the settings
-    // dialog activity is closed and might be a better place to handle changes. The following
-    // code solves this by using "change flags", checked in onActivityResult() later on.
+    /**
+     * Listener for changed preferences. This is called after each single change IMMEDIATELY!
+     * This means, if changing a preference that might trigger a more expensive action, it could
+     * get bad if user toggles that switch and in the end closes the dialog without any effective
+     * change.
+     * The onActivityResult() method reacting on SETTINGS_REQUEST is called AFTER the settings
+     * dialog activity is closed and might be a better place to handle changes. The following
+     * code solves this by using "change flags", checked in onActivityResult() later on.
+     */
     SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener = new
             SharedPreferences.OnSharedPreferenceChangeListener() {
                 @Override
@@ -1323,7 +1378,8 @@ public class MainActivity extends AppCompatActivity
         }
         if (id == R.id.action_about) {
             new dialogDisplay(MainActivity.this, "Version: " + ABOUT_VERSION +
-                    "\nTODO credits:\nflaticons.com for movie_other_64.png",
+                    "\nTODO credits:\nflaticons.com for movie_other_64.png\n\n" +
+                    getString(R.string.credits_first_testers),
                     "Infos (still development)");
             return true;
         }
@@ -1340,8 +1396,8 @@ public class MainActivity extends AppCompatActivity
             //i.putExtra(Intent.EXTRA_EMAIL, new String[]{"user@domain.com"});
             //String cc[] = {vKE() + "," + vHH()};
             //i.putExtra(Intent.EXTRA_EMAIL, cc);
-            i.putExtra(Intent.EXTRA_SUBJECT, "Greetings from FunInSpace");
-            i.putExtra(Intent.EXTRA_TEXT, "Just a test email sent by the famous FunInSpace App. I hope you enjoy the attachment :)");
+            i.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.test_mail_subject));
+            i.putExtra(Intent.EXTRA_TEXT, getString(R.string.test_mail_text));
 
             // == ADDING A SINGLE FILE ATTACHMENT TO THE MAIL ==  // TODO multiple
             // E-mail apps do not have access to my storage - prohibited by Android security
@@ -1422,10 +1478,12 @@ public class MainActivity extends AppCompatActivity
             changeWallpaper("");
         }
         if (id == R.id.action_search_apod) {
-            new dialogDisplay(MainActivity.this, "Searching the NASA APOD Archive is not yet available.", "TODO");
+            new dialogDisplay(MainActivity.this,
+                    "Searching the NASA APOD Archive is not yet available.", "TODO");
         }
         if (id == R.id.action_filter) {
-            new dialogDisplay(MainActivity.this, "Filter List by Rating, wallpaper status, image size, video is not yet implemented.", "TODO");
+            new dialogDisplay(MainActivity.this,
+                    "Filter List by Rating, wallpaper status, image size, video is not yet implemented.", "TODO");
         }
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -1526,11 +1584,11 @@ public class MainActivity extends AppCompatActivity
             File wpFile = new File(getApplicationContext().getFilesDir(), wpName);
             if (wpFile.exists()) {
                 if (wpName.equals(wpFileCurrent)) {
-                    Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found AS ACTIVE");
+                    //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found AS ACTIVE");
                     newitem.setWpFlag(WP_ACTIVE);
                     currentWallpaperIndex = count;
                 } else {
-                    Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found");
+                    //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found");
                     newitem.setWpFlag(WP_EXISTS);
                 }
             } else {
@@ -1685,7 +1743,8 @@ public class MainActivity extends AppCompatActivity
                     sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
                     execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
         } else {
-            new dialogDisplay(this, getString(R.string.warn_apod_disable), getString(R.string.reminder));
+            new dialogDisplay(this, getString(R.string.warn_apod_disable),
+                    getString(R.string.reminder));
         }
     }
 

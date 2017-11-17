@@ -62,6 +62,12 @@
     Dropbox Liste nicht unbedingt täglich aktualisiert wird.</string>
     <string name="search_option">Vollsuche</string>
     <string name="full_search_explain">Suche in Titel und zusätzlich in Beschreibungstext</string>
+    <string name="test_mail_text">Just a test email sent by the famous FunInSpace App. I hope you enjoy the attachment :)</string>
+    <string name="test_mail_subject">Greetings from FunInSpace</string>
+    <string name="credits_first_testers">First pre alpha testers credits: Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger</string>
+    <string name="rating">Bewertung</string>
+    <string name="set_as_wallpaper">Setze als Hintergrundbild</string>
+    <string name="reselect_wallpaper">Hintergrund Ausschnitt neu wählen</string>
     <string-array name="wp_quality_titles">
         <item>Niedrig</item>
         <item>Mittel</item>

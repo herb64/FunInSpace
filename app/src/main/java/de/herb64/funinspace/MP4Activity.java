@@ -175,9 +175,9 @@ public class MP4Activity extends AppCompatActivity {
         outState.putInt("playpos", mp4View.getCurrentPosition());
         outState.putBoolean("isplaying", mp4View.isPlaying());
         outState.putString("mp4url", mp4Url);
-        Log.i("HFCM", "Saving instance: " + mp4Url +
+        /*Log.i("HFCM", "Saving instance: " + mp4Url +
                 ", Pos: " + mp4View.getCurrentPosition() +
-                ", Playing: " + mp4View.isPlaying());
+                ", Playing: " + mp4View.isPlaying());*/
     }
 
     /**

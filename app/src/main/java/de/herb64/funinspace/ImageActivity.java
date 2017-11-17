@@ -63,6 +63,10 @@ import de.herb64.funinspace.helpers.utils;
 // See also about youtube icon
 // https://www.youtube.com/yt/about/brand-resources/#logos-icons-colors
 
+// TODO: it would be good, if the second long press could be omitted and the selection just can be
+//       taken when closing the window...
+// TODO: resizing of the selection rect to
+
 public class ImageActivity extends AppCompatActivity implements ImgHiresFragment.myCallbacks {
     private drawableImageView ivHires = null;
     private Bitmap myBitmap;
@@ -157,9 +161,9 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         }
         // Get orientation: see https://developer.android.com/reference/android/view/Display.html
         isLandScape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
-        wallPaperSelectMode = false;
+        /*wallPaperSelectMode = false;
         //wallPaperQuality = DEFAULT_WP_QUALITY;
-        ivHires.setSelectRect(null);
+        ivHires.setSelectRect(null);*/
 
         // Get info on memoryClass - needed for bitmap loading to avoid OOM situations
         ActivityManager activityManager = (ActivityManager) this.getSystemService(ACTIVITY_SERVICE);
@@ -190,6 +194,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             maxTextureSize = savedInstanceState.getInt("maxtexturesize");
             imageName = savedInstanceState.getString("imagename");
             wallPaperQuality = savedInstanceState.getInt("wallpaper_quality");
+            wallPaperSelectMode = false;
             if (myBitmap != null) {
                 initializeMatrix();
             }
@@ -204,6 +209,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             maxTextureSize = intent.getIntExtra("maxtexturesize",0);
             imageName = intent.getStringExtra("imagename");
             wallPaperQuality = Integer.parseInt(intent.getStringExtra("wallpaper_quality"));
+            // We now can start the activity in select mode without need to first long press
+            wallPaperSelectMode = intent.getBooleanExtra("wpselect", false);
             returnIntent = new Intent();
 
             // TODO Docu
@@ -229,6 +236,12 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 fm.beginTransaction().add(mHiresFragment, TAG_TASK_FRAGMENT).commit();
             }
         }
+
+        //wallPaperSelectMode = false;
+        //wallPaperQuality = DEFAULT_WP_QUALITY;
+        ivHires.setSelectRect(null);
+
+
         Log.i("HFCM", "Finished oncreate in imageactivity with quality " + wallPaperQuality);
     }
 
@@ -474,9 +487,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             if (wallPaperSelectMode) {
                 wallPaperSelectMode = false;
                 ivHires.setSelectRect(null);
-
-                Log.w("HFCM", "Wallpaper processing start...");
-
                 //SystemClock.sleep(3000);
                 // Map wallPaperSelectRect to a hires bitmap region and use BitmapRegionDecoder
                 // to cut this range + apply scaling for the wallpaper bitmap object
@@ -555,7 +565,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                     returnIntent.putExtra("wallpaperfile", imageName);
                 }
 
-                Log.w("HFCM", "Wallpaper processing finished");
                 String toaster = getString(R.string.toast_wp_select_finished);
                 Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
 
@@ -773,6 +782,11 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         returnIntent.putExtra("hiresurl", strHires);
         returnIntent.putExtra("logString", teststring);
         setResult(RESULT_OK,returnIntent);
+
+        // Initialize wallpaper selection rectangle, if we already started in active selection mode
+        if (wallPaperSelectMode) {
+            initWPSelect();
+        }
     }
 
     /* THE OLD CODE: AsyncTask was defined HERE with doInBackground and onPostExecute.
@@ -826,5 +840,58 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         } else {
             Log.d(TAG, "Fragment is null, no remove");
         }*/
+    }
+
+    /**
+     * Initialize the wallpaper selection rectangle without having the need to long click on the
+     * image to activate. This is used when image activity is started from contextual action mode
+     * This only gets called, if wallpaperselection mode was set by the intent.
+     * TODO: this code is double from what is in onLongPress handler - cleanup the code!!
+     */
+    private void initWPSelect() {
+        float aspectWall = (float) dispWidth / (float) dispHeight;
+        if (isLandScape) {
+            aspectWall = 1f / aspectWall;
+        }
+        int wallWidth = isLandScape ? dispHeight : dispWidth;
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
+            aspectWall *= 2f;
+            wallWidth *= 2;
+        }
+        float aspectBitmap = (float) imgWidth / (float) imgHeight;
+
+        // Set wallpapper selection rectangle size and moving bounds within the image view
+        float wallSelectHeight;
+        float wallSelectWidth;
+        if (aspectBitmap >= aspectWall) {
+            wallSelectHeight = scaledHeight;
+            wallSelectWidth = wallSelectHeight * aspectWall;
+        } else {
+            wallSelectWidth = scaledWidth;
+            wallSelectHeight = wallSelectWidth / aspectWall;
+        }
+        wpMinX = (int) (((float)viewWidth - scaledWidth) / 2f);
+        wpMaxX = (int) (((float)viewWidth + scaledWidth) / 2f);
+        wpMinY = (int) (((float)viewHeight - scaledHeight) / 2f);
+        wpMaxY = (int) (((float)viewHeight + scaledHeight) / 2f);
+
+        // Initialize wallpaper selection mode - create a centered rectangle
+        //String toaster = getString(R.string.toast_wp_start_select);
+        //Toast.makeText(ImageActivity.this, "Enable test", Toast.LENGTH_LONG).show();
+        //wallPaperSelectMode = true;
+
+        // Reset view matrix to initial fullscreen view for selection of wallpaper range
+        initializeMatrix();
+        ivHires.setImageMatrix(imgMatrix);
+
+        // Calculate starting wallpaper selection Rectangle for image view
+        wallPaperSelectRect.set(
+                (int) (((float)viewWidth - wallSelectWidth) / 2f),
+                (int) (((float)viewHeight - wallSelectHeight) / 2f),
+                (int) (((float)viewWidth + wallSelectWidth) / 2f),
+                (int) (((float)viewHeight + wallSelectHeight) / 2f)
+        );
+        ivHires.setSelectRect(wallPaperSelectRect);
+        ivHires.invalidate();
     }
 }

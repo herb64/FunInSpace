@@ -29,14 +29,21 @@
     app:showAsAction="ifRoom|collapseActionView"-->
     <item
         android:id="@+id/cab_rating"
-        android:title="Rating"
+        android:title="@string/rating"
         app:showAsAction="ifRoom"
         android:icon="@android:drawable/btn_star" />
 
+    <!-- todo: need new icons for wallpaper - but how to show them in overflow -->
     <item
         android:id="@+id/cab_wallpaper"
-        android:title="Set as wallpaper"
+        android:title="@string/set_as_wallpaper"
         app:showAsAction="ifRoom"
         android:icon="@android:drawable/btn_plus" />
+
+    <item
+        android:id="@+id/cab_wp_reselect"
+        android:icon="@android:drawable/btn_minus"
+        android:title="@string/reselect_wallpaper"
+        app:showAsAction="ifRoom" />
 
 </menu>
