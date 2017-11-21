@@ -48,16 +48,21 @@
         android:title="Search"
         android:icon="@android:drawable/ic_menu_search"
         app:showAsAction="always|collapseActionView"
-        app:actionViewClass="android.support.v7.widget.SearchView"/>
+        app:actionViewClass="android.support.v7.widget.SearchView" />
 
     <!-- 13.11.2017 - adding filter icon - not yet nice. TODO: Need to check license
-         or better design my own -->
+         or better design my own
+         18.11.2017 - try to make my own filterview to be displayed in the app bar, similar
+         to SearchView
+         TODO: app:actionProviderClass - this might be the better way to use actionprovider -->
+
     <item
         android:id="@+id/action_filter"
         android:orderInCategory="5"
         android:title="@string/action_filter"
         android:icon="@drawable/ic_filter"
-        app:showAsAction="always" />
+        app:showAsAction="always|collapseActionView"
+        app:actionViewClass="de.herb64.funinspace.FilterView" />
 
     <item
         android:id="@+id/action_settings"

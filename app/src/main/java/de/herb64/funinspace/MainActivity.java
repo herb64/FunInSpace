@@ -19,6 +19,9 @@ import android.speech.tts.TextToSpeech;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
+import android.support.v4.internal.view.SupportMenuItem;
+import android.support.v4.view.MenuItemCompat;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.view.menu.MenuBuilder;
@@ -131,7 +134,7 @@ public class MainActivity extends AppCompatActivity
     //private static final int GIB = 1024 * MIB;
 
     // strings for media type classification
-    private static final String M_IMAGE = "image";
+    protected static final String M_IMAGE = "image";
     protected static final String M_YOUTUBE = "youtube";
     protected static final String M_VIMEO = "vimeo";
     protected static final String M_MP4 = "mp4";      // first nasa mp4 on 13.11.2017
@@ -144,8 +147,8 @@ public class MainActivity extends AppCompatActivity
 
     private static final String WP_CURRENT_BACKUP = "w_current.jpg";
     protected static final int WP_NONE = 0;
-    protected static final int WP_EXISTS = 1 << 1;
-    protected static final int WP_ACTIVE = 1 << 2;
+    protected static final int WP_EXISTS = 1;// << 1;
+    protected static final int WP_ACTIVE = 3;// << 2;
     //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers                  !!!!! TODO: used for cleanup and shuffle option
 
     @Override
@@ -154,6 +157,13 @@ public class MainActivity extends AppCompatActivity
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+        //https://developer.android.com/design/patterns/actionbar.html
+        ActionBar actbar = getSupportActionBar();
+        actbar.setIcon(R.mipmap.ic_launcher);
+        actbar.setDisplayShowTitleEnabled(false);
+        // we can set our own custom view here...
+        //actbar.setDisplayShowCustomEnabled(true);
+        //actbar.setCustomView();
 
         // get the locale - using default leads to several warnings with String.format()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
@@ -264,7 +274,7 @@ public class MainActivity extends AppCompatActivity
                     v.setEllipsize(null);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);
                     if (read) {
-                        tts.speak(myList.get(position).getExplanation(),
+                        tts.speak(myList.get((int)id).getExplanation(),
                                 TextToSpeech.QUEUE_FLUSH,
                                 null);
                     }
@@ -342,6 +352,21 @@ public class MainActivity extends AppCompatActivity
 
                 MenuItem item = menu.findItem(R.id.cab_wallpaper);
                 item.setEnabled(!(selected.size() > 1));
+                if (selected.size() == 1) {
+                    switch (myList.get(selected.get(0)).getWpFlag()) {
+                        case WP_NONE:
+                            item.setTitle(R.string.set_as_wallpaper);
+                            break;
+                        case WP_EXISTS:
+                            item.setTitle(R.string.remove_as_wallpaper);
+                            item.setEnabled(false);
+                            break;
+                        case WP_ACTIVE:
+                            item.setEnabled(false);
+                            break;
+                    }
+                }
+
                 MenuItem item2 = menu.findItem(R.id.cab_wp_reselect);
                 item2.setEnabled(!(selected.size() > 1));
                 // TODO: how can the "read" icon be "shown as inactive"? - move into on item checkedstatechange
@@ -483,6 +508,7 @@ public class MainActivity extends AppCompatActivity
                     case R.id.cab_wallpaper:
                     case R.id.cab_wp_reselect:
                         // We only get here, if there's ONE SINGLE selected space item.
+                        // TODO: handle wallpaper remove !!!
                         String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
                         File wp = new File(getApplicationContext().getFilesDir(), wpfn);
                         if (wp.exists() && menuItem.getItemId()==R.id.cab_wallpaper) {
@@ -664,7 +690,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onStop() {
         super.onStop();
-        if (tts.isSpeaking()) {
+        if (tts != null && tts.isSpeaking()) {
             tts.stop();
         }
     }
@@ -1358,6 +1384,9 @@ public class MainActivity extends AppCompatActivity
      * The options menu is the primary Application menu. Do not confuse with "settings" dialog.
      * It is called during startup of the activity once.
      * Note the code to make icons visible in overflow menu.
+     * TODO: document how to make icons for search AND filter disappear, if any of these actions
+     * is actually expanded. Otherwise, for example, filter could be clicked, while search action
+     * was expaned, getting bad overlay of graphics... -> SupportMenuItem!!!
      * @param menu the menu item
      * @return boolean return value
      */
@@ -1375,19 +1404,21 @@ public class MainActivity extends AppCompatActivity
             m.setOptionalIconsVisible(true);
         }
 
-        MenuItem searchItem = menu.findItem(R.id.action_search); // 22.10.2017 - add
-        //SearchView sv = (SearchView) MenuItemCompat.getActionView(searchItem); // deprecated
+        // 20.11.2017 Switch MenuItem to SupportMenuItem and use noinspection RestrictedApi  TODO DOCU
+        // to allow for registering expand listeners for action view
+        final SupportMenuItem searchItem = (SupportMenuItem) menu.findItem(R.id.action_search); // 22.10.2017
+        //noinspection RestrictedApi
         SearchView sv = (SearchView) searchItem.getActionView();
-
         // on close listener does not work at all - see also discussions on web. I now use the
         // current search string length = 0 to detect, that the search is closed and that the list
         // is not filtered again.
+        // Todo: this can be solved by using the actionexpand listeners instead!!!                                                                          !!!!!!!!!!!!!
+        // Todo: indeed, we need a reset of our filter anyway!
         /*sv.setOnCloseListener(new SearchView.OnCloseListener() {
             @Override
             public boolean onClose() {
             }
         });*/
-
         sv.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String s) {
@@ -1407,7 +1438,103 @@ public class MainActivity extends AppCompatActivity
                 return false;
             }
         });
-        return true;
+
+        // === FILTER FOR OTHER CONSTRAINTS ===
+
+        // see also https://developer.android.com/training/appbar/action-views.html
+        // TODO: actually, this looks like the way to go: actionprovider - hmmm, really?
+        // https://developer.android.com/reference/android/support/v4/view/ActionProvider.html
+        // https://www.grokkingandroid.com/adding-actionviews-to-your-actionbar/
+        // https://gist.github.com/f2prateek/3982054
+        final SupportMenuItem filterItem = (SupportMenuItem) menu.findItem(R.id.action_filter);
+        // getting inspection error:
+        // "SupportMenuItem.getActionView can only be called from within the same library group (groupId=com.android.support)
+        //noinspection RestrictedApi
+        FilterView fv = (FilterView) filterItem.getActionView();    // define in menu_main.xml
+
+        // TODO !!!!!!!!!!!!!!! see lalatex doc for some more details and work out history
+        // Problems adding expand listener (to disable/enable other menu items)
+        // ....
+
+        /* deprecated, see https://developer.android.com/reference/android/support/v4/view/MenuItemCompat.html
+        MenuItemCompat.setOnActionExpandListener(filterItem,
+                new MenuItemCompat.OnActionExpandListener() ....
+                });
+        FilterView fv =
+                (FilterView) MenuItemCompat.getActionView(filterItem);*/
+
+        // not implemented
+        /*fv.setOnCloseListener(new FilterView.OnCloseListener() {
+            @Override
+            public boolean onClose() {
+            }
+        });*/
+
+        fv.setOnQueryConstraintListener(new FilterView.OnQueryConstraintListener() {
+            @Override
+            public boolean onQueryConstraintSubmit(String s) {
+                if (s.endsWith("0:0:0:0:0")) {
+                    adp.cleanMap();
+                }
+                adp.getFilter().filter(s);
+                return false;
+            }
+
+            @Override
+            public boolean onQueryConstraintChange(String s) {
+                if (s.endsWith("0:0:0:0:0")) {
+                    adp.cleanMap();
+                }
+                adp.getFilter().filter(s);
+                return false;
+            }
+        });
+
+        // We either use a text search OR a filter (e.g. by video). The respectively other option
+        // needs to be removed from the menu items to avoid bad overlays. We can achieve this by
+        // registering a listener to the expansion of either type. This was quite a bit annoying to
+        // find out, how to get this work.
+
+        // Make "textsearch" menu item unavailable, if "filter" is currently used
+        //noinspection RestrictedApi
+        filterItem.setSupportOnActionExpandListener(new MenuItem.OnActionExpandListener() {
+            @Override
+            public boolean onMenuItemActionExpand(MenuItem menuItem) {
+                searchItem.setVisible(false);
+                // TODO - what about inactivating other items as well (those in bar)
+                //menu.findItem(R.id.action_settings).setVisible(false);
+                // this just makes the next from overflow to appear... not saving space
+                // well, we could overwrite the complete bar... but GROUPS could be used (removegroup, set group visible...)
+                return true;
+            }
+            @Override
+            public boolean onMenuItemActionCollapse(MenuItem menuItem) {
+                searchItem.setVisible(true);
+                //adp.cleanMap();
+                //adp.getFilter().filter("");                                                                                                         // TODO RE-TEST
+                return true;
+            }
+        });
+
+        // Make "filter" menu item unavailable, if "textsearch" is currently used
+        //noinspection RestrictedApi
+        searchItem.setSupportOnActionExpandListener(new MenuItem.OnActionExpandListener() {
+            @Override
+            public boolean onMenuItemActionExpand(MenuItem menuItem) {
+                filterItem.setVisible(false);
+                return true;
+            }
+
+            @Override
+            public boolean onMenuItemActionCollapse(MenuItem menuItem) {
+                filterItem.setVisible(true);
+                //adp.cleanMap();
+                return true;
+            }
+        });
+
+        return super.onCreateOptionsMenu(menu);
+        //return true;
     }
 
     /**
@@ -1416,6 +1543,7 @@ public class MainActivity extends AppCompatActivity
      * app:showAsAction="ifRoom|collapseActionView"
      * app:actionViewClass="android.support.v7.widget.SearchView"
      * This is handled by actionViewClass
+     * Same applies to the new class "FilterView", that has been created on 18.11.2017
      * @param item  the menuitem that has been selected
      * @return      return true, if we handled the event, else false to forward
      */
@@ -1555,10 +1683,7 @@ public class MainActivity extends AppCompatActivity
             new dialogDisplay(MainActivity.this,
                     "Searching the NASA APOD Archive is not yet available.", "TODO");
         }
-        if (id == R.id.action_filter) {
-            new dialogDisplay(MainActivity.this,
-                    "Filter List by Rating, wallpaper status, image size, video is not yet implemented.", "TODO");
-        }
+        // if (id == R.id.action_filter)  //no longer needed
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
         return false;
@@ -1806,6 +1931,9 @@ public class MainActivity extends AppCompatActivity
         ArrayList<Long> epochs = utils.getNASAEpoch(loc);
         // we check the first image in list: if it's epoch is same as current NASA 00:00:00 epoch,
         // we do not call the apod loader at all.
+
+        // Get current date and NASA date: if NASA date is behind, we need to wait, e.g. 04:00 DE
+
         /*if (myList.get(0).getDateTime() == epochs.get(0)) {
             new dialogDisplay(MainActivity.this, "Image already loaded for this epoch...");
         } else {

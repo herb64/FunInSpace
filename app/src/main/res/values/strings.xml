@@ -171,4 +171,5 @@
     <string name="pref_summary_read_text">Read out the explanation on each foldout of the explanation text. The context menu also offers a \'read out\' option.</string>
     <string name="pref_title_read_text">Read explanation</string>
     <string name="cab_read">Read out</string>
+    <string name="remove_as_wallpaper">Remove wp (TODO)</string>
 </resources>
