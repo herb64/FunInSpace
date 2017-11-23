@@ -53,4 +53,10 @@
         android:title="@string/reselect_wallpaper"
         app:showAsAction="ifRoom" />
 
+    <item
+        android:id="@+id/cab_wp_remove"
+        android:icon="@android:drawable/btn_minus"
+        android:title="@string/remove_as_wallpaper"
+        app:showAsAction="ifRoom" />
+
 </menu>

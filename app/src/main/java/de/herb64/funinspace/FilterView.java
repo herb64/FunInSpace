@@ -8,10 +8,7 @@ import android.support.v7.widget.LinearLayoutCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.CheckBox;
-import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import java.util.Locale;
 
 /**
@@ -32,7 +29,6 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
     private OnQueryConstraintListener mOnQueryConstraintListener;
     private checkBoxClickListener cbClickListener;
     private Context mCtx;
-    //private CheckBox cb_video;
     //private HorizontalScrollView sv_scroll;
     //private LinearLayout ll_scroll;
     private ImageView iv_rating1;
@@ -42,8 +38,7 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
     private ImageView iv_rating5;
     private ImageView iv_youtube;
     private ImageView iv_vimeo;
-    private ImageView iv_video;         // all other videos (non youtube/vimeo/??, mp4 for now)
-    //private CheckBox cb_wallpaper;
+    private ImageView iv_video;     // MP4
     private ImageView iv_wallpaper;
 
     // Current selection status information, from which the filter string is built
@@ -52,28 +47,31 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
     private int rating_select_state;
     private int width_select_state;
     private int height_select_state;
-    // a special string to be sent to the filter
-    private String filterSearchTerm;
 
     // C O N S T A N T S
-    private static final int FILTER_VIDEO_NONE = 0;
+    protected static final int FILTER_VIDEO_NONE = 0;
     protected static final int FILTER_YOUTUBE = 1;
     protected static final int FILTER_VIMEO = 1 << 1;
     protected static final int FILTER_MP4 = 1 << 2;
 
+
+    /**
+     * Implementation for CollapsibleActionView
+     */
     @Override
     public void onActionViewExpanded() {
         //updateViewsVisibility(true);
     }
 
     /**
-     * Same code as with onLongClick TODO Check and make function if ok..
+     * Implementation for CollapsibleActionView
      */
     @Override
     public void onActionViewCollapsed() {
         //clearFocus();
         //updateViewsVisibility(true);
-        rating_select_state = 0;
+        resetFilter();
+        /*rating_select_state = 0;
         video_select_state = 0;
         wp_select_state = 0;
         width_select_state = 0;
@@ -87,7 +85,7 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
         iv_vimeo.setImageResource(R.drawable.vimeo_icon_dark);
         iv_video.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
         iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
-        mOnQueryConstraintListener.onQueryConstraintChange(makeFilterString());
+        mOnQueryConstraintListener.onQueryConstraintChange(makeFilterString());*/
     }
 
     /*@Override
@@ -184,10 +182,9 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
         wp_select_state = MainActivity.WP_NONE;
     }
 
-
     /**
      * Listener for the items in the FilterView. Implements click and longclick
-     * TODO - if one star left for rating, cannot be cleared....
+     * TODO - if one star left for rating, cannot be cleared.... how to handle that?
      * TODO - rename class checkBoxClickListener ---
      */
     private class checkBoxClickListener implements OnClickListener, OnLongClickListener {
@@ -236,19 +233,6 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
                     rating_select_state = 5;
                     break;
 
-                /*case R.id.cb_video:
-                    if (cb_video.isChecked()) {
-                        iv_video.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.holo_orange_light));
-                        mOnQueryConstraintListener.onQueryConstraintChange("");
-                        //mOnQueryConstraintListener.onQueryConstraintChange("MEDIA___M_YOUTUBE");
-                    } else {
-                        iv_video.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
-                        //mOnQueryConstraintListener.onQueryConstraintChange("");
-                    }
-                    break;*/
-
-                // todo: maybe have icons for youtube, vimeo and mp4 separately
-
                 case R.id.iv_filter_youtube:
                     if ((video_select_state & FILTER_YOUTUBE) == FILTER_YOUTUBE) {
                         iv_youtube.setImageResource(R.drawable.youtube_social_icon_dark);
@@ -286,30 +270,19 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
                     switch (wp_select_state) {
                         case MainActivity.WP_NONE:
                             iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.darker_gray));
-                            //mOnQueryConstraintListener.onQueryConstraintChange("WP___1");
                             wp_select_state = MainActivity.WP_EXISTS;
                             break;
                         case MainActivity.WP_EXISTS:
                             iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, R.color.color_hfcm_yellow_bright));
-                            //mOnQueryConstraintListener.onQueryConstraintChange("WP___2");
                             wp_select_state = MainActivity.WP_ACTIVE;
                             break;
                         case MainActivity.WP_ACTIVE:
                             iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
-                            //mOnQueryConstraintListener.onQueryConstraintChange("");
                             wp_select_state = MainActivity.WP_NONE;
                             break;
                         default:
                             break;
                     }
-
-                    /*if (cb_wallpaper.isChecked()) {
-                        iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, R.color.color_hfcm_yellow_bright));
-                        mOnQueryConstraintListener.onQueryConstraintChange("WP___2");
-                    } else {
-                        iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
-                        mOnQueryConstraintListener.onQueryConstraintChange("");
-                    }*/
                     break;
                 default:
                     break;
@@ -325,7 +298,8 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
          */
         @Override
         public boolean onLongClick(View view) {
-            rating_select_state = 0;
+            resetFilter();
+            /*rating_select_state = 0;
             video_select_state = 0;
             wp_select_state = 0;
             width_select_state = 0;
@@ -339,7 +313,7 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
             iv_vimeo.setImageResource(R.drawable.vimeo_icon_dark);
             iv_video.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
             iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
-            mOnQueryConstraintListener.onQueryConstraintChange(makeFilterString());
+            mOnQueryConstraintListener.onQueryConstraintChange(makeFilterString());*/
             return true;   // avoid simple click processing after
         }
     }
@@ -372,4 +346,24 @@ public class FilterView extends LinearLayoutCompat implements CollapsibleActionV
         );
     }
 
+    /**
+     * Reset filter state variables and icons in Filter View
+     */
+    private void resetFilter() {
+        rating_select_state = 0;
+        video_select_state = 0;
+        wp_select_state = 0;
+        width_select_state = 0;
+        height_select_state = 0;
+        iv_rating1.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
+        iv_rating2.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
+        iv_rating3.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
+        iv_rating4.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
+        iv_rating5.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
+        iv_youtube.setImageResource(R.drawable.youtube_social_icon_dark);
+        iv_vimeo.setImageResource(R.drawable.vimeo_icon_dark);
+        iv_video.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
+        iv_wallpaper.setColorFilter(ContextCompat.getColor(mCtx, android.R.color.black));
+        mOnQueryConstraintListener.onQueryConstraintChange(makeFilterString());
+    }
 }

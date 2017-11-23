@@ -77,6 +77,9 @@ import de.herb64.funinspace.models.spaceItem;
 //       might be an option. But take care, because
 //       on 10.10.2017, it failed, although link was ok - network issue most likely, CHECK!!!
 
+// TODO: network check - timeouts, 404 etc..  --- UNMETERED NETWORKS - check this
+// https://developer.android.com/reference/android/net/NetworkCapabilities.html
+
 /*
  * The MainActivity Class for FunInSpace
  */
@@ -99,7 +102,8 @@ public class MainActivity extends AppCompatActivity
     private Locale loc;
     protected Drawable expl_points;
     private SharedPreferences sharedPref;
-    private boolean thumbQualityChanged = false;    // indicate preference setting change
+    private boolean thumbQualityChanged;    // indicate preference setting change
+    private boolean dateFormatChanged;      // important: need true after installation
     private int currentWallpaperIndex = -1;
     protected TimeZone tzNASA;
     protected Calendar cNASA;
@@ -118,7 +122,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.3.8 (alpha),\nBuild Date 2017-11-17\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.3.9 (alpha),\nBuild Date 2017-11-21\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
@@ -173,18 +177,27 @@ public class MainActivity extends AppCompatActivity
             loc = getResources().getConfiguration().locale;
         }
 
-        // Timezone and Calendar objects used to base our timestamps on current NASA TimeZone
-        tzNASA = TimeZone.getTimeZone("America/New_York"); // NASA server is within this TZ
-        cNASA = Calendar.getInstance(tzNASA);
-        // TODO - make display format of date configurable in settings
-        formatter = new SimpleDateFormat("dd. MMM yyyy", loc);
-        formatter.setTimeZone(tzNASA);
-        formatter.setCalendar(cNASA);
-
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // TODO check, if this is rotation proof, or if we bettger should get prefs each time
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+        // Initialize flags to true, so that first open of preferences dialog, which triggers the
+        // prefChangeListener, does change it back to false in this case.
+        dateFormatChanged = !sharedPref.contains("date_format");
+        thumbQualityChanged = !sharedPref.contains("rgb565_thumbs");
         sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
+
+        // Timezone and Calendar objects used to base our timestamps on current NASA TimeZone
+        // We must interpret the stored epoch value as seen from NASA time!
+        tzNASA = TimeZone.getTimeZone("America/New_York"); // NASA server is within this TZ
+        cNASA = Calendar.getInstance(tzNASA);
+        // TODO - make display format of date configurable in settings
+        //String fmt = sharedPref.getString("date_format", getString(R.string.df_dd_mm_yyyy));
+        //String fmt = sharedPref.getString("date_format", "dd.MMM.yyyy");
+        // TODO: shared prefs are mixed up for date format
+        String fmt = sharedPref.getString("date_format", getString(R.string.df_dd_mm_yyyy));
+        formatter = new SimpleDateFormat(fmt, loc);
+        formatter.setTimeZone(tzNASA);
+        formatter.setCalendar(cNASA);
 
         // TODO solve issue with vectorgraphics on 4.1 (4.x?) - for now, just dirty workaround...
         // arrow_down_float image only - don't like that, but do it now
@@ -350,52 +363,47 @@ public class MainActivity extends AppCompatActivity
                 }*/
                 //item.setIcon(android.R.drawable.btn_plus); // also does not work
 
-                MenuItem item = menu.findItem(R.id.cab_wallpaper);
-                item.setEnabled(!(selected.size() > 1));
+                // By default, all menu items are visible
+                MenuItem item_setwp = menu.findItem(R.id.cab_wallpaper);
+                //item_setwp.setEnabled(!(selected.size() > 1));
+                MenuItem item_reselect = menu.findItem(R.id.cab_wp_reselect);
+                MenuItem item_remove = menu.findItem(R.id.cab_wp_remove);
                 if (selected.size() == 1) {
-                    switch (myList.get(selected.get(0)).getWpFlag()) {
-                        case WP_NONE:
-                            item.setTitle(R.string.set_as_wallpaper);
-                            break;
-                        case WP_EXISTS:
-                            item.setTitle(R.string.remove_as_wallpaper);
-                            item.setEnabled(false);
-                            break;
-                        case WP_ACTIVE:
-                            item.setEnabled(false);
-                            break;
-                    }
-                }
-
-                MenuItem item2 = menu.findItem(R.id.cab_wp_reselect);
-                item2.setEnabled(!(selected.size() > 1));
-                // TODO: how can the "read" icon be "shown as inactive"? - move into on item checkedstatechange
-
-                // Disable wallpaper menu item if currently active one is selected. This might only
-                // be changed in rectangle selection, but not set again...
-                // Important: onPrepareActionMode is called at different times:
-                // 1. if the FIRST space item is selected - selected array is empty at that time!!!
-                // 2. when clicking on the action bar - selected array is now filled with data
-                // 3. it is NOT called, if an action item on the bar is clicked, i.e. no overflow
-                // 4. it is NOT called on subsequent item selections
-                if (selected.size() == 1) {
+                    // For a single selection: non images cannot be selected at all
                     if (!myList.get(selected.get(0)).getMedia().equals(M_IMAGE)) {
-                        item.setEnabled(false);
-                        item2.setEnabled(false);
+                        // setVisible is better than setEnabled in this case!
+                        item_setwp.setVisible(false);
+                        item_reselect.setVisible(false);
+                        item_remove.setVisible(false);
                         return true;
                     }
-                    String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
-                    SharedPreferences shPref = getPreferences(Context.MODE_PRIVATE);
-                    String wpFileCurrent = shPref.getString("CURRENT_WALLPAPER_FILE", "");
-                    if (wpfn.equals(wpFileCurrent)) {
-                        item.setEnabled(false);
+                    int wpflag = myList.get(selected.get(0)).getWpFlag();
+                    if (wpflag == WP_ACTIVE) {
+                        item_setwp.setVisible(false);
+                        item_remove.setVisible(false);
+                        item_reselect.setVisible(true);
+                    } else if (wpflag == WP_EXISTS) {
+                        item_setwp.setVisible(true);
+                        item_remove.setVisible(true);
+                        item_reselect.setVisible(false);
+                    } else {
+                        item_setwp.setVisible(true);
+                        item_remove.setVisible(false);
+                        item_reselect.setVisible(false);
                     }
-                    File wpfile = new File(getApplicationContext().getFilesDir(), wpfn);
-                    if (!wpfile.exists()) {
-                        item2.setEnabled(false);
+                } else if (selected.size() > 1) {
+                    for (int idx : selected) {
+                        if (myList.get(idx).getWpFlag() == WP_EXISTS) {
+                            item_setwp.setVisible(false);
+                            item_remove.setVisible(true);
+                            item_reselect.setVisible(false);
+                            break;
+                        }
+                        item_setwp.setVisible(false);
+                        item_remove.setVisible(false);
+                        item_reselect.setVisible(false);
                     }
                 }
-
                 return true;        // ???
                 //return false;
             }
@@ -506,12 +514,103 @@ public class MainActivity extends AppCompatActivity
                         actionMode.finish();
                         return true;
                     case R.id.cab_wallpaper:
+                    case R.id.cab_wp_remove:
                     case R.id.cab_wp_reselect:
-                        // We only get here, if there's ONE SINGLE selected space item.
-                        // TODO: handle wallpaper remove !!!
-                        String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
+                        if (selected.size() == 1) {
+                            switch (myList.get(selected.get(0)).getWpFlag()) {
+                                case WP_NONE:
+                                case WP_ACTIVE:
+                                    String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
+                                    int maxAlloc = devInfo.getMaxAllocatable();
+                                    Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
+                                    hiresIntent.putExtra("hiresurl", myList.get(selected.get(0)).getHires());
+                                    hiresIntent.putExtra("listIdx", selected.get(0));
+                                    hiresIntent.putExtra("maxAlloc", maxAlloc);
+                                    hiresIntent.putExtra("maxtexturesize", maxTextureSize);
+                                    hiresIntent.putExtra("wallpaper_quality",
+                                            sharedPref.getString("wallpaper_quality", "80"));
+                                    lastImage = myList.get(selected.get(0)).getTitle();
+                                    // wallpaper filename now as imagename
+                                    hiresIntent.putExtra("imagename", wpfn);
+                                    // call image activity with wallpaper selection mode at startup
+                                    hiresIntent.putExtra("wpselect", true);
+                                    Log.i("HFCM", "Changing wallpaper '" + wpfn + "'");
+                                    startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
+                                    break;
+                                case WP_EXISTS:
+                                    // 2 options: set existing as wp or remove existing wp
+                                    switch (menuItem.getItemId()) {
+                                        case R.id.cab_wallpaper:
+                                            // Calling confirm dialog - this will set the wallpaper in callback
+                                            fragArguments = new Bundle();
+                                            fragArguments.putInt("IDX", selected.get(0));
+                                            fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
+                                            fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
+                                                    myList.get(selected.get(0)).getTitle()));
+                                            fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
+                                            fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
+                                            fm = getSupportFragmentManager();
+                                            confirmDialog confirmdlg = new confirmDialog();
+                                            confirmdlg.setArguments(fragArguments);
+                                            confirmdlg.show(fm, "CONFIRMTAG");
+                                            break;
+                                        case R.id.cab_wp_remove:
+                                            if (myList.get(selected.get(0)).getWpFlag() == WP_EXISTS) {
+                                                File wpdel = new File(getApplicationContext().getFilesDir(),
+                                                        myList.get(selected.get(0)).getThumb().replace("th_", "wp_"));
+                                                if (!wpdel.delete()) {
+                                                    Log.i("HFCM", "File delete for wallpaper did not return true");
+                                                }
+                                                myList.get(selected.get(0)).setWpFlag(WP_NONE);
+                                                adp.notifyDataSetChanged();
+                                            }
+                                            break;
+                                        default:
+                                            break;
+                                    }
+                                    break;
+                                default:
+                                    break;
+
+                            }
+                            /*File wp = new File(getApplicationContext().getFilesDir(),
+                                    myList.get(selected.get(0)).getThumb().replace("th_", "wp_"));
+                            if (!wp.exists()) { // TODO: could use wp status as well... ???
+                                // Calling confirm dialog - this will set the wallpaper in callback
+                                fragArguments = new Bundle();
+                                fragArguments.putInt("IDX", selected.get(0));
+                                fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
+                                fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
+                                        myList.get(selected.get(0)).getTitle()));
+                                fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
+                                fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
+                                fm = getSupportFragmentManager();
+                                confirmDialog confirmdlg = new confirmDialog();
+                                confirmdlg.setArguments(fragArguments);
+                                confirmdlg.show(fm, "CONFIRMTAG");
+                            }*/
+                            return true;
+                        }
+
+                        // This is reached for multiple selections, there's only one option: delete
+                        // all wallpapers, if existing for selected elements. No removal of the
+                        // active one. This just removes wp files and updates wp status
+                        // TODO; confirm dialog
+                        for (int idx : selected) {
+                            if (myList.get(idx).getWpFlag() == WP_EXISTS) {
+                                File wpdel = new File(getApplicationContext().getFilesDir(),
+                                        myList.get(idx).getThumb().replace("th_", "wp_"));
+                                if (!wpdel.delete()) {
+                                    Log.i("HFCM", "File delete for wallpaper did not return true");
+                                }
+                                myList.get(idx).setWpFlag(WP_NONE);
+                            }
+                        }
+                        adp.notifyDataSetChanged();
+
+                        /*String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
                         File wp = new File(getApplicationContext().getFilesDir(), wpfn);
-                        if (wp.exists() && menuItem.getItemId()==R.id.cab_wallpaper) {
+                        if (wp.exists()) {
                             // Calling confirm dialog - this will set the wallpaper in callback
                             fragArguments = new Bundle();
                             fragArguments.putInt("IDX", selected.get(0));
@@ -540,13 +639,21 @@ public class MainActivity extends AppCompatActivity
                             hiresIntent.putExtra("wpselect", true);
                             Log.i("HFCM", "Changing wallpaper '" + wpfn + "'");
                             startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
-                        }
+                        }*/
                         return true;
                     case R.id.cab_read:
+                        // deprecations
+                        // https://stackoverflow.com/questions/27968146/texttospeech-with-api-21
                         if (!tts.isSpeaking()) {
-                            tts.speak("Title",
-                                    TextToSpeech.QUEUE_ADD,
-                                    null);
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                tts.speak("Title",
+                                        TextToSpeech.QUEUE_ADD,
+                                        null, null);
+                            } else {
+                                tts.speak("Title",
+                                        TextToSpeech.QUEUE_ADD,
+                                        null);
+                            }
                             tts.playSilence(500L,
                                     TextToSpeech.QUEUE_ADD,
                                     null);
@@ -906,7 +1013,8 @@ public class MainActivity extends AppCompatActivity
         apodItem.setExplanation(sExplanation);
         apodItem.setHires(sHiresUrl);
         // now using long int epoch value for date in spaceItem
-        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
+        long epoch = utils.getNASAEpoch(loc).get(0);
+        /*SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
         // normally we would use code as below for correct locale, but we parse a specific
         // format here :_ "date": "2017-09-17", as returned by NASA in their json
         // DateFormat dF = SimpleDateFormat.getDateInstance();
@@ -917,7 +1025,7 @@ public class MainActivity extends AppCompatActivity
             epoch = dF.parse(sDate).getTime();
         } catch (ParseException e) {
             e.printStackTrace();
-        }
+        }*/
         apodItem.setDateTime(epoch);
         apodItem.setMedia(sMediaType);
         apodItem.setRating(0);
@@ -1344,6 +1452,16 @@ public class MainActivity extends AppCompatActivity
                     addItems();
                     adp.notifyDataSetChanged();
                 }
+                if (dateFormatChanged) {
+                    dateFormatChanged = false;
+                    // acutally, the SimpleDateFormat object does not seem to allow to change the
+                    // format string, so we recreate the object...
+                    String fmt = sharedPref.getString("date_format", getString(R.string.df_dd_mm_yyyy));
+                    formatter = new SimpleDateFormat(fmt, loc); // "dd. MMMM yyyy"
+                    formatter.setTimeZone(tzNASA);
+                    formatter.setCalendar(cNASA);
+                    adp.notifyDataSetChanged();
+                }
             }
         }
     }
@@ -1356,6 +1474,9 @@ public class MainActivity extends AppCompatActivity
      * The onActivityResult() method reacting on SETTINGS_REQUEST is called AFTER the settings
      * dialog activity is closed and might be a better place to handle changes. The following
      * code solves this by using "change flags", checked in onActivityResult() later on.
+     * IMPORTANT: Need to have set the "Changed" flags to TRUE, if no shared prefs exist, because
+     * this listener gets called when first opening the preferences after installation. This is
+     * done on sharedPreferences preparation in onCreate()
      */
     SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener = new
             SharedPreferences.OnSharedPreferenceChangeListener() {
@@ -1363,11 +1484,10 @@ public class MainActivity extends AppCompatActivity
                 public void onSharedPreferenceChanged(SharedPreferences sharedPreferences,
                                                       String changed) {
                     if (changed.equals("rgb565_thumbs")) {
-                        // On each switch toggle, we invert the value without immediately starting
-                        // any action. The final value is checked in onActivityResult()
-                        // to determine, if an action is needed based on the value of this setting
-                        // after the user has closed the dialog.
                         thumbQualityChanged ^= true;
+                    }
+                    if (changed.equals("date_format")) {
+                        dateFormatChanged ^= true;
                     }
                     if (changed.equals("full_search")) {
                         // this one: just set on each single toggle
@@ -1696,7 +1816,6 @@ public class MainActivity extends AppCompatActivity
         super.onTrimMemory(level);
     }*/
 
-
     /**
      * On startup, fill ArrayList of spaceItems with contents described in local JSON
      */
@@ -1933,6 +2052,9 @@ public class MainActivity extends AppCompatActivity
         // we do not call the apod loader at all.
 
         // Get current date and NASA date: if NASA date is behind, we need to wait, e.g. 04:00 DE
+
+        // Get a message: New image not yet available, if our date is newer than current image date
+        // but nasa did still not jump the date boundary (e.g. germany 03:00 -> still on prv. day in NEwYork
 
         /*if (myList.get(0).getDateTime() == epochs.get(0)) {
             new dialogDisplay(MainActivity.this, "Image already loaded for this epoch...");

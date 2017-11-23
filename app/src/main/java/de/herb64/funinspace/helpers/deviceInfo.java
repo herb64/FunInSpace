@@ -131,9 +131,9 @@ public class deviceInfo {
         // Availabe features on the phone TODO finalize
         PackageManager pM = ctx.getPackageManager();
         FeatureInfo[] fInfo = pM.getSystemAvailableFeatures();
-        for (FeatureInfo aFInfo : fInfo) {
+        /*for (FeatureInfo aFInfo : fInfo) {
             Log.i("HFCM", aFInfo.toString());
-        }
+        }*/
         // Build infos
         sdkVersion = Build.VERSION.SDK_INT;
         brand = Build.BRAND;

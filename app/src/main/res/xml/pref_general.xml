@@ -51,7 +51,7 @@
         android:key="date_format"
         android:negativeButtonText="@null"
         android:positiveButtonText="@null"
-        android:title="@string/date_format" />
+        android:title="@string/df_title" />
 
     <SwitchPreference
         android:defaultValue="false"

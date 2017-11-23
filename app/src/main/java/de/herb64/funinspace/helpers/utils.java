@@ -3,6 +3,7 @@ package de.herb64.funinspace.helpers;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.ConcurrentNavigableMap;
 
 
 /**
@@ -158,173 +160,122 @@ public final class utils {
 
     /**
      * Calculate some epoch values based on TimeZone New York
+     * TODO: checkout DateTimeFormatter as modern way in Java to handle dates/times
      * @param locale the locale, used for string formatting
      * @return ArrayList of 3 long values containing epoch values:
-     * - epoch-nasa at 00:00:00 (date only)
-     * - epoch-nasa at current time
-     * - epoch-device
-     * TODO: THIS IS ALL STILL IN A VERY BAD SHAPE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-     */
+     * - epoch cut down to 00:00:00 (date only) - TODO why should we keep that? just for fun ??
+     * - epoch full at current time
+     * */
     public static ArrayList<Long> getNASAEpoch(Locale locale) {
         ArrayList<Long> epochs = new ArrayList<>();
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             HashSet<String> zoneids = (HashSet<String>) ZoneId.getAvailableZoneIds();
         }*/
+        // about date and time and java dependencies - DateTimeFormatter object
+        // https://stackoverflow.com/questions/15360123/time-difference-between-two-times
 
-        // The local system info
-        final TimeZone tzSYS = TimeZone.getDefault();
-        Log.i("HFCM", "Local timezone: " + tzSYS.toString());
-        final Calendar cSYS = Calendar.getInstance(tzSYS);
-        Log.i("HFCM", "Calendar info LOC: " + cSYS.toString());
-        long epochSYS = System.currentTimeMillis();
-        Log.i("HFCM", "SYS Epoch: " + epochSYS);
-
-        // This one uses timezone New York, creating a different calendar object
-        final TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
-        Log.i("HFCM", "NASA timezone: " + tzNASA.toString());
-        final Calendar cNASA = Calendar.getInstance(tzNASA);
-        Log.i("HFCM", "Calendar info NASA: " + cNASA.toString());
-        long epochNASA = cNASA.getTimeInMillis();
-        Log.i("HFCM", "NASA Epoch: " + epochNASA);
-
-        String yyyymmddNASA1 = String.format(locale, "%04d-%02d-%02d",
-                cNASA.get(Calendar.YEAR),
-                cNASA.get(Calendar.MONTH) + 1,
-                cNASA.get(Calendar.DAY_OF_MONTH));
-        Log.i("HFCM", "NASA Date string: " + yyyymmddNASA1);
-        String yyyymmddSYS = String.format(locale, "%04d-%02d-%02d",
-                cSYS.get(Calendar.YEAR),
-                cSYS.get(Calendar.MONTH) + 1,
-                cSYS.get(Calendar.DAY_OF_MONTH));
-        Log.i("HFCM", "SYS Date string: " + yyyymmddSYS);
-
-        // No matter, which calendar is used, it produces the same epoch value
-        //long epochLOC = cLOC.getTimeInMillis();
-        //long epochDEF = cDEF.getTimeInMillis();
-        //long epochNASA = cNASA.getTimeInMillis();
-
-        // Running this code BEFORE epochNASA is calculated, does change epoch NASA as well
-        // WHY DOES THIS CHANGE cNASA obviously?? - because parse() changes timezone!!
-        SimpleDateFormat dF00_00_00 = new SimpleDateFormat("yyyy-MM-dd", locale);
-        long epochNASA_00_00_00 = 0;
-        long epochSYS_00_00_00 = 0;
-        try {
-            // https://developer.android.com/reference/java/text/DateFormat.html#setTimeZone(java.util.TimeZone)
-            // The TimeZone set by this method may be overwritten as a result of a call to the parse method.!!!!
-            dF00_00_00.setCalendar((Calendar) cNASA.clone());       // use clone object, otherwise cNASA Timezone gets overwritten!!!
-            //dFTEST.setTimeZone(tzNASA);
-            epochNASA_00_00_00 = dF00_00_00.parse(yyyymmddNASA1).getTime();   // PARSE CHANGES THE TIMEZONE!!!
-            dF00_00_00.setCalendar((Calendar) cSYS.clone());       // use clone object, otherwise cNASA Timezone gets overwritten!!!
-            //dFTEST.setTimeZone(tzSYS);
-            epochSYS_00_00_00 = dF00_00_00.parse(yyyymmddSYS).getTime();
-        } catch (ParseException e) {
-            e.printStackTrace();
-        }
-        // Why does this get different results than same call before?? - parse is responsible!!
-        // using a calendar clone for parse operations solves this
-        long epochNASA2 = cNASA.getTimeInMillis();      // just verify, that parse did not change cNASA
-
-        // No matter, which calendar object is used, the same time string is produced reflecting the
-        // local time on the system for its timezone.
-        //Log.i("HFCM", "LOC: epoch=" + epochLOC + " > " + cLOC.getTime().toString());
-        //Log.i("HFCM", "DEF: epoch=" + epochDEF + " > " + cDEF.getTime().toString());
-        Log.i("HFCM", "SYS: epoch=" + epochSYS + " > " + cSYS.getTime().toString());
-        Log.i("HFCM", "NASA: epoch=" + epochNASA + " > " + cNASA.getTime().toString());
-        Log.i("HFCM", "NASA 00_00_00: epoch=" + epochNASA_00_00_00 );
-        Log.i("HFCM", "Local 00_00_00: epoch =" + epochSYS_00_00_00 );
-        Log.i("HFCM", "NASA: epoch2=" + epochNASA2 + " > " + cNASA.getTime().toString());
-
-        // Getting the time/date for any other given timezone (i.e. the local time there)
-        // create a formatter for this and assign a calendar or timezone object of the requested
-        SimpleDateFormat fmtNASA = new SimpleDateFormat("dd. MMM yyyy, HH:mm:ss", locale);
-        //fmtNASA.setCalendar(cNASA);
-        fmtNASA.setTimeZone(tzNASA);
-        float deltaHours = (float) (epochNASA - epochNASA_00_00_00) / 3600000f;
-        Log.i("HFCM", String.format(locale, "NASA local time: %s, %2f", fmtNASA.format(epochSYS), deltaHours));
-
-        // Some other test:
-        fmtNASA.setTimeZone(TimeZone.getTimeZone("Europe/Brussels"));
-        Log.i("HFCM", String.format(locale, "Brussels local time: %s", fmtNASA.format(epochSYS)));
-
-        // Get time difference between system and nasa in hours
-        // NASA local 00 epoch is larger than local value (for timezone tokyo with 14h) - this makes
-        // sense, because 1.1.1970 happened in Japan BEFORE the US
-
-        // Message for display: new image not yet available
-        // our date might be already ahead of nasa date
-
-
-        // ____________________________________________________
-
+        long epochFULL = System.currentTimeMillis();        // current milliseconds value
         // TimeZone tzNASA1 = TimeZone.getTimeZone("GMT-05:00");
         // Getting by ID returns a different object, than getting by GMT... Looks like this
         // implements dst already, so we need no API call..
         // Washington not available as ID, but New York is same zone and also uses DST
         // (only Arizona does not use DST)
+        TimeZone tzSYS = TimeZone.getDefault();
+        Log.w("HFCM", "DEVICE running on timezone " +
+                tzSYS.getDisplayName() +
+                " / " + tzSYS.getID());
+        Calendar cSYS = Calendar.getInstance(tzSYS);
+        Log.i("HFCM", "SYS TZ offset for epoch (hours): " + (float)tzSYS.getOffset(epochFULL)/3600000f);
 
+        // NASA Server seems to be in New York timezone (deduced from delay when images appear)
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        Log.w("HFCM", "NASA timezone " +
+                tzNASA.getDisplayName() +
+                " / " + tzNASA.getID());
+        Calendar cNASA = Calendar.getInstance(tzNASA);
+        Log.i("HFCM", "NASA TZ offset for epoch (hours): " + (float)tzNASA.getOffset(epochFULL)/3600000f);
+        Log.w("HFCM", "SYS ahead of NASA (hours): " +
+                ((float)tzSYS.getOffset(epochFULL) - (float)tzNASA.getOffset(epochFULL))/3600000f);
+
+        // The only way to get the date/time as string as seen in other timezone from the calendar
+        // is to query the elements single calendar fields themselves and create a formatted string
+        // Calling calendar.getTime() returns our local time values
+        // Log.e("HFCM", "TEST: " + cNASA.getTime().toString());   // gets our local time!!
         String yyyymmddNASA = String.format(locale, "%04d-%02d-%02d",
                 cNASA.get(Calendar.YEAR),
                 cNASA.get(Calendar.MONTH) + 1,
                 cNASA.get(Calendar.DAY_OF_MONTH));
-        /*String hhmmssNASA = String.format (locale, "%02d:%02d:%02d",
+        Log.i("HFCM", "NASA Date only string: " + yyyymmddNASA);
+        String yyyymmddhhmmssNASA = String.format(locale, "%04d-%02d-%02d_%02d-%02d-%02d",
+                cNASA.get(Calendar.YEAR),
+                cNASA.get(Calendar.MONTH) + 1,
+                cNASA.get(Calendar.DAY_OF_MONTH),
                 cNASA.get(Calendar.HOUR_OF_DAY),
                 cNASA.get(Calendar.MINUTE),
-                cNASA.get(Calendar.SECOND));*/
+                cNASA.get(Calendar.SECOND));
+        Log.i("HFCM", "NASA Date+time string: " + yyyymmddhhmmssNASA);
+        String yyyymmddSYS = String.format(locale, "%04d-%02d-%02d",
+                cSYS.get(Calendar.YEAR),
+                cSYS.get(Calendar.MONTH) + 1,
+                cSYS.get(Calendar.DAY_OF_MONTH));
+        Log.i("HFCM", "SYS  Date onlystring: " + yyyymmddSYS);
 
-        // Get NASA epoch value for current date with time = 00:00:00
-        //long epochNASA_00_00_00;
-        long epochLocal;
-        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", locale);
-
-        dF.setTimeZone(tzSYS);
-        //dF.setCalendar(cLOC);
+        // Use SimpleDateFormat to get the epoch value reduced to date only (no hh:mm:ss...)
+        SimpleDateFormat dF00_00_00 = new SimpleDateFormat("yyyy-MM-dd", locale);
+        long epoch_00_00_00 = 0;
         try {
-            epochLocal = dF.parse(yyyymmddNASA).getTime();
+            // IMPORTANT:
+            // https://developer.android.com/reference/java/text/DateFormat.html#setTimeZone(java.util.TimeZone)
+            // The TimeZone set by this method may be overwritten as a result of a call to the parse method.!!!!
+            dF00_00_00.setCalendar((Calendar) cNASA.clone()); // clone to avoid timezone overwrite
+            //dFTEST.setTimeZone(tzNASA);
+            epoch_00_00_00 = dF00_00_00.parse(yyyymmddNASA).getTime();
         } catch (ParseException e) {
-            epochLocal = -1;
             e.printStackTrace();
         }
+        Log.i("HFCM", "FULL: epoch=" + epochFULL);
+        Log.i("HFCM", "00_00_00: epoch= " + epoch_00_00_00);
 
-        dF.setTimeZone(tzNASA);
-        //dF.setCalendar(cNASA);        // if setting this, it makes 00:00:00 time !!!
-        try {
-            epochNASA_00_00_00 = dF.parse(yyyymmddNASA).getTime();
-        } catch (ParseException e) {
-            epochNASA_00_00_00 = -1;
-            e.printStackTrace();
-        }
+        // Getting the time/date for any other given timezone (i.e. the local time there)
+        // create a formatter for this and assign a calendar or timezone object of the requested
+        SimpleDateFormat fmtCHECK = new SimpleDateFormat("dd. MMM yyyy, HH:mm:ss", locale);
+        //fmtNASA.setCalendar(cNASA);
+        fmtCHECK.setTimeZone(tzNASA);
+        Log.i("HFCM", String.format(locale, "NASA local time: %s", fmtCHECK.format(epochFULL)));
+
+        // Some other test:
+        fmtCHECK.setTimeZone(TimeZone.getTimeZone("Europe/Brussels"));
+        Log.i("HFCM", String.format(locale, "Brussels local time: %s", fmtCHECK.format(epochFULL)));
+
         // Prepare return values: NASA epoch at 00:00:00, NASA epoch full, our own epoch
-        epochs.add(epochNASA_00_00_00);
-        epochs.add(cNASA.getTimeInMillis());
-        epochs.add(epochLocal);
-        //epochs.add(Calendar.getInstance().getTimeInMillis());   // actually same as value above
+        epochs.add(epoch_00_00_00);
+        epochs.add(epochFULL);
 
         // Testing and debugging
         SimpleDateFormat formatter = new SimpleDateFormat("dd. MMM yyyy, HH:mm:ss", locale);
         formatter.setTimeZone(tzNASA);
         //formatter.setCalendar(cNASA);
         Log.i("HFCM", "Have epochs " + epochs +
-                "\nLocal time converted to nasa: " + formatter.format(epochs.get(2)) +
                 "\nNASA time 00:00:00: " + formatter.format(epochs.get(0)) +
                 "\nNASA time full: " + formatter.format(epochs.get(1)));
 
         // It seems to be sufficient to have the timezone object
         //formatter.setTimeZone(tzLOC);
         formatter.setCalendar(cSYS);
-        Log.i("HFCM", "Local time on device: " + formatter.format(epochs.get(2)) + " (" + tzSYS.getDisplayName() + ")");
+        Log.i("HFCM", "Local time on device: " + formatter.format(epochs.get(1)) + " (" + tzSYS.getDisplayName() + ")");
 
         // we do not need to use a Date object for formatting, can pass epoch as well
         //Date testdate = new Date(epochNASA_00_00_00);
         //String formatted = formatter.format(testdate);
 
         // just get them all printed
-        String[] tzIDs = TimeZone.getAvailableIDs();
+        /*String[] tzIDs = TimeZone.getAvailableIDs();
         for (String id : tzIDs) {
             TimeZone tzTEST = TimeZone.getTimeZone(id);
             formatter.setTimeZone(tzTEST);
-            //Log.i("HFCM", "Converted time: " + formatter.format(epochs.get(2)) +
-            //        " (" + id + " / " + tzTEST.getDisplayName() + ")");
-        }
+            Log.i("HFCM", "Converted time: " + formatter.format(epochs.get(2)) +
+                    " (" + id + " / " + tzTEST.getDisplayName() + ")");
+        }*/
         return epochs;
     }
 

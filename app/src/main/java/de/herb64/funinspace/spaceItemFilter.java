@@ -30,7 +30,7 @@ public class spaceItemFilter extends Filter {
      * @param adapter the adapter, from which the filter is created
      */
     public spaceItemFilter(ArrayList<spaceItem> filterList, spaceAdapter adapter) {
-        Log.i("HFCM", "spaceItemFilter constructor");
+        //Log.i("HFCM", "spaceItemFilter constructor");
         this.filterList = filterList;
         this.adapter = adapter;
         this.idxMap = new SparseIntArray();
@@ -49,7 +49,7 @@ public class spaceItemFilter extends Filter {
      */
     @Override
     protected FilterResults performFiltering(CharSequence filterTerm) {
-        Log.i("HFCM", "peformFiltering called with charsequence filterterm '" + filterTerm + "'");
+        //Log.i("HFCM", "peformFiltering called with charsequence filterterm '" + filterTerm + "'");
         FilterResults results = new FilterResults();
         ArrayList<spaceItem> filteredItems;
         if (filterTerm != null &&
@@ -126,73 +126,21 @@ public class spaceItemFilter extends Filter {
         int rating = Integer.parseInt(constraints[0]);
         int video = Integer.parseInt(constraints[1]);
         int wpflag = Integer.parseInt(constraints[2]);
-        Log.i("HFCM", "Filter by constraints, string is '" + s + "'");
+        //Log.i("HFCM", "Filter by constraints, string is '" + s + "'");
         for (int i = 0; i< filterList.size(); i++) {
             if (filterList.get(i).getRating() >= rating &&
-                    (((video & FilterView.FILTER_YOUTUBE) == FilterView.FILTER_YOUTUBE && filterList.get(i).getMedia().equals(MainActivity.M_YOUTUBE)) ||
-                    ((video & FilterView.FILTER_VIMEO) == FilterView.FILTER_VIMEO && filterList.get(i).getMedia().equals(MainActivity.M_VIMEO)) ||
-                    ((video & FilterView.FILTER_MP4) == FilterView.FILTER_MP4 && filterList.get(i).getMedia().equals(MainActivity.M_MP4)) ||
-                    video == 0) &&
-                    //(video == 1 && !filterList.get(i).getMedia().equals(MainActivity.M_IMAGE)) &&
-                    filterList.get(i).getWpFlag() == wpflag) {
+                    (((video & FilterView.FILTER_YOUTUBE) == FilterView.FILTER_YOUTUBE &&
+                            filterList.get(i).getMedia().equals(MainActivity.M_YOUTUBE)) ||
+                    ((video & FilterView.FILTER_VIMEO) == FilterView.FILTER_VIMEO &&
+                            filterList.get(i).getMedia().equals(MainActivity.M_VIMEO)) ||
+                    ((video & FilterView.FILTER_MP4) == FilterView.FILTER_MP4 &&
+                            filterList.get(i).getMedia().equals(MainActivity.M_MP4)) ||
+                    video == FilterView.FILTER_VIDEO_NONE) &&
+                    filterList.get(i).getWpFlag() >= wpflag) {
                 filteredItems.add(filterList.get(i));
                 idxMap.append(key++, i);
             }
         }
         return filteredItems;
     }
-
-    /**
-     * Search for space items, that match a minimum rating
-     * @param rating the minimum rating value as integer
-     * @return The matching space items in an array list
-     */
-    /*private ArrayList<spaceItem> filterByRating(int rating) {
-        ArrayList<spaceItem> filteredItems = new ArrayList<>();
-        idxMap.clear();
-        int key = 0;
-        for (int i = 0; i< filterList.size(); i++) {
-            if (filterList.get(i).getRating() >= rating) {
-                filteredItems.add(filterList.get(i));
-                idxMap.append(key++, i);
-            }
-        }
-        return filteredItems;
-    }*/
-
-    /**
-     * Search for space items, that match certain wallpaper status
-     * @param wpstatus wallpaper status
-     * @return The matching space items in an array list
-     */
-    /*private ArrayList<spaceItem> filterByWallpaper(int wpstatus) {
-        ArrayList<spaceItem> filteredItems = new ArrayList<>();
-        idxMap.clear();
-        int key = 0;
-        for (int i = 0; i< filterList.size(); i++) {
-            if (filterList.get(i).getWpFlag() >= wpstatus) {
-                filteredItems.add(filterList.get(i));
-                idxMap.append(key++, i);
-            }
-        }
-        return filteredItems;
-    }*/
-
-    /**
-     * Search for space items, that match certain media types
-     * @param mediatype integer bitmask for media types
-     * @return The matching space items in an array list
-     */
-    /*private ArrayList<spaceItem> filterByMedia(int mediatype) {
-        ArrayList<spaceItem> filteredItems = new ArrayList<>();
-        idxMap.clear();
-        int key = 0;
-        for (int i = 0; i< filterList.size(); i++) {
-            if (!filterList.get(i).getMedia().equals("M_IMAGE")) {
-                filteredItems.add(filterList.get(i));
-                idxMap.append(key++, i);
-            }
-        }
-        return filteredItems;
-    }*/
 }

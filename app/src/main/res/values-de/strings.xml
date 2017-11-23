@@ -68,11 +68,12 @@
     <string name="rating">Bewertung</string>
     <string name="set_as_wallpaper">Setze als Hintergrundbild</string>
     <string name="reselect_wallpaper">Hintergrund Ausschnitt neu wählen</string>
+    <string name="remove_as_wallpaper">Lösche Hintergrundbild</string>
     <string name="wp_tip_long_press">TIP\n Long Press erlaubt Hintergrundbild Auswahl</string>
     <string name="pref_summary_read_text">Den Erklärungstext bei jedem Aufklappen vorlesen. Über das Kontextmenü kann ebenfalls das Vorlesen gestartet werden.</string>
     <string name="pref_title_read_text">Vorlesen der Erklärung</string>
     <string name="cab_read">Vorlesen</string>
-    <string name="remove_as_wallpaper">Lösche (TODO)</string>
+
     <string-array name="wp_quality_titles">
         <item>Niedrig</item>
         <item>Mittel</item>
@@ -80,4 +81,5 @@
         <item>Optimal</item>
     </string-array>
 
+    <string name="df_title">Datums Format</string>
 </resources>

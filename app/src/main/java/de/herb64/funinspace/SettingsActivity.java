@@ -71,7 +71,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
                     returnIntent.putExtra("wallpaper_quality", listPreference.getValue());
                 }
                 if (listPreference.getKey().equals("date_format")) {
-                    //returnIntent.putExtra("wallpaper_quality", listPreference.getValue());
+                    returnIntent.putExtra("date_format", listPreference.getValue());
                 }
 
                 // Set the summary to reflect the new value.
@@ -210,6 +210,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             bindPreferenceSummaryToValue(findPreference("example_list"));
             // important to have listener called
             bindPreferenceSummaryToValue(findPreference("item_order"));
+            bindPreferenceSummaryToValue(findPreference("date_format"));
         }
 
         @Override
