@@ -2,19 +2,21 @@ package de.herb64.funinspace;
 
 import android.app.Dialog;
 import android.content.DialogInterface;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatDialogFragment;
 
 /**
  * Created by herbert on 11/12/17.
- * This is currently used for wallpaper changes.
+ * This is currently used for wallpaper changes only
  */
 
 public class confirmDialog extends AppCompatDialogFragment {
 
     public interface ConfirmListener {
         void processConfirmation(int idx);
+        void processNegConfirm(int idx);
     }
 
     @Override
@@ -35,6 +37,9 @@ public class confirmDialog extends AppCompatDialogFragment {
                 if (i == DialogInterface.BUTTON_POSITIVE) {
                     ConfirmListener act = (ConfirmListener) getActivity();
                     act.processConfirmation(idx);
+                } else if (i == DialogInterface.BUTTON_NEGATIVE) {
+                    ConfirmListener act = (ConfirmListener) getActivity();
+                    act.processNegConfirm(idx);
                 }
             }
         };

@@ -17,6 +17,7 @@ import android.support.annotation.Nullable;
 import android.util.Log;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -28,17 +29,25 @@ import de.herb64.funinspace.helpers.utils;
 
 /**
  * Created by herbert on 7/22/17.
+ * Load the hires image given in passed URL. If the URL is not http..., it contains a filename to
+ * be loaded locally.
+ * In addition, constraints for memory allocation / glTextureSize are passed, from which the loader
+ * gets the largest possible image size that can be loaded.
+ * Return values: the bitmap that has been created, information about the size of the original, non
+ * scaled bitmap, a logstring and the filename.
  */
 // https://stackoverflow.com/questions/36947709/how-do-i-fix-or-correct-the-default-file-template-warning-in-intellij-idea
 
 public class ImgHiresFragment extends Fragment {
 
-    // INTERFACES: these are implemented in ImageActivity
+    /**
+     * Interface implementation is found in ImageActivity
+     */
     interface myCallbacks {
         void onPreExecute();
         //void onProgressUpdate(int percent);
         void onCancelled();
-        void onPostExecute(Bitmap bitmap, String logstring, String origsize);
+        void onPostExecute(Bitmap bitmap, String logstring, String origsize, String filename);
     }
 
     // CONSTANTS
@@ -58,10 +67,16 @@ public class ImgHiresFragment extends Fragment {
     private String imgFullSize = "";
     private String logString = "";
 
-    // =======================================================
-    // OVERRIDE METHODS: onCreate(), onAttach() and onDetach()
-    // =======================================================
-
+    /**
+     * Passed intent information:
+     * urltoparse       the url to be loaded, or filepath if local copy exists
+     * memclass
+     * maxAlloc
+     * maxTextureSize
+     * imageName        the hires filename to be saved
+     *
+     * @param savedInstanceState
+     */
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -75,6 +90,7 @@ public class ImgHiresFragment extends Fragment {
         maxAlloc = getArguments().getInt("maxAlloc");
         texLimit = getArguments().getInt("maxTextureSize");
         imageName = getArguments().getString("imageName");
+        Log.i("HFCM", "ImageHiresFragment called for '" + imageName + "'");
         new hiresTask().execute(Url2Load);
     }
 
@@ -146,7 +162,6 @@ public class ImgHiresFragment extends Fragment {
          */
         @Override
         protected Bitmap doInBackground(String... params) {
-            // url for image is found in params[0]...
             Bitmap bmp = null;
 
             // avoid complaints on String.format()...
@@ -157,6 +172,16 @@ public class ImgHiresFragment extends Fragment {
                 //noinspection deprecation
                 loc = getResources().getConfiguration().locale;
             }
+
+            // If we have a local file to load: url contains file path of basename
+            if (!params[0].startsWith("http")) {
+                Log.i("HFCM", "Loading file locally: " + params[0]);
+                bmp = BitmapFactory.decodeFile(params[0]);
+                logString = "Image " + imageName + " has been loaded locally from a cached copy";
+                imgFullSize = "no-change";
+                return bmp;
+            }
+
             //"https://www.dropbox.com/s/q7rvk28orcx7qom/HFCM-20120927-06048.jpg";
             //"https://dl.dropboxusercontent.com/s/q7rvk28orcx7qom/HFCM-20120927-06048.jpg";
             try {
@@ -360,19 +385,25 @@ public class ImgHiresFragment extends Fragment {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            return bmp;
 
+            return bmp;
         }
 
-        // we just send the bitmap to the ImageActivity via callback
+        /**
+         * Implementation of onPostExecute is in ImageActivity via callback
+         * @param bitmap
+         */
         @Override
         protected void onPostExecute(Bitmap bitmap) {
             super.onPostExecute(bitmap);
             if(mCallbacks != null) {
-                mCallbacks.onPostExecute(bitmap, logString, imgFullSize);
+                mCallbacks.onPostExecute(bitmap, logString, imgFullSize, imageName);
             }
         }
 
+        /**
+         * Cancelled
+         */
         @Override
         protected void onCancelled() {
             super.onCancelled();

@@ -2,7 +2,6 @@ package de.herb64.funinspace;
 
 import android.app.ActivityManager;
 import android.app.FragmentManager;
-import android.app.WallpaperManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -13,7 +12,6 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
-import android.os.SystemClock;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -26,13 +24,10 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
-import android.widget.Scroller;
 import android.widget.Toast;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 
 import de.herb64.funinspace.helpers.utils;
@@ -90,8 +85,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     private int imgHeight;
     private float scaledWidth;
     private float scaledHeight;
-    private Scroller mScroller;
-    private int memClass;
+    //private Scroller mScroller;
+    //private int memClass;
     private int maxAlloc;
     private int maxTextureSize;
     private String imageName;
@@ -110,6 +105,18 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     // TODO : make quality selectable - maybe just list preference: low - medium - high - excellent with 25/50/80/100
     //private static final int DEFAULT_WP_QUALITY = 80;
 
+    /**
+     * Passed information via intent
+     * hiresurl             url to load (or absolutepath of file to load, if exists)
+     * listidx
+     * maxalloc
+     * maxtexturesize
+     * imagename            base name of image, without prefixes
+     * wallpaperquality
+     * wallpaperselectmode
+     *
+     * @param savedInstanceState    save instance state
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -127,7 +134,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         //ivHires.setOnTouchListener(new imgTouchListener());
         SGDetector = new ScaleGestureDetector(this, new imgScaleListener());
         GDetector = new GestureDetector(this, new imgDragListener());
-        mScroller = new Scroller(getApplicationContext());
+        //mScroller = new Scroller(getApplicationContext());
         loadingBar = (ProgressBar) findViewById(R.id.pb_loading);
         imgMatrix = new Matrix();
         mValues = new float[9];
@@ -167,7 +174,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
 
         // Get info on memoryClass - needed for bitmap loading to avoid OOM situations
         ActivityManager activityManager = (ActivityManager) this.getSystemService(ACTIVITY_SERVICE);
-        memClass = activityManager.getMemoryClass();
+        int memClass = activityManager.getMemoryClass();
 
         // Handle restored instance state to recover from phone rotation
         // https://stackoverflow.com/questions/19856359/imageview-not-retaining-image-when-screen-rotation-occurs
@@ -231,7 +238,9 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 fragArguments.putInt("memclass", memClass);
                 fragArguments.putInt("maxAlloc", maxAlloc);
                 fragArguments.putInt("maxTextureSize", maxTextureSize);
-                fragArguments.putString("imageName", "not used any more"); //imageName);
+                //fragArguments.putString("imageName", imageName.replace("wp_", ""));
+                fragArguments.putString("imageName", imageName);
+                // check, if image file exists and pass info to hires loader fragment
                 mHiresFragment.setArguments(fragArguments);
                 fm.beginTransaction().add(mHiresFragment, TAG_TASK_FRAGMENT).commit();
             }
@@ -240,7 +249,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         //wallPaperSelectMode = false;
         //wallPaperQuality = DEFAULT_WP_QUALITY;
         ivHires.setSelectRect(null);
-
 
         Log.i("HFCM", "Finished oncreate in imageactivity with quality " + wallPaperQuality);
     }
@@ -543,10 +551,10 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                     e1.printStackTrace();
                 }
 
-                // Save a jpeg file of the wallpaper bitmap
-                Log.i("HFCM", "Saving wallpaper image into " + imageName + ", Quality: " + wallPaperQuality);
+                // Save a jpeg file of the wallpaper bitmap // TODO: use quality parm, is prepared in utils since 24.11.2017
+                Log.i("HFCM", "Saving wallpaper image into 'wp_" + imageName + "', Quality: " + wallPaperQuality);
                 utils.writeJPG(getApplicationContext(),
-                        imageName,  // w_cropped.jpg
+                        "wp_" + imageName,
                         wallBitmap);
 
                 // Return the resulting bitmap via the intent - hmm, maybe just use the written file
@@ -558,17 +566,17 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 // Now using the stored file, which even allows to keep files with disctinct names,
                 // allowing for some APOD gallery from which we can select our prepared wallpapers.
                 // Also, a "random" paper from within the app is possible this way...
-                ByteArrayOutputStream ws = new ByteArrayOutputStream();
+//                ByteArrayOutputStream ws = new ByteArrayOutputStream();                                                                     // TODO remove ??? stream no longer used!!
                 if (wallBitmap != null) {
-                    wallBitmap.compress(Bitmap.CompressFormat.JPEG, wallPaperQuality, ws);
+//                    wallBitmap.compress(Bitmap.CompressFormat.JPEG, wallPaperQuality, ws);
                     //returnIntent.putExtra("wallpaperbmp", ws.toByteArray());
-                    returnIntent.putExtra("wallpaperfile", imageName);
+                    returnIntent.putExtra("wallpaperfile", "wp_" + imageName);
                 }
 
                 String toaster = getString(R.string.toast_wp_select_finished);
                 Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
 
-                // TODO : better might be rect flattenToString / unflatten and pass string instead
+                // TODO : docu better might be rect flattenToString / unflatten and pass string instead
                 // anyway, code no longer used, we pass the bitmap object via intent return value
                 /*ArrayList<Integer> reg = new ArrayList<>();
                 reg.add(region.left);
@@ -576,6 +584,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 reg.add(region.right);
                 reg.add(region.bottom);
                 returnIntent.putIntegerArrayListExtra("wallpaperregion", reg);*/
+
+                ivHires.invalidate();
 
             } else {
                 // Initialize wallpaper selection mode - create a centered rectangle
@@ -588,15 +598,16 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 ivHires.setImageMatrix(imgMatrix);
 
                 // Calculate starting wallpaper selection Rectangle for image view
-                wallPaperSelectRect.set(
+                initWPSelect();
+                /*wallPaperSelectRect.set(
                         (int) (((float)viewWidth - wallSelectWidth) / 2f),
                         (int) (((float)viewHeight - wallSelectHeight) / 2f),
                         (int) (((float)viewWidth + wallSelectWidth) / 2f),
                         (int) (((float)viewHeight + wallSelectHeight) / 2f)
-                );
-                ivHires.setSelectRect(wallPaperSelectRect);
+                );*/
+                //ivHires.setSelectRect(wallPaperSelectRect);
             }
-            ivHires.invalidate();
+            //ivHires.invalidate();
             //loadingBar.setVisibility(View.GONE);
             super.onLongPress(e);
         }
@@ -734,10 +745,20 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
      * @param originalSize  Size of the image as it is provided by NASA (unscaled)
      */
     @Override
-    public void onPostExecute(Bitmap bitmap, String logstring, String originalSize) {
+    public void onPostExecute(Bitmap bitmap, String logstring, String originalSize, String filename) {
         myBitmap = bitmap;
         Log.i(TAG, logstring);
         if(myBitmap != null) {
+
+            // Save a copy of the image (in scaled version) to local storage. Note: this is not the
+            // original image, but the one scaled to fit on our phone.
+            // TODO possible implications on load if current heap memory not available on later load
+            //      we might introduce OOM by just loading the given file
+            File img = new File(getFilesDir(), "hd_" + filename);
+            if (!img.exists()) {
+                utils.writeJPG(getApplicationContext(), "hd_" + filename, bitmap, 100);
+            }
+
             //I/HFCM: Displaymetrics = DisplayMetrics{density=2.625, width=1080, height=1794, scaledDensity=2.625, xdpi=420.0, ydpi=420.0}
             DisplayMetrics metrics = new DisplayMetrics();
             getWindowManager().getDefaultDisplay().getMetrics(metrics);
@@ -774,7 +795,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             ivHires.setImageBitmap(bmp);
             String toaster = "onPostExecute: No bitmap has been returned (null)";
             Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
-            Log.d(TAG, "ImageActivity - onPostExecute: No bitmap has been returned (null)");
+            Log.e(TAG, "ImageActivity - onPostExecute: No bitmap has been returned (null)");
         }
         loadingBar.setVisibility(View.GONE);
         // Prepare data to be returned after closing the activity
@@ -782,6 +803,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         returnIntent.putExtra("lstIdx", listIdx);
         returnIntent.putExtra("hiresurl", strHires);
         returnIntent.putExtra("logString", logstring);
+        returnIntent.putExtra("filename", imageName);
         setResult(RESULT_OK,returnIntent);
 
         // Initialize wallpaper selection rectangle, if we already started in active selection mode
@@ -793,37 +815,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
         }
     }
-
-    /* THE OLD CODE: AsyncTask was defined HERE with doInBackground and onPostExecute.
-       Problem with that: this was not safe against rotation of phone while the asynctask was
-       still running, because the ImageActivity is recreated on such a config event.
-       Needed to switch over to a 'retained fragment'. See new code in ImgHiresFragment.java.
-    public class ImgHiresTask extends AsyncTask<String, String, Bitmap> {
-        now moved this to ImgHiresFragment class, which is derived from Fragment
-    }
-    */
-
-    // Just for debugging problems - make a bitmap file copy
-    /*private void saveBmpTest(Bitmap bmp, String filename) {
-        // And write the thumbnail to internal storage
-        File testFile = new File(getApplicationContext().getFilesDir(), filename);
-        FileOutputStream outstream = null;
-        try {
-            outstream = new FileOutputStream(testFile);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-        try {
-            if (outstream != null) {
-                bmp.compress(Bitmap.CompressFormat.JPEG, 90, outstream);
-                outstream.flush();
-                outstream.close();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }*/
-
 
     /**
      * We do not necessarily longpress twice, if selection is done, the wallpaper gets prepared
@@ -858,10 +849,10 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         if (isLandScape) {
             aspectWall = 1f / aspectWall;
         }
-        int wallWidth = isLandScape ? dispHeight : dispWidth;
+        //int wallWidth = isLandScape ? dispHeight : dispWidth;
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
             aspectWall *= 2f;
-            wallWidth *= 2;
+            //wallWidth *= 2;
         }
         float aspectBitmap = (float) imgWidth / (float) imgHeight;
 

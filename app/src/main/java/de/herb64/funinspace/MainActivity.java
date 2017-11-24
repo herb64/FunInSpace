@@ -45,6 +45,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.io.File;
+import java.io.FileFilter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -446,7 +447,15 @@ public class MainActivity extends AppCompatActivity
                             File thdel = new File(getApplicationContext().getFilesDir(),
                                     myList.get(idx).getThumb());
                             if (!thdel.delete()) {
-                                Log.i("HFCM", "File delete for thumbnail did not return true");
+                                Log.e("HFCM", "File delete for thumbnail did not return true");
+                            }
+                            // Remove existing hires image
+                            File hddel = new File(getApplicationContext().getFilesDir(),
+                                    myList.get(idx).getThumb().replace("th_", "hd_"));
+                            if (hddel.exists()) {
+                                if (!hddel.delete()) {
+                                    Log.e("HFCM", "File delete for hires cached image did not return true");
+                                }
                             }
 
                             // delete the json object from json array
@@ -520,7 +529,7 @@ public class MainActivity extends AppCompatActivity
                             switch (myList.get(selected.get(0)).getWpFlag()) {
                                 case WP_NONE:
                                 case WP_ACTIVE:
-                                    String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
+                                    String basefn = myList.get(selected.get(0)).getThumb().replace("th_", "");
                                     int maxAlloc = devInfo.getMaxAllocatable();
                                     Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
                                     hiresIntent.putExtra("hiresurl", myList.get(selected.get(0)).getHires());
@@ -530,11 +539,11 @@ public class MainActivity extends AppCompatActivity
                                     hiresIntent.putExtra("wallpaper_quality",
                                             sharedPref.getString("wallpaper_quality", "80"));
                                     lastImage = myList.get(selected.get(0)).getTitle();
-                                    // wallpaper filename now as imagename
-                                    hiresIntent.putExtra("imagename", wpfn);
+                                    // base filename now as imagename
+                                    hiresIntent.putExtra("imagename", basefn);
                                     // call image activity with wallpaper selection mode at startup
                                     hiresIntent.putExtra("wpselect", true);
-                                    Log.i("HFCM", "Changing wallpaper '" + wpfn + "'");
+                                    Log.i("HFCM", "Changing wallpaper 'wp_" + basefn + "'");
                                     startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
                                     break;
                                 case WP_EXISTS:
@@ -1124,6 +1133,7 @@ public class MainActivity extends AppCompatActivity
      * Implementation of interface ConfirmListener in confirmDialog class. This class allows to
      * have a dialog's result to be processed only, if the Positive Button has been pressed.
      * For now, it's only used for wallpaper change confirmation.
+     * @param idx index into list
      */
     @Override
     public void processConfirmation(int idx) {
@@ -1139,6 +1149,22 @@ public class MainActivity extends AppCompatActivity
             changeWallpaper(wpfile);
         }
     }
+
+    /**
+     * Implementation of interface ConfirmListener in confirmDialog class. This handles negative
+     * button.
+     * For now, it's only used for wallpaper change confirmation.
+     * @param idx index
+     */
+    @Override
+    public void processNegConfirm(int idx) {
+        // The wp file was created during wp select (longpress) - so it exists and even if it is not
+        // confirmed as active wp, the file exists, so immediately update wp status to be shown in
+        // list
+        myList.get(idx).setWpFlag(WP_EXISTS);
+        adp.notifyDataSetChanged();
+    }
+
 
     /* N O T E:   T H I S   I S   N O T   A C T I V E
      * Listener for rating bar changes - useless for me, because I use "small" bars
@@ -1176,46 +1202,29 @@ public class MainActivity extends AppCompatActivity
             }*/
             // 11.11.2017 - moved ellipsized explanation text handling to OnItemClickListener()
 
-            // Decide, if we want to proceed if no WiFi is active
-            if (sharedPref.getBoolean("wifi_switch", false) && !devInfo.isWifiActive()) {
+            // Check, if a local copy for hires image exists. If yes, pass filepath to URL
+            String hiresFileBase = myList.get(idx).getThumb().replace("th_", "");
+            File hiresFile = new File(getApplicationContext().getFilesDir(), "hd_" + hiresFileBase);
+            String hiresUrl;
+            if (hiresFile.exists()) {
+                hiresUrl = hiresFile.getAbsolutePath();
+            } else {
+                hiresUrl = myList.get(idx).getHires();
+            }
+            String media = myList.get(idx).getMedia();
+            // Decide, if we want to proceed if no WiFi is active (local image load no problem)
+            if (sharedPref.getBoolean("wifi_switch", false)
+                    && !devInfo.isWifiActive()
+                    && hiresUrl.startsWith("http")) {
                 new dialogDisplay(MainActivity.this, getString(R.string.hires_no_wifi), "No Wifi");
                 return;
             }
-            String hiresUrl = myList.get(idx).getHires();
-            String media = myList.get(idx).getMedia();
+
             // get maximum allocatable heap mem at time of pressing the button
             int maxAlloc = devInfo.getMaxAllocatable();
             Log.i("HFCM", "maximum alloc:" + String.valueOf(maxAlloc));
-            // This checks our own media type, which has been set in createApodFromJson()
-            /*  TODO: just changed to switch/case - just keep some time in case problems occur
-                if (media.equals(M_IMAGE)) {
-                Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
-                hiresIntent.putExtra("hiresurl", hiresUrl);
-                hiresIntent.putExtra("listIdx", idx);
-                hiresIntent.putExtra("maxAlloc", maxAlloc);
-                hiresIntent.putExtra("maxtexturesize", maxTextureSize);
-                hiresIntent.putExtra("wallpaper_quality",
-                        sharedPref.getString("wallpaper_quality", "80"));
-                lastImage = myList.get(idx).getTitle();
-                //hiresIntent.putExtra("imagename", lastImage);
-                // wallpaper filename now as imagename
-                hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_","wp_"));
-                // forResult now ALWAYS to get logstring returned for debugging
-                // if hires size is already
-                // TODO: how about running one thread to just query the hires image size
-                startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
-            } else if (media.equals(M_YOUTUBE)) {
-                String thumb = myList.get(idx).getThumb();
-                // We get the ID from thumb name - hmmm, somewhat dirty ?
-                playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
-            } else if (media.equals(M_VIMEO)){
-                playVimeo(hiresUrl);
-            } else if (media.equals(M_MP4)) {
-                playMP4(hiresUrl);
-            } else {
-                new dialogDisplay(MainActivity.this, "Unknown media: " + media, "Warning");
-            }*/
 
+            // Check our own media type, which has been set in createApodFromJson()
             switch (media) {
                 case M_IMAGE:
                     Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
@@ -1228,7 +1237,9 @@ public class MainActivity extends AppCompatActivity
                     lastImage = myList.get(idx).getTitle();
                     //hiresIntent.putExtra("imagename", lastImage);
                     // wallpaper filename now as imagename
-                    hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_","wp_"));
+                    //hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_","wp_"));
+                    //hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_",""));
+                    hiresIntent.putExtra("imagename", hiresFileBase);
                     // forResult now ALWAYS to get logstring returned for debugging
                     // if hires size is already
                     // TODO: how about running one extra thread to just query the hires image size, using MediaMetadataRetriever - would avoid startForResult...
@@ -1404,10 +1415,10 @@ public class MainActivity extends AppCompatActivity
                             .execute(myList.get(listidx).getHires());
                 }*/
 
-                if (myList.get(listidx).getHiSize().equals(testsize)) {
-                    return;     // no action needed if hires size already in data
+                if (myList.get(listidx).getHiSize().equals(testsize) ||
+                        testsize.equals("no-change")) {
+                    return;     // no action needed if hires size already in data // TODO maybe get during apod load using asyncload by testing from stream...
                 }
-                // maybe change json to put Title out of content one hierarchy higher ??
                 try {
                     // data in json is reverse ordered as in list
                     JSONObject content = parent.getJSONObject(parent.length() - 1 - listidx).
@@ -2193,13 +2204,13 @@ public class MainActivity extends AppCompatActivity
                     Log.i("HFCM", "Missing thumb reload returned from asyncLoad");
                 }
                 break;*/
-            case "WALLPAPER":
+            /*case "WALLPAPER":
                 if (output instanceof Bitmap) {
                     Log.w("HFCM", "Disabled wallpaperload returning from asyncload - processfinish");
                 } else {
                     Log.e("HFCM", "asyncLoad for WALLPAPER did not return a bitmap");
                 }
-                break;
+                break;*/
             default:
                 new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
                 break;
@@ -2386,6 +2397,33 @@ public class MainActivity extends AppCompatActivity
         }
         // Rewrite local json file
         utils.writeJson(getApplicationContext(), localJson, parent);
+    }
+
+    /**
+     * Get informations on existing files (thumbs, wallpapers, hires) and their memory use. This
+     * can be displayed in the about dialog.
+     * @return  formatted string containing the infos for display
+     */
+    public String getFileStats() {
+        // hmm, filenamefilter does not allow wildcard... could use java.nio.file... but not avail..
+        /*File dir = new File(getFilesDir().getPath());
+        File[] files = dir.listFiles();
+        String[] filenames = dir.list();
+
+        for (int idx = 0; idx < myList.size(); idx++) {
+
+        }*/
+        return "Filestats to be done...";
+    }
+
+    /**
+     * Cleanup: remove any orphan wallpapers/thumbnails
+     *          check hires cached image: older images with no rating could be removed - this just
+     *          would cause them to be reloaded on next click.
+     * @return  formatted string with results on cleanup
+     */
+    public String cleanupFiles() {
+        return "Cleanup to be done";
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////

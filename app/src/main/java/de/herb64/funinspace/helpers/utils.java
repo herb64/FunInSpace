@@ -157,6 +157,28 @@ public final class utils {
         }
     }
 
+    /**
+     * Write bitmap to jpeg file
+     * @param ctx context
+     * @param filename filename
+     * @param bitmap bitmap object to be written
+     */
+    public static void writeJPG(Context ctx, String filename, Bitmap bitmap, int quality) {
+        File thumbFile = new File(ctx.getFilesDir(), filename);
+        FileOutputStream outstream = null;
+        int q = quality > 100 ? 100 : quality;
+        q = q < 0 ? 0 : quality;
+        Log.i("HFCM", "Utils writeJPG for " + filename);
+        try {
+            outstream = new FileOutputStream(thumbFile);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, q, outstream);
+            outstream.flush();
+            outstream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e("HFCM", e.getMessage());
+        }
+    }
 
     /**
      * Calculate some epoch values based on TimeZone New York
