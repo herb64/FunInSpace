@@ -174,10 +174,13 @@ public class ImgHiresFragment extends Fragment {
             }
 
             // If we have a local file to load: url contains file path of basename
+            // TODO - check for OOM, if memory allocation is not sufficient
             if (!params[0].startsWith("http")) {
                 Log.i("HFCM", "Loading file locally: " + params[0]);
                 bmp = BitmapFactory.decodeFile(params[0]);
-                logString = "Image " + imageName + " has been loaded locally from a cached copy";
+                logString = String.format(loc, "Image '%s' has been loaded from cached copy.\n" +
+                        "Image size: %dx%d\n",
+                        imageName, bmp.getWidth(), bmp.getHeight());
                 imgFullSize = "no-change";
                 return bmp;
             }

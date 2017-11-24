@@ -123,7 +123,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.4.1 (alpha)\nBuild Date 2017-11-24\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.4.2 (alpha)\nBuild Date 2017-11-24\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
@@ -333,6 +333,9 @@ public class MainActivity extends AppCompatActivity
                 readitem.setEnabled(!(selected.size() > 1));
                 readitem.setVisible(!(selected.size() > 1));
 
+                // TODO: change action bar to "delete cached file" or "force reload from NASA", if a cached file currently exists...
+                // we might want to have a small disk symbol left down of thumb indicating the presence of a cached file...
+
                 adp.notifyDataSetChanged();
             }
 
@@ -532,7 +535,25 @@ public class MainActivity extends AppCompatActivity
                                     String basefn = myList.get(selected.get(0)).getThumb().replace("th_", "");
                                     int maxAlloc = devInfo.getMaxAllocatable();
                                     Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
-                                    hiresIntent.putExtra("hiresurl", myList.get(selected.get(0)).getHires());
+
+
+                                    // Check, if a local copy for hires image exists. If yes, pass filepath to URL
+                                    // TODO: duplicate code here... do this better - also need to check for wifi flag to avoid load for wallpaper purpose as well
+                                    //String hiresFileBase = myList.get(idx).getThumb().replace("th_", "");
+                                    File hiresFile = new File(getApplicationContext().getFilesDir(), "hd_" + basefn);
+                                    String hiresUrl;
+                                    if (hiresFile.exists()) {
+                                        hiresUrl = hiresFile.getAbsolutePath();
+                                    } else {
+                                        hiresUrl = myList.get(selected.get(0)).getHires();
+                                    }
+                                    hiresIntent.putExtra("hiresurl", hiresUrl);
+
+
+                                    // OLD - this one did always load the nasa remote image
+                                    //hiresIntent.putExtra("hiresurl", myList.get(selected.get(0)).getHires());
+
+
                                     hiresIntent.putExtra("listIdx", selected.get(0));
                                     hiresIntent.putExtra("maxAlloc", maxAlloc);
                                     hiresIntent.putExtra("maxtexturesize", maxTextureSize);
@@ -1367,18 +1388,18 @@ public class MainActivity extends AppCompatActivity
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == HIRES_LOAD_REQUEST) {
             if (resultCode == RESULT_OK) {
+                // Get the wallpaper info from returned intent (returning bmp is bad - trx size)
                 String testsize = data.getStringExtra("sizeHires");
                 //String hUrl = data.getStringExtra("hiresurl");
                 int listidx = data.getIntExtra("lstIdx",0);
                 String logString = data.getStringExtra("logString");
-                new dialogDisplay(this, logString, lastImage);
 
-                // Get the wallpaper info from returned intent. Several options tested
-                // - return bitmap bytearray ( - transaction size problems with high quality)
-                //   see getByteArrayExtra() doc in lalatex
-                // - just return a file name ( + allows for multiple images, e.g. 'shuffle' option)
+                // Display a log dialog for image loader statistics (image memory / scaling)
+                if (sharedPref.getBoolean("show_debug_infos", true)) {
+                    new dialogDisplay(this, logString, lastImage);
+                }
 
-                // Show a dialog to have user confirm, that he wants to set this wallpaper image
+                // User dialog OK processConfirmation() kicks off changer thread later
                 if (data.getStringExtra("wallpaperfile") != null) {
                     Bundle fragArguments = new Bundle();
                     //fragArguments.putString("RESULT", data.getStringExtra("wallpaperfile"));
@@ -1391,29 +1412,9 @@ public class MainActivity extends AppCompatActivity
                     FragmentManager fm = getSupportFragmentManager();
                     confirmDialog dlg = new confirmDialog();
                     dlg.setArguments(fragArguments);
-                    // dlg.setTargetFragment(); // only when calling from fragment, not from activity as here
+                    // dlg.setTargetFragment(); // only if calling from fragment, not from activity!
                     dlg.show(fm, "CONFIRMTAG");
                 }
-
-                // the following code to change the wp should then be called from listener
-                // ImageActivity returns the filename of the newly created wallpaper jpeg file
-                /*if (data.getStringExtra("wallpaperfile") != null) {
-                    changeWallpaper(data.getStringExtra("wallpaperfile"));
-                }*/
-
-                /* OLD CODE USING ASYNCLOAD - to keep for documentation purposes
-                doing an async load just passing region/scale to be loaded from network
-                if (data.getIntegerArrayListExtra("wallpaperregion") != null) {
-                    ArrayList<Integer> lst = data.getIntegerArrayListExtra("wallpaperregion");
-                    Rect myrect = new Rect();
-                    myrect.set(lst.get(0), lst.get(1), lst.get(2), lst.get(3));
-                    new asyncLoad(MainActivity.this,
-                            "WALLPAPER",
-                            true,
-                            myrect,
-                            3)
-                            .execute(myList.get(listidx).getHires());
-                }*/
 
                 if (myList.get(listidx).getHiSize().equals(testsize) ||
                         testsize.equals("no-change")) {
@@ -1712,7 +1713,8 @@ public class MainActivity extends AppCompatActivity
         if (id == R.id.action_about) {
             new dialogDisplay(MainActivity.this, "Version: " + ABOUT_VERSION +
                     "\nTODO credits:\nflaticons.com for movie_other_64.png\n\n" +
-                    getString(R.string.credits_first_testers),
+                    getString(R.string.credits_first_testers) +
+                    utils.getFileStats(getApplicationContext(), loc),
                     "Infos (still development)");
             return true;
         }
@@ -2397,33 +2399,6 @@ public class MainActivity extends AppCompatActivity
         }
         // Rewrite local json file
         utils.writeJson(getApplicationContext(), localJson, parent);
-    }
-
-    /**
-     * Get informations on existing files (thumbs, wallpapers, hires) and their memory use. This
-     * can be displayed in the about dialog.
-     * @return  formatted string containing the infos for display
-     */
-    public String getFileStats() {
-        // hmm, filenamefilter does not allow wildcard... could use java.nio.file... but not avail..
-        /*File dir = new File(getFilesDir().getPath());
-        File[] files = dir.listFiles();
-        String[] filenames = dir.list();
-
-        for (int idx = 0; idx < myList.size(); idx++) {
-
-        }*/
-        return "Filestats to be done...";
-    }
-
-    /**
-     * Cleanup: remove any orphan wallpapers/thumbnails
-     *          check hires cached image: older images with no rating could be removed - this just
-     *          would cause them to be reloaded on next click.
-     * @return  formatted string with results on cleanup
-     */
-    public String cleanupFiles() {
-        return "Cleanup to be done";
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////

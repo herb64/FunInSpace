@@ -3,6 +3,7 @@ package de.herb64.funinspace;
 import android.app.ActivityManager;
 import android.app.FragmentManager;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -12,6 +13,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
+import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -112,7 +114,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
      * maxalloc
      * maxtexturesize
      * imagename            base name of image, without prefixes
-     * wallpaperquality
+     * wallpaperquality     quality in which to save wallpaper - from preferences
      * wallpaperselectmode
      *
      * @param savedInstanceState    save instance state
@@ -451,7 +453,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
          * First long press enables, second long press disables and creates the wallpaper.
          * Rotation of phone disables selection mode with no action. Wallpapers are always generated
          * for the standard rotation of the phone (portrait). Check for tablets...
-         * TODO; how does the user know that this is the way to create wallpapers?
          * @param e     MotionEvent to be processed
          */
         @Override
@@ -459,10 +460,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             // TODO: REAL display size information for Android < api17
             // https://stackoverflow.com/questions/35780980/getting-the-actual-screen-height-android
             // https://developer.android.com/guide/practices/screens_support.html
+            // TODO  - fix that initWpSelect stuff -- not yet clean!!!
 
-            // for docu: debugger showing -1 for bitmap variable mWidth/mHeight - seems to be no
-            // problem. After showing image in debugger and opening variable view again, it even
-            // shows the correct values then! (observed with 4.1 avd test)
             float aspectWall = (float) dispWidth / (float) dispHeight;
             if (isLandScape) {
                 aspectWall = 1f / aspectWall;
@@ -551,39 +550,24 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                     e1.printStackTrace();
                 }
 
-                // Save a jpeg file of the wallpaper bitmap // TODO: use quality parm, is prepared in utils since 24.11.2017
-                Log.i("HFCM", "Saving wallpaper image into 'wp_" + imageName + "', Quality: " + wallPaperQuality);
-                utils.writeJPG(getApplicationContext(),
-                        "wp_" + imageName,
-                        wallBitmap);
-
-                // Return the resulting bitmap via the intent - hmm, maybe just use the written file
-                // instead... this code shows, how to return a bitmap to a calling activity
-                // via ByteArrayOutputStream converted with toByteArray()
-                // Storing bitmap stream - does this cause memory to be used? Bad in terms of
-                // transaction size limits... AS SUSPECTED, QUALITY 90 RESULTS IN TX TOO LARGE!!!
-                // android.os.TransactionTooLargeException
-                // Now using the stored file, which even allows to keep files with disctinct names,
-                // allowing for some APOD gallery from which we can select our prepared wallpapers.
-                // Also, a "random" paper from within the app is possible this way...
-//                ByteArrayOutputStream ws = new ByteArrayOutputStream();                                                                     // TODO remove ??? stream no longer used!!
+                // Save wallpaper bitmap as JPEG (now with quality) and return filename via intent.
+                //Log.i("HFCM", "Saving wallpaper image into 'wp_" + imageName + "', Quality: " + wallPaperQuality);
+                //utils.writeJPG(getApplicationContext(),
+                //        "wp_" + imageName,
+                //        wallBitmap);
                 if (wallBitmap != null) {
-//                    wallBitmap.compress(Bitmap.CompressFormat.JPEG, wallPaperQuality, ws);
-                    //returnIntent.putExtra("wallpaperbmp", ws.toByteArray());
+                    Log.i("HFCM", "Saving wallpaper image into 'wp_" + imageName +
+                            "', Quality: " + wallPaperQuality);
+                    utils.writeJPG(getApplicationContext(),
+                            "wp_" + imageName,
+                            wallBitmap,
+                            wallPaperQuality);
                     returnIntent.putExtra("wallpaperfile", "wp_" + imageName);
+                    String toaster = getString(R.string.toast_wp_select_finished);
+                    Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
                 }
-
-                String toaster = getString(R.string.toast_wp_select_finished);
-                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
-
-                // TODO : docu better might be rect flattenToString / unflatten and pass string instead
-                // anyway, code no longer used, we pass the bitmap object via intent return value
-                /*ArrayList<Integer> reg = new ArrayList<>();
-                reg.add(region.left);
-                reg.add(region.top);
-                reg.add(region.right);
-                reg.add(region.bottom);
-                returnIntent.putIntegerArrayListExtra("wallpaperregion", reg);*/
+                //String toaster = getString(R.string.toast_wp_select_finished);
+                //Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
 
                 ivHires.invalidate();
 
@@ -612,8 +596,16 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             super.onLongPress(e);
         }
 
-        // TODO: implement smoother scrolling - Scroller might be your friend :)
-        // https://developer.android.com/reference/android/widget/Scroller.html
+        /**
+         * TODO: implement smoother scrolling - Scroller might be your friend :)
+         * https://developer.android.com/reference/android/widget/Scroller.html
+         * @param e1 motion event
+         * @param e2 motion event
+         * @param velocityX velocity
+         * @param velocityY velocity
+         * @return boolean
+         */
+        //
         @Override
         public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
             //super.onFling(e1, e2, velocityX, velocityY);
@@ -750,13 +742,18 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         Log.i(TAG, logstring);
         if(myBitmap != null) {
 
-            // Save a copy of the image (in scaled version) to local storage. Note: this is not the
-            // original image, but the one scaled to fit on our phone.
+            // Save local hires image copy to local storage. Note: this is not the original image,
+            // but the one, that possibly has been scaled to fit the devices mem/tex constraints
             // TODO possible implications on load if current heap memory not available on later load
             //      we might introduce OOM by just loading the given file
-            File img = new File(getFilesDir(), "hd_" + filename);
-            if (!img.exists()) {
-                utils.writeJPG(getApplicationContext(), "hd_" + filename, bitmap, 100);
+
+            SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
+            if (shPref.getBoolean("hires_save", false)) {
+                Log.i("HFCM", "Creating local copy of hires image to 'hd_" + filename);
+                File img = new File(getFilesDir(), "hd_" + filename);
+                if (!img.exists()) {
+                    utils.writeJPG(getApplicationContext(), "hd_" + filename, bitmap, 100);
+                }
             }
 
             //I/HFCM: Displaymetrics = DisplayMetrics{density=2.625, width=1080, height=1794, scaledDensity=2.625, xdpi=420.0, ydpi=420.0}

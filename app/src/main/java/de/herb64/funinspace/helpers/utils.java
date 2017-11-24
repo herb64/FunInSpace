@@ -3,7 +3,6 @@ package de.herb64.funinspace.helpers;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Build;
-import android.os.SystemClock;
 import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -31,15 +30,6 @@ import java.util.concurrent.ConcurrentNavigableMap;
  * - static member functions called on the "class", NOT an "instance"
  */
 public final class utils {
-
-    // Washington (NASA HQ) - matches with the observations, at which time new images appear in DE
-    // https://www.timeanddate.de/stadt/info/usa/washington-dc
-    // https://www.timeanddate.de/zeitzonen/deutschland
-    // BUT: most of USA has daylight saving time, so how to know, when it switches to GMT-04:00?
-    // API (google) or just use the scheduled plan within the app:
-    // https://greenwichmeantime.com/time-zone/rules/usa/               - rules
-    // https://developers.google.com/maps/documentation/timezone/intro  - API Google
-    // https://www.timeanddate.com/services/api/                        - API
 
     /**
      * Read contents of a text file
@@ -193,6 +183,16 @@ public final class utils {
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             HashSet<String> zoneids = (HashSet<String>) ZoneId.getAvailableZoneIds();
         }*/
+
+        // Washington (NASA HQ) - matches with the observations, at which time new images appear in DE
+        // https://www.timeanddate.de/stadt/info/usa/washington-dc
+        // https://www.timeanddate.de/zeitzonen/deutschland
+        // BUT: most of USA has daylight saving time, so how to know, when it switches to GMT-04:00?
+        // API (google) or just use the scheduled plan within the app:
+        // https://greenwichmeantime.com/time-zone/rules/usa/               - rules
+        // https://developers.google.com/maps/documentation/timezone/intro  - API Google
+        // https://www.timeanddate.com/services/api/                        - API
+
         // about date and time and java dependencies - DateTimeFormatter object
         // https://stackoverflow.com/questions/15360123/time-difference-between-two-times
 
@@ -301,6 +301,61 @@ public final class utils {
         return epochs;
     }
 
+    /**
+     * Get informations on existing files (thumbs, wallpapers, hires) and their memory use. This
+     * can be displayed in the about dialog.
+     * @return  formatted string containing the infos for display
+     */
+    public static String getFileStats(Context ctx, Locale loc) {
+        File dir = new File(ctx.getFilesDir().getPath());
+        File[] files = dir.listFiles();
+        int nTh = 0;
+        long sTh = 0;
+        int nWp = 0;
+        long sWp = 0;
+        int nHd = 0;
+        long sHd = 0;
+        for (File file : files) {
+            if (file.getName().startsWith("th_")) {
+                nTh++;
+                sTh +=  file.length();
+            } else if (file.getName().startsWith("wp_")) {
+                nWp++;
+                sWp +=  file.length();
+            } else if(file.getName().startsWith("hd_")) {
+                nHd++;
+                sHd +=  file.length();
+            }
+        }
+        return String.format(loc, "\n\nUsed image memory:\nThumbnails: %d files, %.2f MB" +
+                        "\nWallpapers: %d files, %.2f MB" +
+                        "\nHires: %d files, %.2f MB",
+                nTh, (float)sTh/1048576f,
+                nWp, (float)sWp/1048576f,
+                nHd, (float)sHd/1048576f);
+    }
+
+    /**
+     * Cleanup: - remove any orphan wallpapers/thumbnails
+     *          - remove inactive hires images with no rating
+     * @return  formatted string with results on cleanup
+     */
+    public static String cleanupFiles() {
+        // filenamefilter does not allow wildcard... could use java.nio.file... but not avail..
+        //String[] filenames = dir.list();
+
+        /*for (int idx = 0; idx < myList.size(); idx++) {
+
+        }*/
+        return "Cleanup to be done";
+    }
+
+    // TODO - backup function. Restore will not restore hires images unchecked, because these are
+    // possibly lower res than on new device, where restore takes place...
+    // need to backup info about phone as well to do checks
+    public static void backupToSdCard() {
+
+    }
     ///////////////// J U S T   S O M E   J U N K  /////////////////////////////////////////////////
     // stuff to check
     /* hmmm, strange behaviour when checking for installed packages

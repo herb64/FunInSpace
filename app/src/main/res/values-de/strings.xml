@@ -19,6 +19,7 @@
     <string name="sorry">Entschuldigung,</string>
     <string name="no_support_yet">Medium zur Zeit noch nicht unterstützt.</string>
 
+    <string name="pref_header_general">Allgemein</string>
     <string name="pref_description_wifi_required">Hires Bilder und Videos nur laden, wenn WiFi verfügbar ist.</string>
     <string name="pref_title_wifi_required">WiFi benötigt für Hires Bilder/Videos</string>
 
@@ -69,7 +70,7 @@
     <string name="set_as_wallpaper">Setze als Hintergrundbild</string>
     <string name="reselect_wallpaper">Hintergrund Ausschnitt neu wählen</string>
     <string name="remove_as_wallpaper">Lösche Hintergrundbild</string>
-    <string name="wp_tip_long_press">TIP\n Long Press erlaubt Hintergrundbild Auswahl</string>
+    <string name="wp_tip_long_press">==TIP==\nLong Press erlaubt Hintergrundbild Auswahl.</string>
     <string name="pref_summary_read_text">Den Erklärungstext bei jedem Aufklappen vorlesen. Über das Kontextmenü kann ebenfalls das Vorlesen gestartet werden.</string>
     <string name="pref_title_read_text">Vorlesen der Erklärung</string>
     <string name="cab_read">Vorlesen</string>
@@ -82,4 +83,10 @@
     </string-array>
 
     <string name="df_title">Datums Format</string>
+    <string name="wp_quality_summary">Qualität neu erstellter Hintergrundbilder. Bereits gespeicherte Bilder werden hierdurch nicht verändert.</string>
+    <string name="df_summary">Wähle ein Datumsformat für die Anzeige in der Liste der Bilder.</string>
+    <string name="hires_save_summary">Speichert lokale Kopien der hochaufösenden Bilder auf deinem Gerät.\nHinweis: Videos werden immer online gespielt und nicht lokal gespeichert.</string>
+    <string name="hires_save_title">Bilder lokal speichern</string>
+    <string name="rgb565_thumbs_summary">Benutze Thumbnail Bilder in niedrigerer Farbauflösung um Speicher zu sparen.</string>
+    <string name="rgb565_thumbs_title">Thumbnail Farbauflösung</string>
 </resources>
