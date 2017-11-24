@@ -880,11 +880,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         wpMinY = (int) (((float)viewHeight - scaledHeight) / 2f);
         wpMaxY = (int) (((float)viewHeight + scaledHeight) / 2f);
 
-        // Initialize wallpaper selection mode - create a centered rectangle
-        //String toaster = getString(R.string.toast_wp_start_select);
-        //Toast.makeText(ImageActivity.this, "Enable test", Toast.LENGTH_LONG).show();
-        //wallPaperSelectMode = true;
-
         // Reset view matrix to initial fullscreen view for selection of wallpaper range
         initializeMatrix();
         ivHires.setImageMatrix(imgMatrix);
