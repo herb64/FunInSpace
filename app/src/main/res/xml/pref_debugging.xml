@@ -25,4 +25,11 @@
         android:summary="Show information for debugging, like the bitmap loader screen after each display of a hires image. You can switch this off if you like and turn on if Herbert asks for this."
         android:title="Display debug informations" />
 
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="youtube_fullscreen"
+        android:summary="Activate the new fullscreen youtube play functionality for testing - there are still issues with device rotation.. and more??"
+        android:title="Test YouTube fullscreen" />
+
+
 </PreferenceScreen>

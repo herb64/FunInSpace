@@ -123,7 +123,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.4.2 (alpha)\nBuild Date 2017-11-24\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.4.3 (alpha)\nBuild Date 2017-11-24\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
@@ -287,7 +287,7 @@ public class MainActivity extends AppCompatActivity
                     v.setMaxLines(MAX_LINES);
                     v.setEllipsize(null);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);
-                    if (read) {
+                    if (read && tts != null) {
                         tts.speak(myList.get((int)id).getExplanation(),
                                 TextToSpeech.QUEUE_FLUSH,
                                 null);
@@ -296,7 +296,7 @@ public class MainActivity extends AppCompatActivity
                     v.setEllipsize(TextUtils.TruncateAt.END);
                     v.setMaxLines(MAX_ELLIPSED_LINES);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
-                    if (read) {
+                    if (read && tts != null) {
                         tts.stop();
                     }
                 }
@@ -1269,7 +1269,11 @@ public class MainActivity extends AppCompatActivity
                 case M_YOUTUBE:
                     String thumb = myList.get(idx).getThumb();
                     // We get the ID from thumb name - hmmm, somewhat dirty ?
-                    playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
+                    if (sharedPref.getBoolean("youtube_fullscreen", false)) {
+                        playYouTubeFullScreen(thumb.replace("th_", "").replace(".jpg", ""));
+                    } else {
+                        playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
+                    }
                     break;
                 case M_VIMEO:
                     playVimeo(hiresUrl);
@@ -1287,6 +1291,7 @@ public class MainActivity extends AppCompatActivity
     /**
      * Play a youtube video by id  - first quick shot for basic test, which uses the autoplay in
      * lightbox mode.
+     * NOTE: this might be completely replaced by the fullscreen code...
      * @param id The String containing the YouTube Video ID
      */
     private void playYouTube(String id) {
@@ -1306,6 +1311,25 @@ public class MainActivity extends AppCompatActivity
         } catch(Exception e) {
             new dialogDisplay(this, getString(R.string.no_youtube),
                     getString(R.string.sorry));
+        }
+    }
+
+    /**
+     * Play a youtube video by id in fullscreen using YouTubePlayerSupportFragment
+     * https://developers.google.com/youtube/android/player/reference/com/google/android/youtube/player/YouTubePlayerSupportFragment
+     * @param id video id
+     */
+    private void playYouTubeFullScreen(String id) {
+        FragmentManager fm = getSupportFragmentManager();
+        YouTubeFragment ytFragment = (YouTubeFragment) fm.findFragmentByTag("YOUTUBE-FULLSCREEN");
+        if (ytFragment == null) {
+            ytFragment = new YouTubeFragment();
+            // setArguments is the way to go, do NOT use non default constructor with fragments!
+            Bundle fragArguments = new Bundle();
+            fragArguments.putString("api_key", yT());
+            fragArguments.putString("video_id", id);
+            ytFragment.setArguments(fragArguments);
+            fm.beginTransaction().add(ytFragment, "YOUTUBE-FULLSCREEN").commit();
         }
     }
 
@@ -1707,7 +1731,7 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_help) {
-            new dialogDisplay(MainActivity.this, "Help page not yet available, to be done soon...", "TODO");
+            new dialogDisplay(MainActivity.this, "Help page not yet available, to be done hopefully soon...", "TODO");
             return true;
         }
         if (id == R.id.action_about) {
@@ -1715,7 +1739,7 @@ public class MainActivity extends AppCompatActivity
                     "\nTODO credits:\nflaticons.com for movie_other_64.png\n\n" +
                     getString(R.string.credits_first_testers) +
                     utils.getFileStats(getApplicationContext(), loc),
-                    "Infos (still development)");
+                    "Infos (in development)");
             return true;
         }
         if (id == R.id.action_mail) {
