@@ -20,7 +20,6 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v4.internal.view.SupportMenuItem;
-import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
@@ -45,7 +44,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.io.File;
-import java.io.FileFilter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -123,14 +121,14 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.4.3 (alpha)\nBuild Date 2017-11-24\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.4.4 (alpha)\nBuild Date 2017-11-25\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
 
     private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
-    // a simulated NASA json file for debugging and testing purpose - enabled as debug user option
+    // a simulated NASA json file for debugging and testing pur     cpose - enabled as debug user option
     private static final String APOD_SIMULATE = "https://dl.dropboxusercontent.com/s/agfxia2f6or5plk/apod-simulate.json";
     // interesting: the name behind the link is not important, notfound.json worked as well, need to change the ID!!
     //private static final String APOD_NOTFOUND = "https://dl.dropboxusercontent.com/s/mzidejp3qfnosff/notfound.json";
@@ -154,7 +152,9 @@ public class MainActivity extends AppCompatActivity
     protected static final int WP_NONE = 0;
     protected static final int WP_EXISTS = 1;// << 1;
     protected static final int WP_ACTIVE = 3;// << 2;
-    //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers                  !!!!! TODO: used for cleanup and shuffle option
+    // TODO - housekeeping of files
+    //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers
+    protected static final int MAX_HIRES_MB = 3;              // limit in MB for hires images on device
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -1317,6 +1317,7 @@ public class MainActivity extends AppCompatActivity
     /**
      * Play a youtube video by id in fullscreen using YouTubePlayerSupportFragment
      * https://developers.google.com/youtube/android/player/reference/com/google/android/youtube/player/YouTubePlayerSupportFragment
+     * TODO: needs much more testing (phone rotation, buttons press like fullscreen etc..)
      * @param id video id
      */
     private void playYouTubeFullScreen(String id) {
@@ -1422,14 +1423,30 @@ public class MainActivity extends AppCompatActivity
                 if (sharedPref.getBoolean("show_debug_infos", true)) {
                     new dialogDisplay(this, logString, lastImage);
                 }
+                // If a new cache file has been written, we trigger a file cleanup
+                if (data.getBooleanExtra("new_hd_cached_file", false)) {
+                    String ttt = utils.cleanupFiles(getApplicationContext(),
+                            myList,
+                            MAX_HIRES_MB * 1024);
+                    adp.notifyDataSetChanged();
+                    if (sharedPref.getBoolean("show_debug_infos", true) && !ttt.equals("")) {
+                        new dialogDisplay(MainActivity.this, ttt, "Cleanup processing", 10f);
+                    }
+                }
+
+                File hdFile = new File(getApplicationContext().getFilesDir(),
+                        myList.get(listidx).getThumb().replace("th_", "hd_"));
+                myList.get(listidx).setCached(hdFile.exists());
 
                 // User dialog OK processConfirmation() kicks off changer thread later
                 if (data.getStringExtra("wallpaperfile") != null) {
                     Bundle fragArguments = new Bundle();
                     //fragArguments.putString("RESULT", data.getStringExtra("wallpaperfile"));
                     fragArguments.putInt("IDX", listidx);
-                    fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
-                    fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
+                    fragArguments.putString("TITLE",
+                            getString(R.string.wp_confirm_dlg_title));
+                    fragArguments.putString("MESSAGE",
+                            getString(R.string.wp_confirm_dlg_msg,
                             myList.get(listidx).getTitle()));
                     fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
                     fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
@@ -1440,22 +1457,24 @@ public class MainActivity extends AppCompatActivity
                     dlg.show(fm, "CONFIRMTAG");
                 }
 
-                if (myList.get(listidx).getHiSize().equals(testsize) ||
-                        testsize.equals("no-change")) {
-                    return;     // no action needed if hires size already in data // TODO maybe get during apod load using asyncload by testing from stream...
-                }
-                try {
-                    // data in json is reverse ordered as in list
-                    JSONObject content = parent.getJSONObject(parent.length() - 1 - listidx).
-                            getJSONObject("Content");
-                    Log.i("HFCM", "HIRES_LOAD: index=" + listidx +
-                            ", list: " + myList.get(listidx).getTitle() +
-                            ", json: " + content.getString("Title"));
-                    content.put("HiSize", testsize);
-                    utils.writeJson(getApplicationContext(), localJson, parent);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                    Log.e("HFCM", e.toString());
+                if (!(myList.get(listidx).getHiSize().equals(testsize) ||
+                        testsize.equals("no-change"))) {
+                    //return;     // no action needed if hires size already in data
+                    // TODO maybe get size at apod load using asyncload from stream...
+                    // this would avoid ugly "launch and return logic" and move this to getapod...
+                    try {
+                        // data in json is reverse ordered as in list
+                        JSONObject content = parent.getJSONObject(parent.length() - 1 - listidx).
+                                getJSONObject("Content");
+                        Log.i("HFCM", "HIRES_LOAD: index=" + listidx +
+                                ", list: " + myList.get(listidx).getTitle() +
+                                ", json: " + content.getString("Title"));
+                        content.put("HiSize", testsize);
+                        utils.writeJson(getApplicationContext(), localJson, parent);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        Log.e("HFCM", e.toString());
+                    }
                 }
                 myList.get(listidx).setHiSize(testsize);
                 adp.notifyDataSetChanged();
@@ -1738,7 +1757,8 @@ public class MainActivity extends AppCompatActivity
             new dialogDisplay(MainActivity.this, "Version: " + ABOUT_VERSION +
                     "\nTODO credits:\nflaticons.com for movie_other_64.png\n\n" +
                     getString(R.string.credits_first_testers) +
-                    utils.getFileStats(getApplicationContext(), loc),
+                    utils.getFileStats(getApplicationContext(), loc) +
+                    "\nLimit: " + MAX_HIRES_MB + "MB (no active cleanup yet)",
                     "Infos (in development)");
             return true;
         }
@@ -1779,11 +1799,14 @@ public class MainActivity extends AppCompatActivity
 
             List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);   // flags ?
             if(pkgs.size() == 0) {
-                new dialogDisplay(MainActivity.this, getString(R.string.no_email_client));
+                new dialogDisplay(MainActivity.this,
+                        getString(R.string.no_email_client));
             } else {
                 for (ResolveInfo pkg : pkgs) {
-                    // see more infos in lalatex - TODO: how to restrict grant to one selected app? / default app
-                    Log.i("HFCM", "Granting shared rights for package: " + pkg.activityInfo.packageName);
+                    // see more infos in lalatex -
+                    // TODO: how to restrict grant to one selected app? / default app
+                    Log.i("HFCM", "Granting shared rights for package: " +
+                            pkg.activityInfo.packageName);
                     grantUriPermission(pkg.activityInfo.packageName,
                             contentUri,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -1832,7 +1855,8 @@ public class MainActivity extends AppCompatActivity
         }
 
         if (id == R.id.restore_wallpaper) {
-            new dialogDisplay(MainActivity.this, getString(R.string.dlg_revert_wp),
+            new dialogDisplay(MainActivity.this,
+                    getString(R.string.dlg_revert_wp),
                     getString(R.string.dlg_title_info));
             changeWallpaper("");
         }
@@ -1949,6 +1973,10 @@ public class MainActivity extends AppCompatActivity
             } else {
                 newitem.setWpFlag(WP_NONE);
             }
+            // Hires cache image filename derived from thumb filename, th_ > hd_
+            String hdName = strThumb.replace("th_", "hd_");
+            File hdFile = new File(getApplicationContext().getFilesDir(), hdName);
+            newitem.setCached(hdFile.exists());
             myList.add(newitem);
             count++;
         }

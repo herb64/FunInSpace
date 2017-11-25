@@ -105,6 +105,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
             holder = new ViewHolder();
             holder.ivThumb = convertView.findViewById(R.id.iv_thumb);
             holder.ivYoutube = convertView.findViewById(R.id.iv_youtube);   // TODO: rename
+            holder.ivCached = convertView.findViewById(R.id.iv_cached);
             holder.ivWallpaper = convertView.findViewById(R.id.iv_wallpaper);
             holder.rbRating = convertView.findViewById(R.id.id_rating);
             holder.tvTitle = convertView.findViewById(R.id.tv_title);
@@ -152,6 +153,13 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
             default:
                 break;
         }
+        // Update small cache save icon bottom left in thumbnail
+        holder.ivCached.setVisibility(iList.get(position).isCached() ? View.VISIBLE : View.INVISIBLE);
+        /*if (iList.get(position).isCached()) {
+            holder.ivCached.setVisibility(View.VISIBLE);
+        } else {
+            holder.ivCached.setVisibility(View.INVISIBLE);
+        }*/
 
         //iv.setColorFilter(getResources().getColor(android.R.color.black), PorterDuff.Mode.SRC_IN);
 

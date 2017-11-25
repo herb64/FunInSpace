@@ -22,7 +22,13 @@ import de.herb64.funinspace.MainActivity;
 // https://stackoverflow.com/questions/12627457/format-statement-in-a-string-resource-file
 // formatted=false not needed in XML. Use format string as %[POSITION]$[TYPE]
 
+
 public class dialogDisplay {
+    /**
+     * Standard dialog with default title, only content can be defined
+     * @param ctx context
+     * @param content string with content to be shown
+     */
     public dialogDisplay(Context ctx, String content) {
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
         builder.setTitle("Infos for Herbert");
@@ -34,14 +40,16 @@ public class dialogDisplay {
                         // hmm, what could we do here??
                     }
                 });
-        //AlertDialog dlg = builder.create();
-        //TextView tv = dlg.findViewById(android.R.id.message);
-        //tv.setText("hugo");
-        //tv.setTextSize(TextView.MEASURED_SIZE_MASK);
         builder.create();
         builder.show();
     }
 
+    /**
+     * Enhanced dialog with title and content to be passed
+     * @param ctx context
+     * @param content string with content to be shown
+     * @param title string with title to be shown
+     */
     public dialogDisplay(Context ctx, String content, String title) {
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
         builder.setTitle(title);
@@ -53,11 +61,30 @@ public class dialogDisplay {
                         // hmm, what could we do here??
                     }
                 });
-        //AlertDialog dlg = builder.create();
-        //TextView tv = dlg.findViewById(android.R.id.message);
-        //tv.setTextSize(TextView.MEASURED_SIZE_MASK);
-        //dlg.show();
         builder.create();
         builder.show();
+    }
+
+    /**
+     * Enhance dialog with title, content and size of content text. Useful for larger content
+     * @param ctx context
+     * @param content string with content to be shown
+     * @param title string with title to be shown
+     * @param size float value for size of content text
+     */
+    public dialogDisplay(Context ctx, String content, String title, float size) {
+
+        AlertDialog dlg = new AlertDialog.Builder(ctx).setMessage(content).
+                setTitle(title).
+                setPositiveButton("OK",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                // hmm, what could we do here??
+                            }
+                        }).
+                show();
+        TextView tv = dlg.findViewById(android.R.id.message);
+        tv.setTextSize(size);
     }
 }

@@ -231,8 +231,11 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             ImgHiresFragment mHiresFragment = (ImgHiresFragment) fm.findFragmentByTag(TAG_TASK_FRAGMENT);
             // If the Fragment is non-null, it is currently being retained across a config change.
             if (mHiresFragment == null) {
-                String toaster = "<" + String.valueOf(listIdx) + "> " + strHires;
-                Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
+                SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
+                if (shPref.getBoolean("show_debug_infos", true)) {
+                    String toaster = "<" + String.valueOf(listIdx) + "> " + strHires;
+                    Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_SHORT).show();
+                }
                 mHiresFragment = new ImgHiresFragment();
                 // setArguments is the way to go, do NOT use non default constructor with fragments!
                 Bundle fragArguments = new Bundle();
@@ -741,18 +744,16 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         myBitmap = bitmap;
         Log.i(TAG, logstring);
         if(myBitmap != null) {
-
             // Save local hires image copy to local storage. Note: this is not the original image,
-            // but the one, that possibly has been scaled to fit the devices mem/tex constraints
-            // TODO possible implications on load if current heap memory not available on later load
-            //      we might introduce OOM by just loading the given file
-
+            // but one, that might have been scaled to fit the device memory/texture constraints
             SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
             if (shPref.getBoolean("hires_save", false)) {
                 Log.i("HFCM", "Creating local copy of hires image to 'hd_" + filename);
                 File img = new File(getFilesDir(), "hd_" + filename);
                 if (!img.exists()) {
                     utils.writeJPG(getApplicationContext(), "hd_" + filename, bitmap, 100);
+                    // TODO: catch errors!!! - change utils function
+                    returnIntent.putExtra("new_hd_cached_file", true);
                 }
             }
 

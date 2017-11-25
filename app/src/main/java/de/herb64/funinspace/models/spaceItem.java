@@ -50,6 +50,7 @@ public class spaceItem implements Parcelable {
     private int maxLines = 3;
     private boolean isSelected = false;
     private int wpFlag = 0;
+    private boolean isCached = false;
 
     public String getTitle() {
         return Title;
@@ -177,6 +178,14 @@ public class spaceItem implements Parcelable {
 
     public void setWpFlag(int wpFlag) {
         this.wpFlag = wpFlag;
+    }
+
+    public boolean isCached() {
+        return isCached;
+    }
+
+    public void setCached(boolean cached) {
+        isCached = cached;
     }
 
     // -------------------------------------------------------

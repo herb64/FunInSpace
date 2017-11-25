@@ -20,8 +20,13 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
+
+import de.herb64.funinspace.MainActivity;
+import de.herb64.funinspace.models.spaceItem;
 
 
 /**
@@ -30,6 +35,8 @@ import java.util.concurrent.ConcurrentNavigableMap;
  * - static member functions called on the "class", NOT an "instance"
  */
 public final class utils {
+
+    private static final long MAX_HDSIZE = 25000;
 
     /**
      * Read contents of a text file
@@ -336,24 +343,92 @@ public final class utils {
     }
 
     /**
-     * Cleanup: - remove any orphan wallpapers/thumbnails
-     *          - remove inactive hires images with no rating
-     * @return  formatted string with results on cleanup
+     *  Cleanup: - remove any orphaned wallpaper/thumbnail/hires image files
+     *           - remove hires images if max space exceeded (size and rating dependent)
+     * @param ctx context
+     * @param items arraylist with spaceitems
+     * @param maxHdMem maximum allowed memory for hires images in bytes
+     * @return formatted string with results on cleanup
      */
-    public static String cleanupFiles() {
+    public static String cleanupFiles(Context ctx, ArrayList<spaceItem> items, long maxHdMem) {
+        // TODO For testing, it is currently on "R.id.action_search_apod"
         // filenamefilter does not allow wildcard... could use java.nio.file... but not avail..
-        //String[] filenames = dir.list();
 
-        /*for (int idx = 0; idx < myList.size(); idx++) {
+        String logString = "";
+        // Create array lists of all th/wp/hd files in filesystem - potential orphans list
+        ArrayList<String> orphans = new ArrayList<>();
+        File dir = new File(ctx.getFilesDir().getPath());
+        String[] names = dir.list();
+        for (String name : names) {
+            if (name.startsWith("th_") || name.startsWith("wp_") || name.startsWith("hd_")) {
+                orphans.add(name);
+            }
+        }
+        String filebase;
+        long usedHdMem = 0;
+        for (spaceItem item : items) {
+            filebase = item.getThumb().replace("th_", "");
+            //if (orphans.contains("th_" + filebase)) {
+            orphans.remove("th_" + filebase);
+            orphans.remove("wp_" + filebase);
+            orphans.remove("hd_" + filebase);
+            File hd = new File(ctx.getFilesDir(), "hd_" + filebase);
+            usedHdMem += hd.length();
+        }
+        usedHdMem /= 1024;
 
-        }*/
-        return "Cleanup to be done";
+        if (orphans.size() > 0) {
+            logString += "Orphans:\n";
+        }
+        for (String fn : orphans) {
+            File todelete = new File(ctx.getFilesDir(), fn);
+            Log.i("HFCM", "Deleting orphaned file: " + fn);
+            logString += fn + "\n";
+            /*if (!todelete.delete()) {
+                Log.e("HFCM", "Error deleting orphaned file: " + todelete);
+            }*/
+        }
+
+        // Delete hires images if space is exceeded: depend on size and rating
+        // TreeMap is sorted: https://developer.android.com/reference/java/util/TreeMap.html
+        Log.i("HFCM", "About to cleanup hd images space, currently in use: " + usedHdMem);
+        TreeMap<Long, File> sorted = new TreeMap<>();
+        if (usedHdMem > maxHdMem) {
+            Log.i("HFCM", "Used hd mem " + usedHdMem + " exceeds max hd mem " + maxHdMem);
+            for (spaceItem item : items) {
+                File hd = new File(ctx.getFilesDir(), item.getThumb().replace("th_", "hd_"));
+                if (hd.exists()) {
+                    int rating = item.getRating();
+                    long size = hd.length() / 1024;
+                    long key = MAX_HDSIZE - size + rating * MAX_HDSIZE;
+                    Log.i("HFCM", "Adding " + hd.getName() + " - key=" + key +
+                            " (size=" + size + ", rating=" + rating + ")");
+                    sorted.put(key, hd);
+                }
+            }
+            logString += "Hires images: (" + usedHdMem + "KB of " + maxHdMem + "KB)\n";
+            for(Map.Entry<Long,File> entry : sorted.entrySet()) {
+                usedHdMem -= entry.getValue().length() / 1024;
+                Log.i("HFCM", "Deleting Hires file: " + entry.getValue().getName() + " > " +
+                        entry.getKey() + " - used mem now " + usedHdMem);
+                logString += entry.getValue().getName() + " (" + entry.getValue().length()/1024 + ")\n";
+                /*if (!entry.getValue().delete()) {
+                    Log.e("HFCM", "Error deleting file: " + entry.getValue().getName());
+                }*/
+                if (usedHdMem < maxHdMem) {
+                    logString += "Now used " + usedHdMem + "KB after cleanup";
+                    logString += "\nNO REAL DELETES DURING TEST PHASE FOR NOW!!!!";
+                    break;
+                }
+            }
+        }
+        return logString;
     }
 
     // TODO - backup function. Restore will not restore hires images unchecked, because these are
     // possibly lower res than on new device, where restore takes place...
     // need to backup info about phone as well to do checks
-    public static void backupToSdCard() {
+    public static void backupToSdCard(Context ctx, ArrayList<spaceItem> items) {
 
     }
     ///////////////// J U S T   S O M E   J U N K  /////////////////////////////////////////////////

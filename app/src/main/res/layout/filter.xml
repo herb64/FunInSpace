@@ -113,6 +113,22 @@
                 android:layout_weight="1"
                 app:srcCompat="@drawable/ic_heart_black_24dp" />
 
+            <Space
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minWidth="@dimen/fab_margin"
+                android:visibility="visible" />
+
+            <ImageView
+                android:id="@+id/iv_filter_hires_cached"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:layout_weight="1"
+                android:visibility="gone"
+                app:srcCompat="@drawable/ic_save_24px" />
+
         </LinearLayout>
     </HorizontalScrollView>
 

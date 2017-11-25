@@ -14,6 +14,7 @@ import android.widget.TextView;
 class ViewHolder {
     ImageView ivThumb;
     ImageView ivYoutube;
+    ImageView ivCached;
     ImageView ivWallpaper;
     RatingBar rbRating;
     TextView tvTitle;

@@ -101,6 +101,15 @@
             tools:layout_width="wrap_content" />
 
         <ImageView
+            android:id="@+id/iv_cached"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_gravity="left|bottom"
+            android:visibility="visible"
+            app:srcCompat="@drawable/ic_save_24px"
+            tools:layout_width="wrap_content" />
+
+        <ImageView
             android:id="@+id/iv_youtube"
             android:layout_width="wrap_content"
             android:layout_height="35dp"
