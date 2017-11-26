@@ -19,6 +19,7 @@ import java.text.SimpleDateFormat;
 // import java.time.ZoneId;             API26+ required
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
@@ -36,6 +37,7 @@ import de.herb64.funinspace.models.spaceItem;
  */
 public final class utils {
 
+    private static final long MS_PER_DAY = 86400000;
     private static final long MAX_HDSIZE = 25000;
 
     /**
@@ -178,14 +180,16 @@ public final class utils {
     }
 
     /**
-     * Calculate some epoch values based on TimeZone New York
+     * Calculate some epoch values based on TimeZone New York //TODO cleanup - lot of unused stuff..
      * TODO: checkout DateTimeFormatter as modern way in Java to handle dates/times
      * @param locale the locale, used for string formatting
+     * @param latestImgEpoch epoch from latest image or 0, if no delta to next img needed
      * @return ArrayList of 3 long values containing epoch values:
      * - epoch cut down to 00:00:00 (date only) - TODO why should we keep that? just for fun ??
      * - epoch full at current time
+     * - milliseconds until next image fetch
      * */
-    public static ArrayList<Long> getNASAEpoch(Locale locale) {
+    public static ArrayList<Long> getNASAEpoch(Locale locale, long latestImgEpoch) {
         ArrayList<Long> epochs = new ArrayList<>();
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             HashSet<String> zoneids = (HashSet<String>) ZoneId.getAvailableZoneIds();
@@ -203,6 +207,8 @@ public final class utils {
         // about date and time and java dependencies - DateTimeFormatter object
         // https://stackoverflow.com/questions/15360123/time-difference-between-two-times
 
+        // http://tycho.usno.navy.mil/systime.html -- time can be quite complicated :)
+
         long epochFULL = System.currentTimeMillis();        // current milliseconds value
         // TimeZone tzNASA1 = TimeZone.getTimeZone("GMT-05:00");
         // Getting by ID returns a different object, than getting by GMT... Looks like this
@@ -214,7 +220,8 @@ public final class utils {
                 tzSYS.getDisplayName() +
                 " / " + tzSYS.getID());
         Calendar cSYS = Calendar.getInstance(tzSYS);
-        Log.i("HFCM", "SYS TZ offset for epoch (hours): " + (float)tzSYS.getOffset(epochFULL)/3600000f);
+        Log.i("HFCM", "SYS TZ offset for epoch (hours): " +
+                (float)tzSYS.getOffset(epochFULL)/3600000f);
 
         // NASA Server seems to be in New York timezone (deduced from delay when images appear)
         TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
@@ -222,7 +229,8 @@ public final class utils {
                 tzNASA.getDisplayName() +
                 " / " + tzNASA.getID());
         Calendar cNASA = Calendar.getInstance(tzNASA);
-        Log.i("HFCM", "NASA TZ offset for epoch (hours): " + (float)tzNASA.getOffset(epochFULL)/3600000f);
+        Log.i("HFCM", "NASA TZ offset for epoch (hours): " +
+                (float)tzNASA.getOffset(epochFULL)/3600000f);
         Log.w("HFCM", "SYS ahead of NASA (hours): " +
                 ((float)tzSYS.getOffset(epochFULL) - (float)tzNASA.getOffset(epochFULL))/3600000f);
 
@@ -248,6 +256,14 @@ public final class utils {
                 cSYS.get(Calendar.MONTH) + 1,
                 cSYS.get(Calendar.DAY_OF_MONTH));
         Log.i("HFCM", "SYS  Date onlystring: " + yyyymmddSYS);
+        String yyyymmddhhmmssSYS = String.format(locale, "%04d-%02d-%02d_%02d-%02d-%02d",
+                cSYS.get(Calendar.YEAR),
+                cSYS.get(Calendar.MONTH) + 1,
+                cSYS.get(Calendar.DAY_OF_MONTH),
+                cSYS.get(Calendar.HOUR_OF_DAY),
+                cSYS.get(Calendar.MINUTE),
+                cSYS.get(Calendar.SECOND));
+        Log.i("HFCM", "SYS Date+time string: " + yyyymmddhhmmssSYS);
 
         // Use SimpleDateFormat to get the epoch value reduced to date only (no hh:mm:ss...)
         SimpleDateFormat dF00_00_00 = new SimpleDateFormat("yyyy-MM-dd", locale);
@@ -264,6 +280,21 @@ public final class utils {
         }
         Log.i("HFCM", "FULL: epoch=" + epochFULL);
         Log.i("HFCM", "00_00_00: epoch= " + epoch_00_00_00);
+        Log.i("HFCM", "Latest image: epoch=" + latestImgEpoch);
+
+        // Calculate the delta time to next required image load.
+        long timeToNext = 0;
+        if (latestImgEpoch > 0) {
+            Date datefull = new Date(epochFULL);
+            Date dateLatestImg = new Date(latestImgEpoch);  // seen in current TimeZone!
+            //Date date00_00_00 = new Date(epoch_00_00_00);
+            Log.i("HFCM", "Date latest image: " + dateLatestImg.toString());
+            long diff = (datefull.getTime() - dateLatestImg.getTime());
+            Log.i("HFCM", "Diff full - imagelatest: " + diff + " seconds");
+            if (diff < MS_PER_DAY) {
+                timeToNext = MS_PER_DAY - diff;
+            }
+        }
 
         // Getting the time/date for any other given timezone (i.e. the local time there)
         // create a formatter for this and assign a calendar or timezone object of the requested
@@ -279,25 +310,28 @@ public final class utils {
         // Prepare return values: NASA epoch at 00:00:00, NASA epoch full, our own epoch
         epochs.add(epoch_00_00_00);
         epochs.add(epochFULL);
+        epochs.add(timeToNext);
 
         // Testing and debugging
         SimpleDateFormat formatter = new SimpleDateFormat("dd. MMM yyyy, HH:mm:ss", locale);
         formatter.setTimeZone(tzNASA);
         //formatter.setCalendar(cNASA);
-        Log.i("HFCM", "Have epochs " + epochs +
+        Log.i("HFCM", "Have values " + epochs +
                 "\nNASA time 00:00:00: " + formatter.format(epochs.get(0)) +
-                "\nNASA time full: " + formatter.format(epochs.get(1)));
+                "\nNASA time full: " + formatter.format(epochs.get(1)) +
+                "\nNASA time next: " + formatter.format(epochs.get(1) + epochs.get(2)));
 
         // It seems to be sufficient to have the timezone object
         //formatter.setTimeZone(tzLOC);
         formatter.setCalendar(cSYS);
         Log.i("HFCM", "Local time on device: " + formatter.format(epochs.get(1)) + " (" + tzSYS.getDisplayName() + ")");
+        Log.i("HFCM", "Local time for next image fetch: " + formatter.format(epochs.get(1) + epochs.get(2)));
 
         // we do not need to use a Date object for formatting, can pass epoch as well
         //Date testdate = new Date(epochNASA_00_00_00);
         //String formatted = formatter.format(testdate);
 
-        // just get them all printed
+        // Just get all defined timezones printed
         /*String[] tzIDs = TimeZone.getAvailableIDs();
         for (String id : tzIDs) {
             TimeZone tzTEST = TimeZone.getTimeZone(id);

@@ -121,7 +121,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.4.4 (alpha)\nBuild Date 2017-11-25\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.4.5 (alpha)\nBuild Date 2017-11-26\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
@@ -179,6 +179,7 @@ public class MainActivity extends AppCompatActivity
         }
 
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
+        // (shared_prefs/de.herb64.funinspace_preferences.xml)
         // TODO check, if this is rotation proof, or if we bettger should get prefs each time
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
         // Initialize flags to true, so that first open of preferences dialog, which triggers the
@@ -191,9 +192,6 @@ public class MainActivity extends AppCompatActivity
         // We must interpret the stored epoch value as seen from NASA time!
         tzNASA = TimeZone.getTimeZone("America/New_York"); // NASA server is within this TZ
         cNASA = Calendar.getInstance(tzNASA);
-        // TODO - make display format of date configurable in settings
-        //String fmt = sharedPref.getString("date_format", getString(R.string.df_dd_mm_yyyy));
-        //String fmt = sharedPref.getString("date_format", "dd.MMM.yyyy");
         // TODO: shared prefs are mixed up for date format
         String fmt = sharedPref.getString("date_format", getString(R.string.df_dd_mm_yyyy));
         formatter = new SimpleDateFormat(fmt, loc);
@@ -714,9 +712,12 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onDestroyActionMode(android.view.ActionMode actionMode) {
                 // reset selection status for all items
-                for (int idx = 0; idx < myList.size(); idx++) {
-                    myList.get(idx).setSelected(false);
+                for (spaceItem item : myList) {
+                    item.setSelected(false);
                 }
+                //for (int idx = 0; idx < myList.size(); idx++) {
+                //    myList.get(idx).setSelected(false);
+                //}
             }
         });
 
@@ -1043,7 +1044,7 @@ public class MainActivity extends AppCompatActivity
         apodItem.setExplanation(sExplanation);
         apodItem.setHires(sHiresUrl);
         // now using long int epoch value for date in spaceItem
-        long epoch = utils.getNASAEpoch(loc).get(0);
+        long epoch = utils.getNASAEpoch(loc, 0).get(0);
         /*SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
         // normally we would use code as below for correct locale, but we parse a specific
         // format here :_ "date": "2017-09-17", as returned by NASA in their json
@@ -1092,6 +1093,7 @@ public class MainActivity extends AppCompatActivity
     void finalizeApodWithLowresImage(Bitmap bitmap) {
         // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
         // item should match anyway, because latest image is on top of the list.
+        // TODO  better: for (spaceItem item : myList) if i is not needed elsewhere
         for(int i=0; i<myList.size();i++) {
             if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
                 // TODO here's the point to check, if the thumbnail file exists (and reload)
@@ -1498,19 +1500,17 @@ public class MainActivity extends AppCompatActivity
                 //       e.g. ordering of elements in list...
                 // Check for any changed preference items, which have been marked by the listener.
                 if (thumbQualityChanged) {
-                    SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
-                    Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
-                    thumbQualityChanged = false;    // RESET !!!
-                    // Just reload the complete list. This reloads all images with changed settings
-                    // from the locally stored thumbnail images
+                    //SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
+                    //Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
+                    Log.i("HFCM", "Low quality thumbs enabled: " + sharedPref.getBoolean("rgb565_thumbs", false));
+                    thumbQualityChanged = false;
                     myList.clear();
                     addItems();
                     adp.notifyDataSetChanged();
                 }
                 if (dateFormatChanged) {
                     dateFormatChanged = false;
-                    // acutally, the SimpleDateFormat object does not seem to allow to change the
-                    // format string, so we recreate the object...
+                    // SimpleDateFormat object does not allow to CHANGE format string - recreate
                     String fmt = sharedPref.getString("date_format", getString(R.string.df_dd_mm_yyyy));
                     formatter = new SimpleDateFormat(fmt, loc); // "dd. MMMM yyyy"
                     formatter.setTimeZone(tzNASA);
@@ -1894,7 +1894,7 @@ public class MainActivity extends AppCompatActivity
         String strHiSize = "";
         String strLowSize = "";
 
-        // Get current wallpaper filename, if any has been set
+        // Get current wallpaper filename, if any has been set (shared_prefs/MainActivity.xml)
         SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
         String wpFileCurrent = shPref.getString("CURRENT_WALLPAPER_FILE", "");
 
@@ -2106,35 +2106,27 @@ public class MainActivity extends AppCompatActivity
      * Try to get the latest APOD. This is called on each start of the app and after a refresh from
      * dropbox (while the latter should not be needed, if dropbox reload does a merge, which is not
      * (yet?) the case.
-     * 14.11.2017 - this function has been created to put the load in a single place and to enable
-     * a check based on nasa server time, if a reload is really needed...
+     * Check the age of the current latest image and avoid any NASA query, if it is already up to
+     * date. In this case, the time until next image is calculated.
+     * TODO: this time might be used to start a ScheduledJob.. ?
      */
     private void getLatestAPOD() {
-        // TODO: add code to check, if latest apod is already in, so no call is needed at all
-        // utils function "needAPODRefresh" as base... doing the timezone stuff
-        ArrayList<Long> epochs = utils.getNASAEpoch(loc);
-        // we check the first image in list: if it's epoch is same as current NASA 00:00:00 epoch,
-        // we do not call the apod loader at all.
-
-        // Get current date and NASA date: if NASA date is behind, we need to wait, e.g. 04:00 DE
-
-        // Get a message: New image not yet available, if our date is newer than current image date
-        // but nasa did still not jump the date boundary (e.g. germany 03:00 -> still on prv. day in NEwYork
-
-        // we need to compare date strings, not epochs!!
-        /*if (myList.get(0).getDateTime() == epochs.get(0)) {
-            Toast.makeText(MainActivity.this, "Image for today is already loaded",
+        ArrayList<Long> epochs = utils.getNASAEpoch(loc, myList.get(0).getDateTime());
+        if (epochs.get(2) > 0) {
+            Toast.makeText(MainActivity.this,
+                    String.format(loc, getString(R.string.apod_already_loaded),
+                            (float)epochs.get(2)/(float)3600000),
                     Toast.LENGTH_LONG).show();
-            return;
-        }*/
-        if (sharedPref.getBoolean("get_apod", true)) {
-            new asyncLoad(MainActivity.this,
-                    "APOD_LOAD",
-                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                    execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
         } else {
-            new dialogDisplay(this, getString(R.string.warn_apod_disable),
-                    getString(R.string.reminder));
+            if (sharedPref.getBoolean("get_apod", true)) {
+                new asyncLoad(MainActivity.this,
+                        "APOD_LOAD",
+                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                        execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
+            } else {
+                new dialogDisplay(this, getString(R.string.warn_apod_disable),
+                        getString(R.string.reminder));
+            }
         }
     }
 

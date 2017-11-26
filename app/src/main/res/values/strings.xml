@@ -179,4 +179,5 @@
     <string name="hires_save_title">Save Hires Images locally</string>
     <string name="rgb565_thumbs_summary">Use lower color resolution Thumbnail pictures to save memory. Check, if you see any difference in the list.</string>
     <string name="rgb565_thumbs_title">Thumbnail color quality</string>
+    <string name="apod_already_loaded">Image of today already loaded. Next image available in %.1f hours</string>
 </resources>

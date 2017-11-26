@@ -89,4 +89,5 @@
     <string name="hires_save_title">Bilder lokal speichern</string>
     <string name="rgb565_thumbs_summary">Benutze Thumbnail Bilder in niedrigerer Farbauflösung um Speicher zu sparen.</string>
     <string name="rgb565_thumbs_title">Thumbnail Farbauflösung</string>
+    <string name="apod_already_loaded">Bild des Tages bereits geladen. Nächstes Bild in %.1f Stunden verfügbar.</string>
 </resources>
