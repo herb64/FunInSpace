@@ -1,6 +1,11 @@
 package de.herb64.funinspace;
 
+import android.app.Notification;
+import android.app.NotificationManager;
 import android.app.WallpaperManager;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -14,9 +19,12 @@ import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.preference.PreferenceManager;
 import android.speech.tts.TextToSpeech;
+// import android.support.multidex.MultiDexApplication;
 import android.support.v4.app.FragmentManager;
+import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v4.internal.view.SupportMenuItem;
@@ -53,12 +61,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 import java.util.TimeZone;
 
 import de.herb64.funinspace.helpers.deviceInfo;
 import de.herb64.funinspace.helpers.dialogDisplay;
 import de.herb64.funinspace.helpers.utils;
 import de.herb64.funinspace.models.spaceItem;
+import de.herb64.funinspace.services.apodJobService;
 
 // TODO Log statements: Log.d etc.. should not be contained in final release - how to automate?
 // see https://stackoverflow.com/questions/2446248/remove-all-debug-logging-calls-before-publishing-are-there-tools-to-do-this
@@ -78,6 +88,18 @@ import de.herb64.funinspace.models.spaceItem;
 
 // TODO: network check - timeouts, 404 etc..  --- UNMETERED NETWORKS - check this
 // https://developer.android.com/reference/android/net/NetworkCapabilities.html
+
+/*
+  TODO Weak references... check..
+https://github.com/googlesamples/android-JobScheduler/blob/master/Application/src/main/java/com/example/android/jobscheduler/MainActivity.java
+/ Prevent possible leaks with a weak reference.
+private WeakReference<MainActivity> mActivity;
+IncomingMessageHandler(MainActivity activity) {
+            super();
+        this.mActivity = new WeakReference<>(activity);
+        }
+ */
+
 
 /*
  * The MainActivity Class for FunInSpace
@@ -109,6 +131,7 @@ public class MainActivity extends AppCompatActivity
     protected SimpleDateFormat formatter;
 
     private TextToSpeech tts;
+    private ComponentName serviceComponent;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
@@ -121,7 +144,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.4.5 (alpha)\nBuild Date 2017-11-26\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.4.8 (alpha)\nBuild Date 2017-11-28\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
@@ -150,11 +173,13 @@ public class MainActivity extends AppCompatActivity
 
     private static final String WP_CURRENT_BACKUP = "w_current.jpg";
     protected static final int WP_NONE = 0;
-    protected static final int WP_EXISTS = 1;// << 1;
+    public static final int WP_EXISTS = 1;// << 1;
     protected static final int WP_ACTIVE = 3;// << 2;
     // TODO - housekeeping of files
     //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers
     protected static final int MAX_HIRES_MB = 3;              // limit in MB for hires images on device
+    public static final int JOB_ID_APOD = 85407;
+    public static final String SHUFFLE_DEBUG_LOG = "shuffle.log";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -418,6 +443,7 @@ public class MainActivity extends AppCompatActivity
                     case R.id.cab_delete:
                         // Within ArrayList - removal from back to front is essential!!
                         Collections.sort(selected, Collections.<Integer>reverseOrder());
+                        boolean needShuffleListRefresh = false;
                         for (int idx : selected) {
                             // spaceAdapter.remove() has been overwritten, so that it deletes the
                             // image in the full ArrayList plus (if filtered view) in the currently
@@ -434,6 +460,7 @@ public class MainActivity extends AppCompatActivity
                             if (myList.get(idx).getWpFlag() == WP_EXISTS) {
                                 File wpdel = new File(getApplicationContext().getFilesDir(),
                                         myList.get(idx).getThumb().replace("th_", "wp_"));
+                                needShuffleListRefresh = true;
                                 if (!wpdel.delete()) {
                                     Log.i("HFCM", "File delete for wallpaper did not return true");
                                 }
@@ -489,7 +516,11 @@ public class MainActivity extends AppCompatActivity
                             }
                             adp.remove(myList.get(idx));
                             // adp.setNotifyOnChange(true); // TODO - test this for auto notify ?
-                            adp.notifyDataSetChanged();
+                            //adp.notifyDataSetChanged();         // TODO _ move after loop!!!
+                        }
+                        adp.notifyDataSetChanged();
+                        if (needShuffleListRefresh) {
+                            utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
                         }
                         actionMode.finish();
                         return true;
@@ -672,7 +703,7 @@ public class MainActivity extends AppCompatActivity
                     case R.id.cab_read:
                         // deprecations
                         // https://stackoverflow.com/questions/27968146/texttospeech-with-api-21
-                        if (!tts.isSpeaking()) {
+                        if (tts != null && !tts.isSpeaking()) {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                                 tts.speak("Title",
                                         TextToSpeech.QUEUE_ADD,
@@ -700,7 +731,7 @@ public class MainActivity extends AppCompatActivity
                             tts.speak(myList.get(selected.get(0)).getExplanation(),
                                     TextToSpeech.QUEUE_ADD,
                                     null);
-                        } else {
+                        } else if (tts != null) {
                             tts.stop();
                         }
                         return true;
@@ -810,15 +841,41 @@ public class MainActivity extends AppCompatActivity
             // JUST A CONVERSION UTILITY USED DURING DEVELOPMENT - CONVERTED EPOCH VALUES INTO A NEW
             // JSON FILE FOR UPLOAD TO DROPBOX - NEW TIMEZONE HANDLING NEEDS THIS CHANGE
             //updateEpochsInJsonDEVEL();
+        }
 
-            tts = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
-                @Override
-                public void onInit(int status) {
-                    if(status != TextToSpeech.ERROR) {
-                        tts.setLanguage(Locale.UK);
-                    }
+        tts = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int status) {
+                if(status != TextToSpeech.ERROR) {
+                    tts.setLanguage(Locale.UK);
                 }
-            });
+            }
+        });
+
+        // Adding our first test service here for JobScheduler testing
+        // Fails in Android 4.1 with
+        // java.lang.NoClassDefFoundError: de.herb64.funinspace.services.apodJobService
+        //     at de.herb64.funinspace.MainActivity.onCreate(MainActivity.java:845)
+        // Web shows: multidex enable as solution
+        // https://stackoverflow.com/questions/31829350/app-crashes-with-noclassdeffounderror-only-on-android-4-x
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            serviceComponent = new ComponentName(this, apodJobService.class);
+        }
+        //scheduleJob();
+        //utils.setWallpaperCandidates(getApplicationContext(), loc, myList);
+        //setNextWallpaperFile();
+    }
+
+    /**
+     * Test: starting our apod Service to be used with JobScheduler
+     */
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            Intent apodServiceIntent = new Intent(this, apodJobService.class);
+            //apodServiceIntent.putExtra("KEY", "some value");
+            startService(apodServiceIntent);
         }
     }
 
@@ -828,6 +885,9 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onStop() {
         super.onStop();
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            stopService(new Intent(this, apodJobService.class));
+        }
         if (tts != null && tts.isSpeaking()) {
             tts.stop();
         }
@@ -880,10 +940,18 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void updateRating(int rating, ArrayList<Integer> selected) {
         HashSet<String> titles = new HashSet<>();
+        boolean needShuffleListRefresh = false;
         for (int idx : selected) {
             myList.get(idx).setRating(rating);
             titles.add(myList.get(idx).getTitle());
+            if (!needShuffleListRefresh && myList.get(idx).getWpFlag() == WP_EXISTS) {
+                needShuffleListRefresh = true;
+            }
         }
+        if (needShuffleListRefresh) {
+            utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
+        }
+
         adp.notifyDataSetChanged();
         JSONObject obj = null;
         JSONObject content = null;
@@ -924,6 +992,8 @@ public class MainActivity extends AppCompatActivity
         // Rewrite local json file
         utils.writeJson(getApplicationContext(), localJson, parent);
     }
+
+
 
     /*
      * GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
@@ -1147,6 +1217,11 @@ public class MainActivity extends AppCompatActivity
         utils.writeJson(getApplicationContext(), localJson, parent);
         myList.add(0, apodItem);
         adp.notifyDataSetChanged();
+        // Add latest epoch into default shared prefs - used by scheduler service
+        SharedPreferences.Editor editor = sharedPref.edit();
+        editor.putLong("LATEST_APOD_EPOCH", apodItem.getDateTime());
+        editor.apply();
+
         Toast.makeText(MainActivity.this, R.string.apod_load,
                 Toast.LENGTH_LONG).show();
         myItemsLV.setSelection(0);
@@ -1176,7 +1251,8 @@ public class MainActivity extends AppCompatActivity
     /**
      * Implementation of interface ConfirmListener in confirmDialog class. This handles negative
      * button.
-     * For now, it's only used for wallpaper change confirmation.
+     * For now, it's only used for wallpaper change confirmation, if a new wp file has been created
+     * but not selected as new active one.
      * @param idx index
      */
     @Override
@@ -1186,6 +1262,7 @@ public class MainActivity extends AppCompatActivity
         // list
         myList.get(idx).setWpFlag(WP_EXISTS);
         adp.notifyDataSetChanged();
+        utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
     }
 
 
@@ -1579,6 +1656,16 @@ public class MainActivity extends AppCompatActivity
             m.setOptionalIconsVisible(true);
         }
 
+        // 27.11.2017 test menu for scheduler debugging
+        JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
+        MenuItem scheditem = menu.findItem(R.id.action_schedule_wallpaper_change);
+        if (allPendingJobs.size() > 0) {
+            scheditem.setTitle("Stop WP Shuffle (Debug)");
+        } else {
+            scheditem.setTitle("Start WP Shuffle (Debug)");
+        }
+
         // 20.11.2017 Switch MenuItem to SupportMenuItem and use noinspection RestrictedApi  TODO DOCU
         // to allow for registering expand listeners for action view
         final SupportMenuItem searchItem = (SupportMenuItem) menu.findItem(R.id.action_search); // 22.10.2017
@@ -1783,11 +1870,14 @@ public class MainActivity extends AppCompatActivity
             // - use external storage
             // - create a provider - this is what we do here - see lalatex docu
             // we just send out the
-            File attachment_file = new File(getApplicationContext().getFilesDir(), localJson);
+            //File attachment_file = new File(getApplicationContext().getFilesDir(), localJson);
+            File attachment_file = new File(getApplicationContext().getFilesDir(), SHUFFLE_DEBUG_LOG);
             Uri contentUri = FileProvider.getUriForFile(MainActivity.this,
                     "de.herb64.funinspace.fileprovider",
                     attachment_file);
-            i.putExtra(Intent.EXTRA_STREAM, contentUri);
+            if (attachment_file.exists()) {
+                i.putExtra(Intent.EXTRA_STREAM, contentUri);
+            }
 
             //i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);    // TODO check
 
@@ -1864,6 +1954,39 @@ public class MainActivity extends AppCompatActivity
             new dialogDisplay(MainActivity.this,
                     "Searching the NASA APOD Archive is not yet available.", "TODO");
         }
+        if (id == R.id.action_schedule_wallpaper_change) {
+            // TODO: WP_SELECT_LIST -- if "" - handle this - no shuffle possible, also if only 1 single wp exists
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+                List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
+                if (allPendingJobs.size() > 0) {
+                    String jobs = "Job IDs cancelled:\n";
+                    for (JobInfo jobinfo : allPendingJobs) {
+                        jobs += jobinfo.getId() + "\n";
+                    }
+                    File shufflelog= new File(getApplicationContext().getFilesDir(), SHUFFLE_DEBUG_LOG);
+                    if (shufflelog.exists()) {
+                        jobs += "\nShuffle log data:\nYou may send this information to me by using the test email function\n";
+                        jobs += utils.readf(getApplicationContext(), SHUFFLE_DEBUG_LOG);
+                    }
+                    new dialogDisplay(MainActivity.this, jobs, "Shuffle Job cancel", 10f);
+                    //new dialogDisplay(MainActivity.this,
+                    //        "The following scheduled jobs get cancelled now, stopping the wallpaper shuffle functionality:\n" + jobs, "DEBUG ONLY!");
+                    utils.cancelAllJobs(getApplicationContext());
+                    utils.logAppend(getApplicationContext(), loc, SHUFFLE_DEBUG_LOG, "Cancel all jobs");
+                    item.setTitle("Start WP Shuffle (Debug)");
+                } else {
+                    utils.scheduleJob(getApplicationContext());
+                    utils.logAppend(getApplicationContext(), loc, SHUFFLE_DEBUG_LOG, "Start Wallpaper Shuffle");
+                    new dialogDisplay(MainActivity.this,
+                            "Schedule has been set to shuffle the wallpaper every 30 minutes, even if app is closed. For now, this is not reboot persistent.", "DEBUG ONLY!");
+                    item.setTitle("Stop WP Shuffle (Debug)");
+                }
+            } else {
+                new dialogDisplay(MainActivity.this,
+                        "Scheduling not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
+            }
+        }
         // if (id == R.id.action_filter)  //no longer needed
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -1895,8 +2018,8 @@ public class MainActivity extends AppCompatActivity
         String strLowSize = "";
 
         // Get current wallpaper filename, if any has been set (shared_prefs/MainActivity.xml)
-        SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
-        String wpFileCurrent = shPref.getString("CURRENT_WALLPAPER_FILE", "");
+        //SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
+        String wpFileCurrent = sharedPref.getString("CURRENT_WALLPAPER_FILE", "");
 
         int count = 0;
         for (int i = parent.length()-1; i >=0 ; i--)
@@ -2108,11 +2231,14 @@ public class MainActivity extends AppCompatActivity
      * (yet?) the case.
      * Check the age of the current latest image and avoid any NASA query, if it is already up to
      * date. In this case, the time until next image is calculated.
-     * TODO: this time might be used to start a ScheduledJob.. ?
+     * TODO: this time might be used to start a ScheduledJob..
      */
     private void getLatestAPOD() {
         ArrayList<Long> epochs = utils.getNASAEpoch(loc, myList.get(0).getDateTime());
         if (epochs.get(2) > 0) {
+            // the next image is scheduled in given milliseconds. We should add some random offset
+            // into the schedule to avoid all application instances running to NASA at same
+            // time - just in case we have thousands of running devices around the world :)
             Toast.makeText(MainActivity.this,
                     String.format(loc, getString(R.string.apod_already_loaded),
                             (float)epochs.get(2)/(float)3600000),
@@ -2245,18 +2371,6 @@ public class MainActivity extends AppCompatActivity
                     Log.e("HFCM", "asyncLoad for lowres image did not return a bitmap");
                 }
                 break;
-            /*case "MISSING_THUMBS_RELOAD":
-                if (status == asyncLoad.OK) {
-                    Log.i("HFCM", "Missing thumb reload returned from asyncLoad");
-                }
-                break;*/
-            /*case "WALLPAPER":
-                if (output instanceof Bitmap) {
-                    Log.w("HFCM", "Disabled wallpaperload returning from asyncload - processfinish");
-                } else {
-                    Log.e("HFCM", "asyncLoad for WALLPAPER did not return a bitmap");
-                }
-                break;*/
             default:
                 new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
                 break;
@@ -2339,12 +2453,14 @@ public class MainActivity extends AppCompatActivity
         activator.start();  // of course, we do not join() :)
 
         // Store filename of current wallpaper into shared preferences
-        SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = shPref.edit();
+        //SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
+        //SharedPreferences.Editor editor = shPref.edit();
+        SharedPreferences.Editor editor = sharedPref.edit();
         editor.putString("CURRENT_WALLPAPER_FILE", wpToSet);
         editor.apply(); // apply is recommended by inspection instead of commit()
         // Refresh adapter (to update wp symbols on thumbnails)
         adp.notifyDataSetChanged();
+        utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
 
         // Get these as well, if present - actually, we do not need this...
         Drawable sysWall = null;
@@ -2374,6 +2490,39 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
+     *
+     */
+    /*private void scheduleJob() {
+        // https://github.com/googlesamples/android-JobScheduler/blob/master/Application/src/main/java/com/example/android/jobscheduler/MainActivity.java
+        // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_APOD, serviceComponent);
+            // set jobinfo data here into builder
+            builder.setMinimumLatency(60000);    // but: not with periodic
+            //builder.setOverrideDeadline(15000);
+            // builder.setPersisted(true);      // survice reboots
+
+            // Extras to pass to the job - well, passing filename not good...
+            PersistableBundle extras = new PersistableBundle();
+            //String wpFile = setNextWallpaperFile();
+            //String wpFile = utils.setNextRandomWallpaper(getApplicationContext(), loc, myList);
+            //extras.putString("WPFILE", wpFile);
+            extras.putInt("COUNT", 1);
+            builder.setExtras(extras);
+
+            JobInfo jobInfo = builder.build();
+            Log.i("HFCM", jobInfo.toString());
+
+            JobScheduler scheduler = null;
+            scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            scheduler.schedule(builder.build());
+        } else {
+            new dialogDisplay(getApplicationContext(), "Job schedule not available pre lollipop");
+        }
+    }*/
+
+
+    /**   DEVEL HELPER ONLY!!!
      * CHANGE IN EPOCH VALUE CALCULATION - JUST TO BE RUN ONCE ON A WELL PREAPARED JSON FILE
      * Helper function for updating epoch values - 15.11.2017 - need to change all values for stored
      * items to the new epoch value. Getting base infos in 'epoch-update' file, derived from NASA

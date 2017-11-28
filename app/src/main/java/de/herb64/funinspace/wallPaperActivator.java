@@ -15,9 +15,10 @@ import java.io.IOException;
  * Setting the wallpaper image in main activity did cause a noticable delay when returning from
  * the image activity. 3 Seconds on Elephone P9000, even more on Klaus' Samsung S4
  * This class allows to run this asynchronously.
+ * Had to make it public for access by apodJobService in conjunction with wallpaper shuffle
  */
 
-class wallPaperActivator implements Runnable {
+public class wallPaperActivator implements Runnable {
 
     private String wpFileName;
     private Context ctx;
@@ -27,7 +28,7 @@ class wallPaperActivator implements Runnable {
      * @param ctx       Context
      * @param filename  Filename to be set
      */
-    wallPaperActivator(Context ctx, String filename) {
+    public wallPaperActivator(Context ctx, String filename) {
         this.wpFileName = filename;
         this.ctx = ctx;
     }

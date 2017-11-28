@@ -66,7 +66,10 @@ public class fileTransferDialog extends AppCompatDialogFragment {
             @Override
             public boolean accept(File file) {
                 if (file.toString().endsWith(".json") ||
-                        (file.toString().endsWith(".jpg") && !file.toString().contains("files/wp_"))
+                        (file.toString().endsWith(MainActivity.SHUFFLE_DEBUG_LOG)) ||
+                        (file.toString().endsWith(".jpg") &&
+                                !file.toString().contains("files/wp_") &&
+                                !file.toString().contains("files/hd_"))
                         ) {
                     return true;
                 }

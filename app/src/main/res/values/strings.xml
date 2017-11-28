@@ -162,7 +162,7 @@
     Your personal ratings for remaining images will not be changed. If images are missing, just try to reload later, as dropbox might not be updated every day.</string>
     <string name="search_option">Full Search</string>
     <string name="full_search_explain">Search in explanation text in addition to title only</string>
-    <string name="test_mail_text">Just a test email sent by the famous FunInSpace App. I hope you enjoy the attachment :)</string>
+    <string name="test_mail_text">Just a test email sent by the famous FunInSpace App. The attachment contains the scheduler log infos from wallpaper shuffle tests :)</string>
     <string name="test_mail_subject">Greetings from FunInSpace</string>
     <string name="credits_first_testers">First pre alpha testers credits: Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger</string>
     <string name="rating">Rating</string>

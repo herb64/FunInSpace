@@ -2,6 +2,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="de.herb64.funinspace.MainActivity">
+
+    <item
+        android:id="@+id/action_schedule_wallpaper_change"
+        android:icon="@android:drawable/ic_lock_idle_alarm"
+        android:orderInCategory="96"
+        android:title="Schedule WP change (Debug)"
+        app:showAsAction="ifRoom" />
+
     <item
         android:id="@+id/action_xfer"
         android:icon="@android:drawable/ic_menu_send"

@@ -61,6 +61,14 @@
                 android:resource="@xml/filepaths" />
         </provider>
 
+        <!-- HFCM - 26.11.2017: manually add for testing JobScheduler. Not having this permission
+             illegalArgumentException: No such service ComponentInfo{de...services.apodJobService}
+             TODO: check that exported = true statement!!! (I remember to have read about security)
+             -->
+        <service android:name=".services.apodJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true"/>
+
     </application>
 
 </manifest>

@@ -1,8 +1,14 @@
 package de.herb64.funinspace.helpers;
 
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.PersistableBundle;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -20,14 +26,18 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 
 import de.herb64.funinspace.MainActivity;
 import de.herb64.funinspace.models.spaceItem;
+import de.herb64.funinspace.services.apodJobService;
 
 
 /**
@@ -118,6 +128,27 @@ public final class utils {
                 writef(ctx, filename, json.toString(2));
             }
         } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * @param ctx
+     * @param filename
+     * @param content
+     */
+    public static void logAppend(Context ctx, Locale loc, String filename, String content) {
+        String timestamp = new SimpleDateFormat("dd.MM.yyyy-HH:mm:ss", loc).format(System.currentTimeMillis());
+        File logFile = new File(ctx.getFilesDir(), filename);
+        FileOutputStream outstream = null;
+        try {
+            outstream = new FileOutputStream(logFile, true);
+            outstream.write((timestamp + " > " + content + "\n").getBytes());
+            outstream.flush();
+            outstream.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
@@ -465,6 +496,113 @@ public final class utils {
     public static void backupToSdCard(Context ctx, ArrayList<spaceItem> items) {
 
     }
+
+
+    /**
+     * Schedule the first job after a given time - the initial job submission.
+     * @param ctx
+     */
+    public static void scheduleJob(Context ctx)
+    {
+        // https://github.com/googlesamples/android-JobScheduler/blob/master/Application/src/main/java/com/example/android/jobscheduler/MainActivity.java
+        // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            ComponentName serviceComponent = new ComponentName(ctx, apodJobService.class);
+            JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_APOD, serviceComponent);
+            // set jobinfo data here into builder
+            builder.setMinimumLatency(5000);    // but: not with periodic
+            builder.setOverrideDeadline(15000);
+            // builder.setPersisted(true);      // survice reboots
+
+            // Just for the testing: pass a counter which is increased during reschedules
+            PersistableBundle extras = new PersistableBundle();
+            extras.putInt("COUNT", 1);
+            builder.setExtras(extras);
+            JobInfo jobInfo = builder.build();
+            Log.i("HFCM", "Scheduler jobinfo: " + jobInfo.toString());
+            JobScheduler sched = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            sched.schedule(jobInfo);
+        }
+    }
+
+    /**
+     * @param ctx
+     */
+    public static void cancelAllJobs(Context ctx) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            JobScheduler sched = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            sched.cancelAll();
+        }
+    }
+
+    /**
+     * Create a formatted string in default shared preferences "WP_SELECT_LIST" to be used by
+     * wallpaper shuffle job to determine a new random filename to be set as new wallpaper.
+     * This is called if user does add/change wallpapers or changes rating for images that are
+     * marked as WPs
+     * @param ctx context
+     * @param loc locale
+     * @param items arraylist of space items
+     */
+    public static void setWPShuffleCandidates(Context ctx, Locale loc, ArrayList<spaceItem> items) {
+        //Set<String> wpSet = new HashSet<>(); > HashSet is not randomly selectable!
+        String wpString = "";
+        logAppend(ctx, loc, MainActivity.SHUFFLE_DEBUG_LOG, "WP Shuffle list update...");
+        for (spaceItem item : items) {
+            if (item.getWpFlag() == MainActivity.WP_EXISTS) {
+                // Rating increases chance to be selected - added to each filename as prefix
+                wpString += String.format(loc,
+                        "%d:%s*",
+                        item.getRating(),
+                        item.getThumb().replace("th_", "wp_"));
+            }
+        }
+        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(ctx);
+        SharedPreferences.Editor editor = sharedPref.edit();
+        editor.putString("WP_SELECT_LIST", wpString);
+        editor.apply();
+    }
+
+    /**
+     * Return a random wallpaper filename from the information contained in default shared prefs
+     * under WP_SELECT_LIST.
+     * @param ctx
+     * @return
+     */
+    public static String getRandomWpFileName(Context ctx) {
+        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(ctx);
+        String wpselections = sharedPref.getString("WP_SELECT_LIST", "");
+        String[] wps = wpselections.split("[*]");
+        ArrayList<String> wplist = new ArrayList<>();
+        for (String wp : wps) {
+            if (!wp.isEmpty()) {
+                String[] v = wp.split(":");
+                wplist.add(v[1]);
+                for (int i = 1; i < Integer.parseInt(v[0]); i++) {
+                    wplist.add(v[1]);
+                }
+            }
+        }
+        if (wplist.size() == 0) {
+            return "";
+        }
+        String current = sharedPref.getString("CURRENT_WALLPAPER_FILE", "");
+        Random r = new Random();
+        int i;
+        // Do not repeat previous image again! Especially important, e.g. 2 wps, ratings 0 and 5
+        // In this case, the algorithm will just toggle between both, ignoring the rating. The more
+        // wallpapers exist, the more the rating has influence.
+        do {
+            i = r.nextInt(wplist.size());
+            Log.i("HFCM", "Testing index for wp:" + i);
+        } while (wplist.get(i).equals(current));
+
+        //editor.putString("NEXT_WALLPAPER_FILE", items.get(i).getThumb().replace("th_", "wp_"));
+        //editor.apply();
+        Log.i("HFCM", "Random index for wp: " + i + " out of " + wplist.size() + ", File: " + wplist.get(i));
+        return wplist.get(i);
+    }
+
     ///////////////// J U S T   S O M E   J U N K  /////////////////////////////////////////////////
     // stuff to check
     /* hmmm, strange behaviour when checking for installed packages
