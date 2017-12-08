@@ -1,43 +1,69 @@
 package de.herb64.funinspace.helpers;
 
-import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkInfo;
+import android.net.RouteInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
-import android.os.PersistableBundle;
+import android.os.Environment;
+import android.os.StatFs;
 import android.preference.PreferenceManager;
+import android.telecom.Call;
+import android.text.TextUtils;
+import android.text.format.Formatter;
 import android.util.Log;
+import android.webkit.MimeTypeMap;
+
+import org.apache.http.params.HttpConnectionParams;
+import org.apache.http.params.HttpParams;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
+import java.net.Socket;
+import java.net.SocketAddress;
+import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 // import java.time.ZoneId;             API26+ required
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
+
+import javax.net.ssl.HttpsURLConnection;
 
 import de.herb64.funinspace.MainActivity;
 import de.herb64.funinspace.models.spaceItem;
-import de.herb64.funinspace.services.apodJobService;
 
 
 /**
@@ -49,6 +75,11 @@ public final class utils {
 
     private static final long MS_PER_DAY = 86400000;
     private static final long MAX_HDSIZE = 25000;
+    private static final String LOG_TS_FORMAT = "yyyy.MM.dd-HH:mm:ss:SSS";
+
+    public static final int NO_JSON = 0;
+    public static final int JSON_OBJ = 1;
+    public static final int JSON_ARRAY = 2;
 
     /**
      * Read contents of a text file
@@ -133,12 +164,45 @@ public final class utils {
     }
 
     /**
-     * @param ctx
-     * @param filename
-     * @param content
+     * Append content with timestamp to a given logfile
+     * @param ctx context
+     * @param filename filename to append to
+     * @param content the string to be appended
      */
-    public static void logAppend(Context ctx, Locale loc, String filename, String content) {
-        String timestamp = new SimpleDateFormat("dd.MM.yyyy-HH:mm:ss", loc).format(System.currentTimeMillis());
+    public static void logAppend(Context ctx, String filename, String content) {
+        if (ctx == null) {
+            return;
+        }
+        String timestamp = new SimpleDateFormat(LOG_TS_FORMAT,Locale.getDefault()).
+                format(System.currentTimeMillis());
+        File logFile = new File(ctx.getFilesDir(), filename);
+        FileOutputStream outstream = null;
+        try {
+            outstream = new FileOutputStream(logFile, true);
+            outstream.write((timestamp + " > " + content + "\n").getBytes());
+            outstream.flush();
+            outstream.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Append content with timestamp and additional duration py passing a starttime
+     * @param ctx context
+     * @param filename filename to append to
+     * @param content string to be appended
+     * @param start epoch value in ms since 1.1.1970 - base for calculating time difference
+     */
+    public static void logAppend(Context ctx, String filename, String content, long start) {
+        if (ctx == null) {
+            return;
+        }
+        long end = System.currentTimeMillis();
+        String timestamp = new SimpleDateFormat(LOG_TS_FORMAT, Locale.getDefault()).format(end);
+        content += "(" + (end-start) + "ms)";
         File logFile = new File(ctx.getFilesDir(), filename);
         FileOutputStream outstream = null;
         try {
@@ -213,14 +277,14 @@ public final class utils {
     /**
      * Calculate some epoch values based on TimeZone New York //TODO cleanup - lot of unused stuff..
      * TODO: checkout DateTimeFormatter as modern way in Java to handle dates/times
-     * @param locale the locale, used for string formatting
      * @param latestImgEpoch epoch from latest image or 0, if no delta to next img needed
      * @return ArrayList of 3 long values containing epoch values:
      * - epoch cut down to 00:00:00 (date only) - TODO why should we keep that? just for fun ??
      * - epoch full at current time
      * - milliseconds until next image fetch
      * */
-    public static ArrayList<Long> getNASAEpoch(Locale locale, long latestImgEpoch) {
+    public static ArrayList<Long> getNASAEpoch(long latestImgEpoch) {
+        Locale locale = Locale.getDefault();
         ArrayList<Long> epochs = new ArrayList<>();
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             HashSet<String> zoneids = (HashSet<String>) ZoneId.getAvailableZoneIds();
@@ -251,19 +315,19 @@ public final class utils {
                 tzSYS.getDisplayName() +
                 " / " + tzSYS.getID());
         Calendar cSYS = Calendar.getInstance(tzSYS);
-        Log.i("HFCM", "SYS TZ offset for epoch (hours): " +
-                (float)tzSYS.getOffset(epochFULL)/3600000f);
+//        Log.i("HFCM", "SYS TZ offset for epoch (hours): " +
+//                (float)tzSYS.getOffset(epochFULL)/3600000f);
 
         // NASA Server seems to be in New York timezone (deduced from delay when images appear)
         TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
-        Log.w("HFCM", "NASA timezone " +
-                tzNASA.getDisplayName() +
-                " / " + tzNASA.getID());
+//        Log.w("HFCM", "NASA timezone " +
+//                tzNASA.getDisplayName() +
+//                " / " + tzNASA.getID());
         Calendar cNASA = Calendar.getInstance(tzNASA);
-        Log.i("HFCM", "NASA TZ offset for epoch (hours): " +
-                (float)tzNASA.getOffset(epochFULL)/3600000f);
-        Log.w("HFCM", "SYS ahead of NASA (hours): " +
-                ((float)tzSYS.getOffset(epochFULL) - (float)tzNASA.getOffset(epochFULL))/3600000f);
+//        Log.i("HFCM", "NASA TZ offset for epoch (hours): " +
+//                (float)tzNASA.getOffset(epochFULL)/3600000f);
+//        Log.w("HFCM", "SYS ahead of NASA (hours): " +
+//                ((float)tzSYS.getOffset(epochFULL) - (float)tzNASA.getOffset(epochFULL))/3600000f);
 
         // The only way to get the date/time as string as seen in other timezone from the calendar
         // is to query the elements single calendar fields themselves and create a formatted string
@@ -273,7 +337,7 @@ public final class utils {
                 cNASA.get(Calendar.YEAR),
                 cNASA.get(Calendar.MONTH) + 1,
                 cNASA.get(Calendar.DAY_OF_MONTH));
-        Log.i("HFCM", "NASA Date only string: " + yyyymmddNASA);
+//        Log.i("HFCM", "NASA Date only string: " + yyyymmddNASA);
         String yyyymmddhhmmssNASA = String.format(locale, "%04d-%02d-%02d_%02d-%02d-%02d",
                 cNASA.get(Calendar.YEAR),
                 cNASA.get(Calendar.MONTH) + 1,
@@ -281,12 +345,12 @@ public final class utils {
                 cNASA.get(Calendar.HOUR_OF_DAY),
                 cNASA.get(Calendar.MINUTE),
                 cNASA.get(Calendar.SECOND));
-        Log.i("HFCM", "NASA Date+time string: " + yyyymmddhhmmssNASA);
+//        Log.i("HFCM", "NASA Date+time string: " + yyyymmddhhmmssNASA);
         String yyyymmddSYS = String.format(locale, "%04d-%02d-%02d",
                 cSYS.get(Calendar.YEAR),
                 cSYS.get(Calendar.MONTH) + 1,
                 cSYS.get(Calendar.DAY_OF_MONTH));
-        Log.i("HFCM", "SYS  Date onlystring: " + yyyymmddSYS);
+//        Log.i("HFCM", "SYS  Date onlystring: " + yyyymmddSYS);
         String yyyymmddhhmmssSYS = String.format(locale, "%04d-%02d-%02d_%02d-%02d-%02d",
                 cSYS.get(Calendar.YEAR),
                 cSYS.get(Calendar.MONTH) + 1,
@@ -294,7 +358,7 @@ public final class utils {
                 cSYS.get(Calendar.HOUR_OF_DAY),
                 cSYS.get(Calendar.MINUTE),
                 cSYS.get(Calendar.SECOND));
-        Log.i("HFCM", "SYS Date+time string: " + yyyymmddhhmmssSYS);
+//        Log.i("HFCM", "SYS Date+time string: " + yyyymmddhhmmssSYS);
 
         // Use SimpleDateFormat to get the epoch value reduced to date only (no hh:mm:ss...)
         SimpleDateFormat dF00_00_00 = new SimpleDateFormat("yyyy-MM-dd", locale);
@@ -309,9 +373,9 @@ public final class utils {
         } catch (ParseException e) {
             e.printStackTrace();
         }
-        Log.i("HFCM", "FULL: epoch=" + epochFULL);
-        Log.i("HFCM", "00_00_00: epoch= " + epoch_00_00_00);
-        Log.i("HFCM", "Latest image: epoch=" + latestImgEpoch);
+//        Log.i("HFCM", "FULL: epoch=" + epochFULL);
+//        Log.i("HFCM", "00_00_00: epoch= " + epoch_00_00_00);
+//        Log.i("HFCM", "Latest image: epoch=" + latestImgEpoch);
 
         // Calculate the delta time to next required image load.
         long timeToNext = 0;
@@ -319,9 +383,9 @@ public final class utils {
             Date datefull = new Date(epochFULL);
             Date dateLatestImg = new Date(latestImgEpoch);  // seen in current TimeZone!
             //Date date00_00_00 = new Date(epoch_00_00_00);
-            Log.i("HFCM", "Date latest image: " + dateLatestImg.toString());
+//            Log.i("HFCM", "Date latest image: " + dateLatestImg.toString());
             long diff = (datefull.getTime() - dateLatestImg.getTime());
-            Log.i("HFCM", "Diff full - imagelatest: " + diff + " seconds");
+//            Log.i("HFCM", "Diff full - imagelatest: " + diff + " seconds");
             if (diff < MS_PER_DAY) {
                 timeToNext = MS_PER_DAY - diff;
             }
@@ -336,7 +400,7 @@ public final class utils {
 
         // Some other test:
         fmtCHECK.setTimeZone(TimeZone.getTimeZone("Europe/Brussels"));
-        Log.i("HFCM", String.format(locale, "Brussels local time: %s", fmtCHECK.format(epochFULL)));
+//        Log.i("HFCM", String.format(locale, "Brussels local time: %s", fmtCHECK.format(epochFULL)));
 
         // Prepare return values: NASA epoch at 00:00:00, NASA epoch full, our own epoch
         epochs.add(epoch_00_00_00);
@@ -347,16 +411,16 @@ public final class utils {
         SimpleDateFormat formatter = new SimpleDateFormat("dd. MMM yyyy, HH:mm:ss", locale);
         formatter.setTimeZone(tzNASA);
         //formatter.setCalendar(cNASA);
-        Log.i("HFCM", "Have values " + epochs +
-                "\nNASA time 00:00:00: " + formatter.format(epochs.get(0)) +
-                "\nNASA time full: " + formatter.format(epochs.get(1)) +
-                "\nNASA time next: " + formatter.format(epochs.get(1) + epochs.get(2)));
+//        Log.i("HFCM", "Have values " + epochs +
+//                "\nNASA time 00:00:00: " + formatter.format(epochs.get(0)) +
+//                "\nNASA time full: " + formatter.format(epochs.get(1)) +
+//                "\nNASA time next: " + formatter.format(epochs.get(1) + epochs.get(2)));
 
         // It seems to be sufficient to have the timezone object
         //formatter.setTimeZone(tzLOC);
         formatter.setCalendar(cSYS);
-        Log.i("HFCM", "Local time on device: " + formatter.format(epochs.get(1)) + " (" + tzSYS.getDisplayName() + ")");
-        Log.i("HFCM", "Local time for next image fetch: " + formatter.format(epochs.get(1) + epochs.get(2)));
+//        Log.i("HFCM", "Local time on device: " + formatter.format(epochs.get(1)) + " (" + tzSYS.getDisplayName() + ")");
+//        Log.i("HFCM", "Local time for next image fetch: " + formatter.format(epochs.get(1) + epochs.get(2)));
 
         // we do not need to use a Date object for formatting, can pass epoch as well
         //Date testdate = new Date(epochNASA_00_00_00);
@@ -371,6 +435,31 @@ public final class utils {
                     " (" + id + " / " + tzTEST.getDisplayName() + ")");
         }*/
         return epochs;
+    }
+
+    /**
+     * Get the milliseconds from current time to next full hour.
+     * @param locale locale
+     * @return long ms to wait for full hour
+     */
+    public static long getMsToNextFullHour(Locale locale) {
+        TimeZone tzSYS = TimeZone.getDefault();
+        Calendar cSYS = Calendar.getInstance(tzSYS);
+        String yyyymmddhh = String.format(locale, "%04d-%02d-%02d_%02d",
+                cSYS.get(Calendar.YEAR),
+                cSYS.get(Calendar.MONTH) + 1,
+                cSYS.get(Calendar.DAY_OF_MONTH),
+                cSYS.get(Calendar.HOUR_OF_DAY));
+        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd_HH", locale);
+        long epoch = 0;
+        long epochFULL = System.currentTimeMillis();
+        try {
+            dF.setCalendar((Calendar) cSYS.clone()); // clone to avoid timezone overwrite
+            epoch = dF.parse(yyyymmddhh).getTime();
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        return epoch + 3600000 - epochFULL;
     }
 
     /**
@@ -412,14 +501,15 @@ public final class utils {
      *           - remove hires images if max space exceeded (size and rating dependent)
      * @param ctx context
      * @param items arraylist with spaceitems
-     * @param maxHdMem maximum allowed memory for hires images in bytes
+     * @param maxHdMem memory Limit in KiB that triggers cleanup
+     * @param skip index in item list to skip from deletion (-1: none
      * @return formatted string with results on cleanup
      */
-    public static String cleanupFiles(Context ctx, ArrayList<spaceItem> items, long maxHdMem) {
-        // TODO For testing, it is currently on "R.id.action_search_apod"
+    public static ArrayList<Integer> cleanupFiles(Context ctx, ArrayList<spaceItem> items, long maxHdMem, int skip) {
         // filenamefilter does not allow wildcard... could use java.nio.file... but not avail..
 
-        String logString = "";
+        //String logString = "";
+        logAppend(ctx, MainActivity.DEBUG_LOG, "Starting file cleanup");
         // Create array lists of all th/wp/hd files in filesystem - potential orphans list
         ArrayList<String> orphans = new ArrayList<>();
         File dir = new File(ctx.getFilesDir().getPath());
@@ -443,23 +533,26 @@ public final class utils {
         usedHdMem /= 1024;
 
         if (orphans.size() > 0) {
-            logString += "Orphans:\n";
+            logAppend(ctx, MainActivity.DEBUG_LOG, orphans.size() + " orphaned files to remove");
         }
         for (String fn : orphans) {
             File todelete = new File(ctx.getFilesDir(), fn);
             Log.i("HFCM", "Deleting orphaned file: " + fn);
-            logString += fn + "\n";
-            /*if (!todelete.delete()) {
+            //logString += fn + "\n";
+            if (!todelete.delete()) {
                 Log.e("HFCM", "Error deleting orphaned file: " + todelete);
-            }*/
+            }
         }
 
         // Delete hires images if space is exceeded: depend on size and rating
         // TreeMap is sorted: https://developer.android.com/reference/java/util/TreeMap.html
         Log.i("HFCM", "About to cleanup hd images space, currently in use: " + usedHdMem);
         TreeMap<Long, File> sorted = new TreeMap<>();
+        TreeMap<Long, Integer> indices = new TreeMap<>();
+        ArrayList<Integer> del_idx = new ArrayList<>();
         if (usedHdMem > maxHdMem) {
             Log.i("HFCM", "Used hd mem " + usedHdMem + " exceeds max hd mem " + maxHdMem);
+            int idx = 0;
             for (spaceItem item : items) {
                 File hd = new File(ctx.getFilesDir(), item.getThumb().replace("th_", "hd_"));
                 if (hd.exists()) {
@@ -469,25 +562,33 @@ public final class utils {
                     Log.i("HFCM", "Adding " + hd.getName() + " - key=" + key +
                             " (size=" + size + ", rating=" + rating + ")");
                     sorted.put(key, hd);
+                    indices.put(key, idx);
                 }
+                idx++;
             }
-            logString += "Hires images: (" + usedHdMem + "KB of " + maxHdMem + "KB)\n";
+
+            logAppend(ctx, MainActivity.DEBUG_LOG, "Hires images: (Used: " + usedHdMem + "KB, Limit: " + maxHdMem + "KB)");
             for(Map.Entry<Long,File> entry : sorted.entrySet()) {
+                if (indices.get(entry.getKey()) == skip) {
+                    continue;
+                }
                 usedHdMem -= entry.getValue().length() / 1024;
                 Log.i("HFCM", "Deleting Hires file: " + entry.getValue().getName() + " > " +
                         entry.getKey() + " - used mem now " + usedHdMem);
-                logString += entry.getValue().getName() + " (" + entry.getValue().length()/1024 + ")\n";
-                /*if (!entry.getValue().delete()) {
+                logAppend(ctx,
+                        MainActivity.DEBUG_LOG,
+                        "delete: " + entry.getValue().getName() + " (" + entry.getValue().length()/1024 + "KB)");
+                del_idx.add(indices.get(entry.getKey()));
+                if (!entry.getValue().delete()) {
                     Log.e("HFCM", "Error deleting file: " + entry.getValue().getName());
-                }*/
+                }
                 if (usedHdMem < maxHdMem) {
-                    logString += "Now used " + usedHdMem + "KB after cleanup";
-                    logString += "\nNO REAL DELETES DURING TEST PHASE FOR NOW!!!!";
+                    logAppend(ctx, MainActivity.DEBUG_LOG, "Used " + usedHdMem + "KB after cleanup");
                     break;
                 }
             }
         }
-        return logString;
+        return del_idx;
     }
 
     // TODO - backup function. Restore will not restore hires images unchecked, because these are
@@ -495,34 +596,6 @@ public final class utils {
     // need to backup info about phone as well to do checks
     public static void backupToSdCard(Context ctx, ArrayList<spaceItem> items) {
 
-    }
-
-
-    /**
-     * Schedule the first job after a given time - the initial job submission.
-     * @param ctx
-     */
-    public static void scheduleJob(Context ctx)
-    {
-        // https://github.com/googlesamples/android-JobScheduler/blob/master/Application/src/main/java/com/example/android/jobscheduler/MainActivity.java
-        // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            ComponentName serviceComponent = new ComponentName(ctx, apodJobService.class);
-            JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_APOD, serviceComponent);
-            // set jobinfo data here into builder
-            builder.setMinimumLatency(5000);    // but: not with periodic
-            builder.setOverrideDeadline(15000);
-            // builder.setPersisted(true);      // survice reboots
-
-            // Just for the testing: pass a counter which is increased during reschedules
-            PersistableBundle extras = new PersistableBundle();
-            extras.putInt("COUNT", 1);
-            builder.setExtras(extras);
-            JobInfo jobInfo = builder.build();
-            Log.i("HFCM", "Scheduler jobinfo: " + jobInfo.toString());
-            JobScheduler sched = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            sched.schedule(jobInfo);
-        }
     }
 
     /**
@@ -540,18 +613,18 @@ public final class utils {
      * wallpaper shuffle job to determine a new random filename to be set as new wallpaper.
      * This is called if user does add/change wallpapers or changes rating for images that are
      * marked as WPs
+     * TODO: building the string: what about that "unflattenFromString stuff to be used?"
      * @param ctx context
-     * @param loc locale
      * @param items arraylist of space items
      */
-    public static void setWPShuffleCandidates(Context ctx, Locale loc, ArrayList<spaceItem> items) {
+    public static void setWPShuffleCandidates(Context ctx, ArrayList<spaceItem> items) {
         //Set<String> wpSet = new HashSet<>(); > HashSet is not randomly selectable!
         String wpString = "";
-        logAppend(ctx, loc, MainActivity.SHUFFLE_DEBUG_LOG, "WP Shuffle list update...");
+        //logAppend(ctx, MainActivity.DEBUG_LOG, "WP_SELECT_LIST update ...");
         for (spaceItem item : items) {
-            if (item.getWpFlag() == MainActivity.WP_EXISTS) {
+            if (item.getWpFlag() >= MainActivity.WP_EXISTS) {
                 // Rating increases chance to be selected - added to each filename as prefix
-                wpString += String.format(loc,
+                wpString += String.format(Locale.getDefault(),
                         "%d:%s*",
                         item.getRating(),
                         item.getThumb().replace("th_", "wp_"));
@@ -565,7 +638,8 @@ public final class utils {
 
     /**
      * Return a random wallpaper filename from the information contained in default shared prefs
-     * under WP_SELECT_LIST.
+     * in WP_SELECT_LIST key. This is a special formatted string to be parsed, including information
+     * on rating.
      * @param ctx
      * @return
      */
@@ -578,30 +652,305 @@ public final class utils {
             if (!wp.isEmpty()) {
                 String[] v = wp.split(":");
                 wplist.add(v[1]);
+                // todo: a better logic for rating influence on selection might be needed!!!
                 for (int i = 1; i < Integer.parseInt(v[0]); i++) {
                     wplist.add(v[1]);
                 }
             }
         }
-        if (wplist.size() == 0) {
+        if (wplist.size() < 2) {
             return "";
         }
         String current = sharedPref.getString("CURRENT_WALLPAPER_FILE", "");
         Random r = new Random();
         int i;
-        // Do not repeat previous image again! Especially important, e.g. 2 wps, ratings 0 and 5
-        // In this case, the algorithm will just toggle between both, ignoring the rating. The more
-        // wallpapers exist, the more the rating has influence.
+        // Do not repeat previous image again
         do {
             i = r.nextInt(wplist.size());
             Log.i("HFCM", "Testing index for wp:" + i);
         } while (wplist.get(i).equals(current));
 
-        //editor.putString("NEXT_WALLPAPER_FILE", items.get(i).getThumb().replace("th_", "wp_"));
-        //editor.apply();
         Log.i("HFCM", "Random index for wp: " + i + " out of " + wplist.size() + ", File: " + wplist.get(i));
         return wplist.get(i);
     }
+
+    /**
+     * @param items
+     * @return
+     */
+    public static int getNumWP(ArrayList<spaceItem> items) {
+        int count = 0;
+        for (spaceItem item : items) {
+            if (item.getWpFlag() >= MainActivity.WP_EXISTS) {   // EXIST + ACTIVE!!!
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Parse a nasa json object - just flat object with strings.
+     * @param s
+     * @return
+     */
+    public static HashMap<String, String> parseNASAJson(String s) {
+        HashMap<String, String> map = new HashMap<>();
+        try {
+            JSONObject parent = new JSONObject(s);
+            Iterator<String> iterator = parent.keys();
+            while (iterator.hasNext()) {
+                String key = iterator.next();
+                map.put(key, (String) parent.get(key));
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+            Log.e("HFCM", e.getMessage());
+        }
+        return map;
+    }
+
+    /**
+     * Check, if network is connected.
+     * @param ctx context
+     * @return true if connected, false if not connection or no ConnectivityService found
+     */
+    public static boolean isNetworkConnected(Context ctx) {
+        ConnectivityManager connManager = (ConnectivityManager) ctx.
+                getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connManager != null) {
+            //LinkProperties props = connManager.getLinkProperties(connManager.getActiveNetwork());
+            // DOCU: java.lang.NoSuchMethodError: No virtual method getActiveNetwork()
+            //       one hint: invalidate caches - does not help, tested it
+            //       https://www.jetbrains.com/help/idea/2016.3/cleaning-system-cache.html
+            //List<RouteInfo> routes = props.getRoutes();
+            NetworkInfo networkInfo = connManager.getActiveNetworkInfo();
+            return networkInfo != null && networkInfo.isConnectedOrConnecting();    // see google
+        }
+        return false;
+    }
+
+    /**
+     * Check internet connectivity without running into possible DNS timeouts. This function
+     * implements a Callable to be able to be called from main thread.
+     * 208.67.222.222 - openDNS
+     * 208.67.220.220 - openDNS
+     * 8.8.8.8 - google dns
+     * 8.8.4.4 - google dns
+     * @return
+     */
+    public static long testSocketConnect(final int timeout) {
+        // using a class derived from Callable
+        //netChecker checker = new netChecker();
+        // static class netChecker implements Callable<Boolean>.. old stuff
+        final long ts = System.currentTimeMillis();
+        final Callable<Long> netCheck = new Callable<Long>() {
+            @Override
+            public Long call() throws Exception {
+                try {
+                    Socket sock = new Socket();
+                    SocketAddress sockaddr = new InetSocketAddress("8.8.8.8", 53);
+                    sock.connect(sockaddr, timeout);
+                    long connecttime = System.currentTimeMillis() - ts;
+                    if (sock.isConnected()) {
+                        Log.i("HFCM", "netCheck socket connected after " +
+                                connecttime + "ms");
+                    }
+                    sock.close();
+                    return connecttime;
+                } catch (IOException e) {
+                    // exception gets called after timeout from sock.connect()
+                    e.printStackTrace();
+                    Log.e("HFCM", "netCheck socket IOException: " + e.getMessage());
+                    return (long)timeout;
+                }
+            }
+        };
+        Log.i("HFCM", "isInternetReachable about to call netCheck.call()");
+        try {
+            // callable.call() does not start a thread!!! and a Thread(callable) cannot be created
+            // use FutureTask
+            // https://stackoverflow.com/questions/25231149/can-i-use-callable-threads-without-executorservice
+            //boolean ttt = checker.call();
+
+            FutureTask<Long> futureTask = new FutureTask<>(netCheck);
+            Thread t=new Thread(futureTask);
+            t.start();
+            long ttt = futureTask.get();
+            Log.e("HFCM", "isInternetReachable, netCheck returned: " + ttt);
+            return ttt;
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.e("HFCM", "isInternetReachable: " + e.getMessage());
+            return timeout;
+        }
+    }
+
+    /**
+     * Check, if we can reach our server, because isConnected() from networkInfo does not tell use
+     * anything about real connectivity. E.g. DNS might fail, no route from wifi router to outside
+     * because DSL disconnected. 10 secs for each resolved IP - takes 40 seconds to exception!
+     * @param ctx
+     * @param url2test
+     * @return
+     */
+    public static boolean isInternetReachable(Context ctx, String url2test) {
+
+        HttpsURLConnection conn = null;
+        int status;
+
+        // testing a bad hack: https://8.8.8.8 - to avoid dns timeout 10sec * times of resolved ips
+        // this one could help to run into other exception
+        // leads to Hostname '8.8.8.8' was not verified - but does not work in my test case - hangs
+
+        try {
+            URL url = new URL(url2test);
+            conn = (HttpsURLConnection) url.openConnection();
+            //conn.setConnectTimeout(500);  // ignored, could use external timer thread
+            status = conn.getResponseCode();
+            if (status == HttpsURLConnection.HTTP_OK) {
+                try {
+                    conn.disconnect();
+                } catch (Exception e){
+                    e.printStackTrace();
+                    logAppend(ctx, MainActivity.DEBUG_LOG, e.toString());
+                }
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            logAppend(ctx, MainActivity.DEBUG_LOG, e.toString());
+            return false;
+        } finally {
+            if(conn != null) {
+                try {
+                    conn.disconnect();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    logAppend(ctx, MainActivity.DEBUG_LOG, e.toString());
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param ctx context
+     * @return integer
+     */
+    public static int getActiveNetworkType(Context ctx) {
+        ConnectivityManager connManager = (ConnectivityManager) ctx.
+                getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connManager != null) {
+            NetworkInfo networkInfo = connManager.getActiveNetworkInfo();
+            if (networkInfo != null && networkInfo.isConnected()) {
+                return networkInfo.getType();
+            } else {
+                return -1;      // TODO - is this ok?
+            }
+        } else {
+            return -1;
+        }
+    }
+
+    /**
+     * Get status
+     * @param ctx context
+     * @return ConnectivityManager.TYPE
+     */
+    public static String getActiveNetworkTypeName(Context ctx) {
+        ConnectivityManager connManager = (ConnectivityManager) ctx.
+                getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connManager != null) {
+            NetworkInfo networkInfo = connManager.getActiveNetworkInfo();
+            if (networkInfo != null && networkInfo.isConnected()) {
+                //int subtype = networkInfo.getSubtype();
+                String networkdetails = String.format(Locale.getDefault(),
+                        "Network: ExtraInfo: %s, SubType: %s",
+                        networkInfo.getExtraInfo(),
+                        networkInfo.getSubtypeName());
+                logAppend(ctx, MainActivity.DEBUG_LOG, networkdetails);
+                return networkInfo.getTypeName();
+            } else {
+                return "NONE";
+            }
+        } else {
+            return "NONE";
+        }
+        /*for (Network net : connManager.getAllNetworks()) {
+            Log.i("HFCM", "Network: " + net.toString());
+        }*/
+
+        /*HashMap<String, Boolean> status = new HashMap<>();
+        if (networkInfo != null && networkInfo.isConnected()) {
+            status.put("WIFI", networkInfo.getType() == ConnectivityManager.TYPE_WIFI);
+            status.put("MOBILE", networkInfo.getType() == ConnectivityManager.TYPE_MOBILE);
+            status.put("BLUETOOTH", networkInfo.getType() == ConnectivityManager.TYPE_BLUETOOTH);
+        }*/
+    }
+
+    /**
+     * Get internal memory available to application
+     * @return internal memory in bytes
+     */
+    public static long getAvailableInternalMem() {
+        File path = Environment.getDataDirectory();
+        StatFs stat = new StatFs(path.getPath());
+        /* Just for comparing results
+        long blockSize = stat.getBlockSizeLong();
+        long availBlocks = stat.getAvailableBlocksLong();
+        long a = stat.getAvailableBytes();
+        long b = availBlocks * blockSize;*/
+        return stat.getAvailableBytes();
+    }
+
+    /**
+     * Get overall internal memory size
+     * @return internal memory in bytes
+     */
+    public static long getTotalInternalMem() {
+        File path = Environment.getDataDirectory();
+        StatFs stat = new StatFs(path.getPath());
+        /* Just for comparing results
+        long blockSize = stat.getBlockSizeLong();
+        long totalBlocks = stat.getBlockCountLong();
+        long a = stat.getTotalBytes();
+        long b = totalBlocks * blockSize;*/
+        return stat.getTotalBytes();
+    }
+
+    /**
+     * Ís the given string a valid json and if so, is it an ARRAY or an OBJECT?
+     * @param string
+     * @return
+     */
+    public static int isJson(String string) {
+        try {
+            new JSONObject(string);
+            return JSON_OBJ;
+        } catch (JSONException a) {
+            try {
+                new JSONArray(string);
+                return JSON_ARRAY;
+            } catch (JSONException b) {
+                return NO_JSON;
+            }
+        }
+        /* As reference: some code from my DROPBOX_REFRESH in processFinish() MainActivity:
+           also a way to get the infos... this create the json array in this case
+        Object json;
+        try {
+            json = new JSONTokener((String) output).nextValue();
+        } catch (JSONException e) {
+            e.printStackTrace();
+            return;
+        }
+        String hhh = json.getClass().toString();    // class.org.MYTYPE
+        if (json != null && json instanceof JSONArray) {
+            refreshFromDropbox((JSONArray) json);
+        }
+        */
+    }
+
 
     ///////////////// J U S T   S O M E   J U N K  /////////////////////////////////////////////////
     // stuff to check

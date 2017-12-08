@@ -1,14 +1,15 @@
 package de.herb64.funinspace;
 
-import android.app.Notification;
-import android.app.NotificationManager;
+import android.annotation.SuppressLint;
 import android.app.WallpaperManager;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
@@ -16,6 +17,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.ThumbnailUtils;
+import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -24,7 +26,6 @@ import android.preference.PreferenceManager;
 import android.speech.tts.TextToSpeech;
 // import android.support.multidex.MultiDexApplication;
 import android.support.v4.app.FragmentManager;
-import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v4.internal.view.SupportMenuItem;
@@ -52,6 +53,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.io.File;
+import java.net.HttpURLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -61,7 +63,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Random;
+import java.util.Set;
 import java.util.TimeZone;
 
 import de.herb64.funinspace.helpers.deviceInfo;
@@ -69,6 +71,8 @@ import de.herb64.funinspace.helpers.dialogDisplay;
 import de.herb64.funinspace.helpers.utils;
 import de.herb64.funinspace.models.spaceItem;
 import de.herb64.funinspace.services.apodJobService;
+import de.herb64.funinspace.services.shuffleJobService;
+import de.herb64.funinspace.services.thumbLoaderJobService;
 
 // TODO Log statements: Log.d etc.. should not be contained in final release - how to automate?
 // see https://stackoverflow.com/questions/2446248/remove-all-debug-logging-calls-before-publishing-are-there-tools-to-do-this
@@ -125,13 +129,16 @@ public class MainActivity extends AppCompatActivity
     private SharedPreferences sharedPref;
     private boolean thumbQualityChanged;    // indicate preference setting change
     private boolean dateFormatChanged;      // important: need true after installation
+    private boolean wpShuffleChanged;
     private int currentWallpaperIndex = -1;
     protected TimeZone tzNASA;
     protected Calendar cNASA;
     protected SimpleDateFormat formatter;
 
     private TextToSpeech tts;
-    private ComponentName serviceComponent;
+    //private ComponentName serviceComponent;
+
+    private BroadcastReceiver receiver = null;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {
@@ -140,21 +147,18 @@ public class MainActivity extends AppCompatActivity
     public native String yT();
     public native String nS();
     public native String vE();
+    public native String dPJ();
+    public native String dAS();
 
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.4.8 (alpha)\nBuild Date 2017-11-28\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.5.3 (alpha)\nBuild Date 2017-12-04\n\nFor special friends only :)\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
 
-    private static final String DROPBOX_JSON = "https://dl.dropboxusercontent.com/s/3yqsmthlxth44w6/nasatest.json";
-    // a simulated NASA json file for debugging and testing pur     cpose - enabled as debug user option
-    private static final String APOD_SIMULATE = "https://dl.dropboxusercontent.com/s/agfxia2f6or5plk/apod-simulate.json";
-    // interesting: the name behind the link is not important, notfound.json worked as well, need to change the ID!!
-    //private static final String APOD_NOTFOUND = "https://dl.dropboxusercontent.com/s/mzidejp3qfnosff/notfound.json";
     //private static final int KIB = 1024;
     //private static final int MIB = 1024 * KIB;
     //private static final int GIB = 1024 * MIB;
@@ -168,22 +172,38 @@ public class MainActivity extends AppCompatActivity
 
     // dealing with the number of displayed lines in the Explanation text view
     protected static final int MAX_ELLIPSED_LINES = 2;
-    private static final int MAX_LINES = 1000;      // hmm, ridiculous, but safe // TODO think
-    protected static final int MAX_ITEMS = 10000;     // limit of items - for id handling
+    private static final int MAX_LINES = 1000;      // ridiculous, but safe // TODO think
+    protected static final int MAX_ITEMS = 10000;   // theoretic limit of items - for id handling
 
+    // wallpaper related stuff
     private static final String WP_CURRENT_BACKUP = "w_current.jpg";
     protected static final int WP_NONE = 0;
-    public static final int WP_EXISTS = 1;// << 1;
-    protected static final int WP_ACTIVE = 3;// << 2;
-    // TODO - housekeeping of files
-    //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers
-    protected static final int MAX_HIRES_MB = 3;              // limit in MB for hires images on device
-    public static final int JOB_ID_APOD = 85407;
-    public static final String SHUFFLE_DEBUG_LOG = "shuffle.log";
+    public static final int WP_EXISTS = 1;
+    protected static final int WP_ACTIVE = 3;   // just in case of bitmap interpretation
+    // TODO - housekeeping of files - see utils cleanup
+    //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers - better use memory constraint ??
 
+    protected static final int MAX_HIRES_MB = 3;  // limit (MB) for hires img on device internal stg
+    protected static final int MAX_HIRES_PERCENT = 10;  // percentage..
+    public static final int JOB_ID_SHUFFLE = 85407;
+    public static final String BCAST_SHUFFLE = "SHUFFLE";
+    public static final int JOB_ID_APOD = 3124;
+    public static final String BCAST_APOD = "APOD";
+    public static final int JOB_ID_THUMB = 739574;
+    public static final String BCAST_THUMB = "THUMB";
+    public static final String DEBUG_LOG = "funinspace.log";
+
+    /**
+     * @param savedInstanceState saved instance data
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        super.onCreate(savedInstanceState); // before own code for create
+
+        if (getIntent().getExtras() != null && getIntent().getExtras().getBoolean("EXIT", false)) {
+            finishAndRemoveTask();
+        }
+
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -191,26 +211,37 @@ public class MainActivity extends AppCompatActivity
         ActionBar actbar = getSupportActionBar();
         actbar.setIcon(R.mipmap.ic_launcher);
         actbar.setDisplayShowTitleEnabled(false);
-        // we can set our own custom view here...
+        // We could set our own custom view here as well - not tested... TODO
         //actbar.setDisplayShowCustomEnabled(true);
         //actbar.setCustomView();
 
+        Log.i("HFCM", "onCreate()...........");
+
         // get the locale - using default leads to several warnings with String.format()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
+        /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
             loc = getResources().getConfiguration().getLocales().get(0);
         } else{
             //noinspection deprecation
             loc = getResources().getConfiguration().locale;
-        }
+        }*/
+        // TODO: locale better this way
+        // https://stackoverflow.com/questions/14389349/android-get-current-locale-not-default
+        loc = Locale.getDefault();
+
+        //long tstart;
+        long starttime = System.currentTimeMillis();
+        utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                "**************  APP START **************");
 
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // (shared_prefs/de.herb64.funinspace_preferences.xml)
-        // TODO check, if this is rotation proof, or if we bettger should get prefs each time
+        // TODO check, if this is rotation proof, or if we better should get prefs each time
         sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
         // Initialize flags to true, so that first open of preferences dialog, which triggers the
         // prefChangeListener, does change it back to false in this case.
         dateFormatChanged = !sharedPref.contains("date_format");
         thumbQualityChanged = !sharedPref.contains("rgb565_thumbs");
+        wpShuffleChanged = !sharedPref.contains("wallpaper_shuffle");
         sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
 
         // Timezone and Calendar objects used to base our timestamps on current NASA TimeZone
@@ -253,8 +284,11 @@ public class MainActivity extends AppCompatActivity
         // Query GL_MAX_TEXTURE_SIZE by creating an OpenGL context within a separate Activity.
         // Important: returned value maxTextureSize not yet available at onCreate(), although
         // onActivityResult is called and values are correct at later times after finishing
-        // onCreate() and even the Toast within onActivityResult shows the correct value.
+        // onCreate() and even the Toast within onActivityResult shows the correct values
+
+        //tstart = System.currentTimeMillis();
         devInfo = new deviceInfo(getApplicationContext());
+        //utils.logAppend(getApplicationContext(), DEBUG_LOG, "* deviceInfo()", tstart);
 
         // Prepare the main ListView containing all our Space Items
         myItemsLV = (ListView) findViewById(R.id.lv_content);
@@ -355,13 +389,15 @@ public class MainActivity extends AppCompatActivity
                 MenuItem readitem = actionMode.getMenu().findItem(R.id.cab_read);
                 readitem.setEnabled(!(selected.size() > 1));
                 readitem.setVisible(!(selected.size() > 1));
-
                 // TODO: change action bar to "delete cached file" or "force reload from NASA", if a cached file currently exists...
-                // we might want to have a small disk symbol left down of thumb indicating the presence of a cached file...
-
                 adp.notifyDataSetChanged();
             }
 
+            /**
+             * @param actionMode
+             * @param menu
+             * @return
+             */
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
@@ -486,6 +522,19 @@ public class MainActivity extends AppCompatActivity
                                 }
                             }
 
+                            // Deleted items - keep track to avoid dropbox sync to get these again
+                            Set<String> deleted_items = sharedPref.getStringSet("DELETED_ITEMS",
+                                    new HashSet<String>());
+                            // IMPORTANT: Need a copy, do NOT edit the gathered object itself!!!
+                            Set<String> newset = new HashSet<>(deleted_items);
+                            newset.add(myList.get(idx).getTitle());
+                            SharedPreferences.Editor editor = sharedPref.edit();
+                            editor.putStringSet("DELETED_ITEMS", newset);
+                            editor.apply();
+                            utils.logAppend(getApplicationContext(),
+                                    DEBUG_LOG,
+                                    "Delete item: '" + myList.get(idx).getTitle() + "'");
+
                             // delete the json object from json array
                             try {
                                 JSONObject obj = (JSONObject) parent.get(parent.length() - 1 - idx);
@@ -515,12 +564,11 @@ public class MainActivity extends AppCompatActivity
                                 e.printStackTrace();
                             }
                             adp.remove(myList.get(idx));
-                            // adp.setNotifyOnChange(true); // TODO - test this for auto notify ?
-                            //adp.notifyDataSetChanged();         // TODO _ move after loop!!!
+                            // adp.setNotifyOnChange(true); // TODO - test this for auto notify ??
                         }
                         adp.notifyDataSetChanged();
                         if (needShuffleListRefresh) {
-                            utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
+                            utils.setWPShuffleCandidates(getApplicationContext(), myList);
                         }
                         actionMode.finish();
                         return true;
@@ -564,8 +612,6 @@ public class MainActivity extends AppCompatActivity
                                     String basefn = myList.get(selected.get(0)).getThumb().replace("th_", "");
                                     int maxAlloc = devInfo.getMaxAllocatable();
                                     Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
-
-
                                     // Check, if a local copy for hires image exists. If yes, pass filepath to URL
                                     // TODO: duplicate code here... do this better - also need to check for wifi flag to avoid load for wallpaper purpose as well
                                     //String hiresFileBase = myList.get(idx).getThumb().replace("th_", "");
@@ -577,12 +623,6 @@ public class MainActivity extends AppCompatActivity
                                         hiresUrl = myList.get(selected.get(0)).getHires();
                                     }
                                     hiresIntent.putExtra("hiresurl", hiresUrl);
-
-
-                                    // OLD - this one did always load the nasa remote image
-                                    //hiresIntent.putExtra("hiresurl", myList.get(selected.get(0)).getHires());
-
-
                                     hiresIntent.putExtra("listIdx", selected.get(0));
                                     hiresIntent.putExtra("maxAlloc", maxAlloc);
                                     hiresIntent.putExtra("maxtexturesize", maxTextureSize);
@@ -597,21 +637,24 @@ public class MainActivity extends AppCompatActivity
                                     startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
                                     break;
                                 case WP_EXISTS:
-                                    // 2 options: set existing as wp or remove existing wp
                                     switch (menuItem.getItemId()) {
                                         case R.id.cab_wallpaper:
-                                            // Calling confirm dialog - this will set the wallpaper in callback
+                                            // Confirm dialog - set the wallpaper in callback
                                             fragArguments = new Bundle();
                                             fragArguments.putInt("IDX", selected.get(0));
-                                            fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
-                                            fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
+                                            fragArguments.putString("TITLE",
+                                                    getString(R.string.wp_confirm_dlg_title));
+                                            fragArguments.putString("MESSAGE",
+                                                    getString(R.string.wp_confirm_dlg_msg,
                                                     myList.get(selected.get(0)).getTitle()));
-                                            fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
-                                            fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
+                                            fragArguments.putString("POS",
+                                                    getString(R.string.wp_confirm_dlg_pos_button));
+                                            fragArguments.putString("NEG",
+                                                    getString(R.string.wp_confirm_dlg_neg_button));
                                             fm = getSupportFragmentManager();
                                             confirmDialog confirmdlg = new confirmDialog();
                                             confirmdlg.setArguments(fragArguments);
-                                            confirmdlg.show(fm, "CONFIRMTAG");
+                                            confirmdlg.show(fm, "WP");
                                             break;
                                         case R.id.cab_wp_remove:
                                             if (myList.get(selected.get(0)).getWpFlag() == WP_EXISTS) {
@@ -632,22 +675,6 @@ public class MainActivity extends AppCompatActivity
                                     break;
 
                             }
-                            /*File wp = new File(getApplicationContext().getFilesDir(),
-                                    myList.get(selected.get(0)).getThumb().replace("th_", "wp_"));
-                            if (!wp.exists()) { // TODO: could use wp status as well... ???
-                                // Calling confirm dialog - this will set the wallpaper in callback
-                                fragArguments = new Bundle();
-                                fragArguments.putInt("IDX", selected.get(0));
-                                fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
-                                fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
-                                        myList.get(selected.get(0)).getTitle()));
-                                fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
-                                fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
-                                fm = getSupportFragmentManager();
-                                confirmDialog confirmdlg = new confirmDialog();
-                                confirmdlg.setArguments(fragArguments);
-                                confirmdlg.show(fm, "CONFIRMTAG");
-                            }*/
                             return true;
                         }
 
@@ -666,39 +693,6 @@ public class MainActivity extends AppCompatActivity
                             }
                         }
                         adp.notifyDataSetChanged();
-
-                        /*String wpfn = myList.get(selected.get(0)).getThumb().replace("th_", "wp_");
-                        File wp = new File(getApplicationContext().getFilesDir(), wpfn);
-                        if (wp.exists()) {
-                            // Calling confirm dialog - this will set the wallpaper in callback
-                            fragArguments = new Bundle();
-                            fragArguments.putInt("IDX", selected.get(0));
-                            fragArguments.putString("TITLE", getString(R.string.wp_confirm_dlg_title));
-                            fragArguments.putString("MESSAGE", getString(R.string.wp_confirm_dlg_msg,
-                                    myList.get(selected.get(0)).getTitle()));
-                            fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
-                            fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
-                            fm = getSupportFragmentManager();
-                            confirmDialog confirmdlg = new confirmDialog();
-                            confirmdlg.setArguments(fragArguments);
-                            confirmdlg.show(fm, "CONFIRMTAG");
-                        } else {
-                            int maxAlloc = devInfo.getMaxAllocatable();
-                            Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
-                            hiresIntent.putExtra("hiresurl", myList.get(selected.get(0)).getHires());
-                            hiresIntent.putExtra("listIdx", selected.get(0));
-                            hiresIntent.putExtra("maxAlloc", maxAlloc);
-                            hiresIntent.putExtra("maxtexturesize", maxTextureSize);
-                            hiresIntent.putExtra("wallpaper_quality",
-                                    sharedPref.getString("wallpaper_quality", "80"));
-                            lastImage = myList.get(selected.get(0)).getTitle();
-                            // wallpaper filename now as imagename
-                            hiresIntent.putExtra("imagename", wpfn);
-                            // call image activity with wallpaper selection mode at startup
-                            hiresIntent.putExtra("wpselect", true);
-                            Log.i("HFCM", "Changing wallpaper '" + wpfn + "'");
-                            startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
-                        }*/
                         return true;
                     case R.id.cab_read:
                         // deprecations
@@ -746,9 +740,6 @@ public class MainActivity extends AppCompatActivity
                 for (spaceItem item : myList) {
                     item.setSelected(false);
                 }
-                //for (int idx = 0; idx < myList.size(); idx++) {
-                //    myList.get(idx).setSelected(false);
-                //}
             }
         });
 
@@ -801,6 +792,7 @@ public class MainActivity extends AppCompatActivity
                 devInfo.setGlMaxTextureSize(maxTextureSize);
                 // TODO: if shared preferences are lost for some reason, run texsize check again
 
+                // TODO: check if it is a valid json array instead of testing for ""
                 if (jsonData.equals("")) {
                     jsonData = "[]";
                 }
@@ -812,27 +804,19 @@ public class MainActivity extends AppCompatActivity
                     e.printStackTrace();
                 }
                 // Parse the local json file contents and add these to ArrayList
+                //tstart = System.currentTimeMillis();
                 addItems();
+                //utils.logAppend(getApplicationContext(), DEBUG_LOG, "* addItems()", tstart);
                 checkMissingThumbs();
             } else {
-                // jsonData is empty. It looks like we did not have a local json file yet, or it
-                // is not a valid one. So we create a new empty parent array and attempt to load a
-                // prefilled json file from our (hardcoded) testing dropbox link.
-
-                // GL TEXTURE check only after installation, result written to shared preferences
+                // It looks like we do not have a local json file yet - FIRST LAUNCH most likely
+                // TODO: later offer a restore option from sd card...
+                // GL TEXTURE check - used in hires image size limit check
                 Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
                 startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
-
                 parent = new JSONArray();
-                Toast.makeText(MainActivity.this, "Initial installation - getting JSON base data " +
-                                "from Herbert's DropBox and loading required images in background for " +
-                                "thumbnail pictures generation to have some test data available...",
-                        Toast.LENGTH_LONG).show();
-                //new loadFromDropboxTask().execute(DROPBOX_JSON); // calls addItems() + adapter notify
-                //asyncLoad loader = new asyncLoad(MainActivity.this, "DROPBOX_INIT");
-                //loader.execute(DROPBOX_JSON);
-                new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(DROPBOX_JSON);
+                initialLaunch();
             }
 
             // Get latest APOD item to append from NASA (or a simulation item from dropbox)
@@ -852,18 +836,128 @@ public class MainActivity extends AppCompatActivity
             }
         });
 
+        utils.setWPShuffleCandidates(getApplicationContext(), myList);
+
         // Adding our first test service here for JobScheduler testing
         // Fails in Android 4.1 with
-        // java.lang.NoClassDefFoundError: de.herb64.funinspace.services.apodJobService
+        // java.lang.NoClassDefFoundError: de.herb64.funinspace.services.shuffleJobService
         //     at de.herb64.funinspace.MainActivity.onCreate(MainActivity.java:845)
         // Web shows: multidex enable as solution
         // https://stackoverflow.com/questions/31829350/app-crashes-with-noclassdeffounderror-only-on-android-4-x
+        /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            serviceComponent = new ComponentName(this, shuffleJobService.class);
+        }*/
+
+        // Broadcast Receiver to handle events, mostly to update the UI immediately (e.g. wallpaper
+        // symbol in thumbnail)
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BCAST_SHUFFLE);
+        filter.addAction(BCAST_THUMB);
+        //filter.addCategory();
+        filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                switch (intent.getAction()) {
+                    case BCAST_SHUFFLE:
+                        String newwp = intent.getStringExtra("NEWWP");
+                        Log.i("HFCM", "Broadcast received, new WP: " + newwp);
+                        // TODO - better way than just iterating? at least some cut if met condition
+                        // or change order of check - to avoid string comparison
+                        for (spaceItem item : myList) {
+                            if (item.getThumb().equals(newwp.replace("wp_", "th_"))) {
+                                item.setWpFlag(WP_ACTIVE);
+                            } else if (item.getWpFlag() == WP_ACTIVE) {
+                                item.setWpFlag(WP_EXISTS);
+                            }
+                        }
+                        adp.notifyDataSetChanged();
+                        break;
+                    case BCAST_THUMB:
+                        String thname = intent.getStringExtra("THUMBNAIL");
+                        Log.i("HFCM", "Broadcast received, THUMBFILE: " + thname);
+                        // ugly code here...
+                        /*int i = 0;
+                        boolean match = false;
+                        for (spaceItem item : myList) {
+                            if (item.getThumb().equals(thname)) {
+                                File thumbFile = new File(getApplicationContext().getFilesDir(), thname);
+                                if (thumbFile.exists()) {
+                                    Bitmap thumb = null;
+                                    // we use this option to save some memory - experimental
+                                    if (sharedPref.getBoolean("rgb565_thumbs", false)) {
+                                        BitmapFactory.Options options = new BitmapFactory.Options();
+                                        options.inPreferredConfig = Bitmap.Config.RGB_565;
+                                        thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath(), options);
+                                    } else {
+                                        thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
+                                    }
+                                    myList.get(i).setBmpThumb(thumb);
+                                } else {
+                                    myList.get(i).setBmpThumb(null);
+                                }
+                                myList.get(i).setThumbLoadingState(View.INVISIBLE);
+                                adp.notifyDataSetChanged();
+                                break;
+                            }
+                            i++;
+                        }*/
+                        break;
+                    case Intent.ACTION_AIRPLANE_MODE_CHANGED:
+                        Log.i("HFCM", "Airplane mode changed...");
+                        break;
+                    default:
+                        break;
+                }
+            }
+        };
+        registerReceiver(receiver, filter);
+
+        // Reschedule jobs, that are expected to be active but not running at app start
+        // TODO rework and investigate
+        // TODO: deal with reboot safety as well.. for now it is not set...
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            serviceComponent = new ComponentName(this, apodJobService.class);
+            if (sharedPref.getBoolean("wallpaper_shuffle", false)) {
+                JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+                List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
+                boolean needReload = true;
+                for (JobInfo pending : allPendingJobs) {
+                    if (pending.getId() == JOB_ID_SHUFFLE) {
+                        needReload = false;
+                    }
+                }
+                if (needReload) {
+                    new dialogDisplay(MainActivity.this,
+                            "Wallpaper Shuffle has been terminated, although it should be active. Reactivating now...");
+                    scheduleShuffle();
+                    utils.logAppend(getApplicationContext(),
+                            DEBUG_LOG,
+                            "Shuffle schedule found inactive although enabled in settings, restarting...");
+                }
+            }
         }
-        //scheduleJob();
-        //utils.setWallpaperCandidates(getApplicationContext(), loc, myList);
-        //setNextWallpaperFile();
+        //utils.logAppend(getApplicationContext(),
+        //        DEBUG_LOG, "* check/restart shuffle service", tstart);
+
+        utils.logAppend(getApplicationContext(), DEBUG_LOG, "Current active network type: " +
+                utils.getActiveNetworkTypeName(getApplicationContext()));
+
+        utils.logAppend(getApplicationContext(),
+                DEBUG_LOG,
+                "onCreate() finished... ",
+                starttime);
+    }
+
+    @Override
+    protected void onDestroy() {
+        // https://stackoverflow.com/questions/18821481/what-is-the-correct-order-of-calling-superclass-methods-in-onpause-onstop-and-o
+        // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
+        if (receiver != null) {
+            unregisterReceiver(receiver);
+            receiver = null;
+        }
+        Log.i("HFCM", "onDestroy()...........");
+        super.onDestroy(); // after own code for destroy
     }
 
     /**
@@ -871,12 +965,8 @@ public class MainActivity extends AppCompatActivity
      */
     @Override
     protected void onStart() {
-        super.onStart();
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            Intent apodServiceIntent = new Intent(this, apodJobService.class);
-            //apodServiceIntent.putExtra("KEY", "some value");
-            startService(apodServiceIntent);
-        }
+        super.onStart(); // before own code for start
+        Log.i("HFCM", "onStart()...........");
     }
 
     /**
@@ -884,13 +974,20 @@ public class MainActivity extends AppCompatActivity
      */
     @Override
     protected void onStop() {
-        super.onStop();
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            stopService(new Intent(this, apodJobService.class));
-        }
+        // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
         if (tts != null && tts.isSpeaking()) {
             tts.stop();
         }
+        Log.i("HFCM", "onStop()...........");
+        super.onStop(); // after own code for stop
+    }
+
+    /**
+     *
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
     }
 
     /**
@@ -923,15 +1020,6 @@ public class MainActivity extends AppCompatActivity
     }*/
 
     /**
-     *
-     */
-    @Override
-    protected void onResume() {
-        super.onResume();
-    }
-
-
-    /**
      * Interface implementation for Rating Dialog result: return from DialogFragment to Activity
      * This is called, if Rating Dialog OK button has been pressed
      * @param rating    the rating value to be set
@@ -949,7 +1037,7 @@ public class MainActivity extends AppCompatActivity
             }
         }
         if (needShuffleListRefresh) {
-            utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
+            utils.setWPShuffleCandidates(getApplicationContext(), myList);
         }
 
         adp.notifyDataSetChanged();
@@ -993,8 +1081,6 @@ public class MainActivity extends AppCompatActivity
         utils.writeJson(getApplicationContext(), localJson, parent);
     }
 
-
-
     /*
      * GET APOD JSON INFOS FROM NASA. THIS STARTS ANOTHER THREAD TO LOAD THE LOWRES IMAGE
      * TODO: VERY IMPORTANT!!! bad asynctask use here, need to fix for memory leaks!!!
@@ -1005,13 +1091,11 @@ public class MainActivity extends AppCompatActivity
      * https://stackoverflow.com/questions/10864853/when-exactly-is-it-leak-safe-to-use-anonymous-inner-classes
      * https://blog.androidcafe.in/android-memory-leak-part-1-context-85cebdc97ab3
      * http://simonvt.net/2014/04/17/asynctask-is-bad-and-you-should-feel-bad/
-     *
-     * Code has been moved to asyncLoad and orignal code now at end of this file... 26.10.2017
      */
 
-    // CODE for processing apod json returned from asyncLoad...  former onpostexecute from apodtask
     /**
      * Create a new spaceItem from information returned in daily JSON
+     * TODO - use my tokener logic as with DROPBOX_REFRESH - pass the json obect instead of the sting - no more hassles with check
      * @params String
      */
     void createApodFromJson(String s) {
@@ -1025,6 +1109,7 @@ public class MainActivity extends AppCompatActivity
         String sDate = "";
         JSONObject parent = null;
         Uri resource_uri = null;
+        // TODO - might go for new utils function parseNASAJson ...
         try {
             parent = new JSONObject(s);
             sMediaType = parent.getString("media_type");
@@ -1034,7 +1119,7 @@ public class MainActivity extends AppCompatActivity
                 sCopyright = "Copyright: " + parent.getString("copyright").
                         replaceAll(System.getProperty("line.separator"), " ");
             }
-            sTitle = parent.getString("title"); // TODO: why not check here for already loaded ??? currently in lowresBitmapOnPostExecuteReplacement()
+            sTitle = parent.getString("title"); // TODO: why not check here for already loaded ??? currently in lowresBitmap OnPostExecute Replacement()
             imgUrl = parent.getString("url"); // TODO: 11.09.2017 - missing leads to strange effects of missing keys
             resource_uri = Uri.parse(imgUrl);
             if (parent.has("hdurl")) {
@@ -1048,8 +1133,10 @@ public class MainActivity extends AppCompatActivity
             sExplanation = parent.getString("explanation");
         } catch (JSONException e) {
             e.printStackTrace();
-            Log.e("HFCM", e.getMessage());
-            new dialogDisplay(this, "APOD JSON Exception:\n" + e.getMessage());
+            // as type is checked before, we should NEVER get this...
+            /*utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "createApodFromJson() JSON exception: " +
+                            s.substring(0, s.length() > 50 ? 50 : s.length()));*/
         }
 
         // At this point sMediaType contains the NASA delivered string. This gets changed now to
@@ -1114,7 +1201,7 @@ public class MainActivity extends AppCompatActivity
         apodItem.setExplanation(sExplanation);
         apodItem.setHires(sHiresUrl);
         // now using long int epoch value for date in spaceItem
-        long epoch = utils.getNASAEpoch(loc, 0).get(0);
+        long epoch = utils.getNASAEpoch(0).get(0);
         /*SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
         // normally we would use code as below for correct locale, but we parse a specific
         // format here :_ "date": "2017-09-17", as returned by NASA in their json
@@ -1228,23 +1315,71 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * Implementation of interface ConfirmListener in confirmDialog class. This class allows to
-     * have a dialog's result to be processed only, if the Positive Button has been pressed.
-     * For now, it's only used for wallpaper change confirmation.
-     * @param idx index into list
+     * Implementation of interface ConfirmListener in confirmDialog class.
+     * @param button
+     * @param tag
+     * @param o
      */
     @Override
-    public void processConfirmation(int idx) {
-        String wpfile = myList.get(idx).getThumb().replace("th_", "wp_");
-        Log.i("HFCM", "Reached confirmation: " + wpfile);
-        if (!wpfile.equals("")) {
-            // update index values
-            if (currentWallpaperIndex >= 0) {
-                myList.get(currentWallpaperIndex).setWpFlag(WP_EXISTS);
-            }
-            myList.get(idx).setWpFlag(WP_ACTIVE);
-            currentWallpaperIndex = idx;
-            changeWallpaper(wpfile);
+    public void processConfirmation(int button, String tag, Object o) {
+        switch (button) {
+            case DialogInterface.BUTTON_POSITIVE:
+                switch (tag) {
+                    case "WP":
+                        String wpfile = myList.get((int)o).getThumb().replace("th_", "wp_");
+                        Log.i("HFCM", "Reached confirmation: " + wpfile);
+                        if (!wpfile.equals("")) {
+                            // update index values
+                            if (currentWallpaperIndex >= 0) {
+                                myList.get(currentWallpaperIndex).setWpFlag(WP_EXISTS);
+                            }
+                            myList.get((int)o).setWpFlag(WP_ACTIVE);
+                            currentWallpaperIndex = (int)o;
+                            changeWallpaper(wpfile);
+                        }
+                        break;
+                    case "INITLAUNCH":
+                        utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                                "Kick off asyncLoad:  DROPBOX_INIT");
+                        new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
+                        break;
+                    case "DROPBOX_REFRESH":
+                        new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
+                        break;
+                    default:
+                        break;
+                }
+
+                break;
+            case DialogInterface.BUTTON_NEGATIVE:
+                switch (tag) {
+                    case "WP":
+                        // wp file was created, but not set as active - update ui !!
+                        myList.get((int)o).setWpFlag(WP_EXISTS);
+                        adp.notifyDataSetChanged();
+                        utils.setWPShuffleCandidates(getApplicationContext(), myList);
+                        break;
+                    case "INITLAUNCH":
+                        // As we do not have a network connection, we close the app here.
+                        // TODO - does not yet work, if there comes some return from asyncload
+                        // it fails with processfinish calling a dialogdisplay, while activity is gone
+                        //terminateApp();
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            case DialogInterface.BUTTON_NEUTRAL:
+                switch (tag) {
+                    case "INITLAUNCH":
+                        break;
+                    default:
+                        break;
+                }
+
+                break;
+            default:
+                break;
         }
     }
 
@@ -1255,15 +1390,15 @@ public class MainActivity extends AppCompatActivity
      * but not selected as new active one.
      * @param idx index
      */
-    @Override
+    /*@Override
     public void processNegConfirm(int idx) {
         // The wp file was created during wp select (longpress) - so it exists and even if it is not
         // confirmed as active wp, the file exists, so immediately update wp status to be shown in
         // list
         myList.get(idx).setWpFlag(WP_EXISTS);
         adp.notifyDataSetChanged();
-        utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
-    }
+        utils.setWPShuffleCandidates(getApplicationContext(), myList);
+    }*/
 
 
     /* N O T E:   T H I S   I S   N O T   A C T I V E
@@ -1287,22 +1422,17 @@ public class MainActivity extends AppCompatActivity
         /**
          * onClick() gets passed the view in which we store the URL to be opened in a TAG. This
          * happens in getView() in our adapter...
+         * Note: cannot receive events from rating bar below thumb, because the "small" RatingBar
+         *       does not support interaction at all.
          * passing multiple tags? we could just combine this in a single string of special format
          * see https://developer.android.com/training/basics/firstapp/starting-activity.html
          * @param view The view
          */
         @Override
         public void onClick(View view) {
-            // if (view.getTag() instanceof View) {}  // JUST FOR DOCU - tag can be a view as well
+            // if (view.getTag() instanceof View) {}  // TODO DOCU - tag can be a view as well
             int idx = (int) view.getTag();  // for "filtered" view - index into full list!
-            /* Can't use this, because "small" ratingbars do not support interaction. So going
-               for a separate dialog to set rating for items selected via contextual action mode
-            if (idx >= 2*MAX_ITEMS) {
-                RatingBar rb = (RatingBar) view;
-            }*/
-            // 11.11.2017 - moved ellipsized explanation text handling to OnItemClickListener()
-
-            // Check, if a local copy for hires image exists. If yes, pass filepath to URL
+            // If a local copy for hires image exists, "misuse" hiresUrl to pass filename instead
             String hiresFileBase = myList.get(idx).getThumb().replace("th_", "");
             File hiresFile = new File(getApplicationContext().getFilesDir(), "hd_" + hiresFileBase);
             String hiresUrl;
@@ -1313,16 +1443,25 @@ public class MainActivity extends AppCompatActivity
             }
             String media = myList.get(idx).getMedia();
             // Decide, if we want to proceed if no WiFi is active (local image load no problem)
-            if (sharedPref.getBoolean("wifi_switch", false)
-                    && !devInfo.isWifiActive()
+            // TODO maybe exchange with utils getActiveNetworkType() for wifi check - but is ok!!
+            if (sharedPref.getBoolean("wifi_switch", true)
+                    //&& !devInfo.isWifiActive()
+                    && !(utils.getActiveNetworkType(getApplicationContext()) == ConnectivityManager.TYPE_WIFI)
                     && hiresUrl.startsWith("http")) {
                 new dialogDisplay(MainActivity.this, getString(R.string.hires_no_wifi), "No Wifi");
                 return;
             }
 
+            //if (utils.getActiveNetworkTypeName(getApplicationContext()).equals("NONE")) {
+            if (!utils.isNetworkConnected(getApplicationContext())) {
+                new dialogDisplay(MainActivity.this,
+                        getString(R.string.no_network_for_hd),
+                        getString(R.string.no_network));
+                return;
+            }
+
             // get maximum allocatable heap mem at time of pressing the button
             int maxAlloc = devInfo.getMaxAllocatable();
-            Log.i("HFCM", "maximum alloc:" + String.valueOf(maxAlloc));
 
             // Check our own media type, which has been set in createApodFromJson()
             switch (media) {
@@ -1335,10 +1474,6 @@ public class MainActivity extends AppCompatActivity
                     hiresIntent.putExtra("wallpaper_quality",
                             sharedPref.getString("wallpaper_quality", "80"));
                     lastImage = myList.get(idx).getTitle();
-                    //hiresIntent.putExtra("imagename", lastImage);
-                    // wallpaper filename now as imagename
-                    //hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_","wp_"));
-                    //hiresIntent.putExtra("imagename", myList.get(idx).getThumb().replace("th_",""));
                     hiresIntent.putExtra("imagename", hiresFileBase);
                     // forResult now ALWAYS to get logstring returned for debugging
                     // if hires size is already
@@ -1347,6 +1482,10 @@ public class MainActivity extends AppCompatActivity
                     break;
                 case M_YOUTUBE:
                     String thumb = myList.get(idx).getThumb();
+                    // stop reading if video is played
+                    if (tts != null && tts.isSpeaking()) {
+                        tts.stop();
+                    }
                     // We get the ID from thumb name - hmmm, somewhat dirty ?
                     if (sharedPref.getBoolean("youtube_fullscreen", false)) {
                         playYouTubeFullScreen(thumb.replace("th_", "").replace(".jpg", ""));
@@ -1355,9 +1494,15 @@ public class MainActivity extends AppCompatActivity
                     }
                     break;
                 case M_VIMEO:
+                    if (tts != null && tts.isSpeaking()) {
+                        tts.stop();
+                    }
                     playVimeo(hiresUrl);
                     break;
                 case M_MP4:
+                    if (tts != null && tts.isSpeaking()) {
+                        tts.stop();
+                    }
                     playMP4(hiresUrl);
                     break;
                 default:
@@ -1489,30 +1634,33 @@ public class MainActivity extends AppCompatActivity
      */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == HIRES_LOAD_REQUEST) {
             if (resultCode == RESULT_OK) {
+                // Display a log dialog for image loader statistics (image memory / scaling)
+                if (sharedPref.getBoolean("show_debug_infos", true)) {
+                    new dialogDisplay(this, data.getStringExtra("logString"), lastImage);
+                }
+
                 // Get the wallpaper info from returned intent (returning bmp is bad - trx size)
                 String testsize = data.getStringExtra("sizeHires");
                 //String hUrl = data.getStringExtra("hiresurl");
-                int listidx = data.getIntExtra("lstIdx",0);
-                String logString = data.getStringExtra("logString");
+                int listidx = data.getIntExtra("lstIdx", 0);
 
-                // Display a log dialog for image loader statistics (image memory / scaling)
-                if (sharedPref.getBoolean("show_debug_infos", true)) {
-                    new dialogDisplay(this, logString, lastImage);
-                }
-                // If a new cache file has been written, we trigger a file cleanup
+                // If a new cache file has been written, we trigger a file cleanup.
                 if (data.getBooleanExtra("new_hd_cached_file", false)) {
-                    String ttt = utils.cleanupFiles(getApplicationContext(),
+                    ArrayList<Integer> del = utils.cleanupFiles(getApplicationContext(),
                             myList,
-                            MAX_HIRES_MB * 1024);
-                    adp.notifyDataSetChanged();
-                    if (sharedPref.getBoolean("show_debug_infos", true) && !ttt.equals("")) {
-                        new dialogDisplay(MainActivity.this, ttt, "Cleanup processing", 10f);
+                            MAX_HIRES_MB * 1024,
+                            listidx);
+                    for (int i : del) {
+                        myList.get(i).setCached(false);
                     }
+                    adp.notifyDataSetChanged();     // better call at end only once
                 }
 
+                // todo - is the following needed on each return?
                 File hdFile = new File(getApplicationContext().getFilesDir(),
                         myList.get(listidx).getThumb().replace("th_", "hd_"));
                 myList.get(listidx).setCached(hdFile.exists());
@@ -1526,21 +1674,22 @@ public class MainActivity extends AppCompatActivity
                             getString(R.string.wp_confirm_dlg_title));
                     fragArguments.putString("MESSAGE",
                             getString(R.string.wp_confirm_dlg_msg,
-                            myList.get(listidx).getTitle()));
+                                    myList.get(listidx).getTitle()));
                     fragArguments.putString("POS", getString(R.string.wp_confirm_dlg_pos_button));
                     fragArguments.putString("NEG", getString(R.string.wp_confirm_dlg_neg_button));
                     FragmentManager fm = getSupportFragmentManager();
                     confirmDialog dlg = new confirmDialog();
                     dlg.setArguments(fragArguments);
                     // dlg.setTargetFragment(); // only if calling from fragment, not from activity!
-                    dlg.show(fm, "CONFIRMTAG");
+                    dlg.show(fm, "WP");
                 }
 
                 if (!(myList.get(listidx).getHiSize().equals(testsize) ||
                         testsize.equals("no-change"))) {
                     //return;     // no action needed if hires size already in data
-                    // TODO maybe get size at apod load using asyncload from stream...
-                    // this would avoid ugly "launch and return logic" and move this to getapod...
+                    // TODO maybe get size at apod load using asyncload from stream... or better: MediaMetaDataRetriever
+                    // TODO this would avoid ugly "launch and return logic" and move this to getapod...
+                    // unfortunately, the retriever did not work for jpg in my tests (only video)
                     try {
                         // data in json is reverse ordered as in list
                         JSONObject content = parent.getJSONObject(parent.length() - 1 - listidx).
@@ -1557,6 +1706,11 @@ public class MainActivity extends AppCompatActivity
                 }
                 myList.get(listidx).setHiSize(testsize);
                 adp.notifyDataSetChanged();
+            } else if (resultCode == RESULT_CANCELED) {
+                Log.w("HFCM", "Returning from imageactivity with RESULT_CANCELLED");
+                utils.logAppend(getApplicationContext(),
+                        MainActivity.DEBUG_LOG,
+                        "HIRES_LOAD > " + lastImage + ": " + data.getStringExtra("logString"));
             }
         } else if (requestCode == GL_MAX_TEX_SIZE_QUERY) {
             if (resultCode == RESULT_OK) {
@@ -1594,6 +1748,39 @@ public class MainActivity extends AppCompatActivity
                     formatter.setCalendar(cNASA);
                     adp.notifyDataSetChanged();
                 }
+                if (wpShuffleChanged) {
+                    wpShuffleChanged = false;
+                    // Enable schedules shuffle, disable stops shuffle. TODO: we need a check on start of the app, if scheduler has died for some reason to restart
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                        boolean shuffle = sharedPref.getBoolean("wallpaper_shuffle", false);
+                        Log.i("HFCM", "WP Shuffle has changed to " + shuffle);
+                        if (shuffle) {
+                            scheduleShuffle();
+                            utils.logAppend(getApplicationContext(),
+                                    DEBUG_LOG,
+                                    "Enabled wallpaper shuffle in settings");
+                            new dialogDisplay(MainActivity.this,
+                                    getString(R.string.wp_shuffle_enabled), "DEBUG ONLY!");
+                        } else {
+                            JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+                            scheduler.cancel(JOB_ID_SHUFFLE);
+                            utils.logAppend(getApplicationContext(),
+                                    DEBUG_LOG,
+                                    "Disabled wallpaper shuffle in settings");
+                            File shufflelog= new File(getApplicationContext().getFilesDir(),
+                                    DEBUG_LOG);
+                            String loginfo = "No logfile data available";
+                            if (shufflelog.exists()) {
+                                loginfo = "\nFunInSpace log data:\nYou may send this to Herbert using  the email function.\n";
+                                loginfo += utils.readf(getApplicationContext(), DEBUG_LOG);
+                            }
+                            new dialogDisplay(MainActivity.this, loginfo, "Shuffle Job cancelled", 10f);
+                        }
+                    } else {
+                        new dialogDisplay(MainActivity.this,
+                                "Not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
+                    }
+                }
             }
         }
     }
@@ -1604,7 +1791,7 @@ public class MainActivity extends AppCompatActivity
      * get bad if user toggles that switch and in the end closes the dialog without any effective
      * change.
      * The onActivityResult() method reacting on SETTINGS_REQUEST is called AFTER the settings
-     * dialog activity is closed and might be a better place to handle changes. The following
+     * dialog activity is CLOSED and might be a better place to handle REAL changes. The following
      * code solves this by using "change flags", checked in onActivityResult() later on.
      * IMPORTANT: Need to have set the "Changed" flags to TRUE, if no shared prefs exist, because
      * this listener gets called when first opening the preferences after installation. This is
@@ -1620,6 +1807,9 @@ public class MainActivity extends AppCompatActivity
                     }
                     if (changed.equals("date_format")) {
                         dateFormatChanged ^= true;
+                    }
+                    if (changed.equals("wallpaper_shuffle")) {
+                        wpShuffleChanged ^= true;
                     }
                     if (changed.equals("full_search")) {
                         // this one: just set on each single toggle
@@ -1642,6 +1832,7 @@ public class MainActivity extends AppCompatActivity
      * @param menu the menu item
      * @return boolean return value
      */
+    @SuppressLint("RestrictedApi")
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
@@ -1656,14 +1847,19 @@ public class MainActivity extends AppCompatActivity
             m.setOptionalIconsVisible(true);
         }
 
-        // 27.11.2017 test menu for scheduler debugging
-        JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-        List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
-        MenuItem scheditem = menu.findItem(R.id.action_schedule_wallpaper_change);
-        if (allPendingJobs.size() > 0) {
-            scheditem.setTitle("Stop WP Shuffle (Debug)");
-        } else {
-            scheditem.setTitle("Start WP Shuffle (Debug)");
+        // Test menu for apod scheduler debugging
+        JobScheduler jobScheduler = null;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
+            MenuItem scheditem = menu.findItem(R.id.action_schedule_apod_json_load);
+            scheditem.setTitle("Start Schedule APOD (Debug)");
+            for (JobInfo pending : allPendingJobs) {
+                if (pending.getId() == JOB_ID_APOD) {
+                    scheditem.setTitle("Stop Schedule APOD (Debug)");
+                    continue;
+                }
+            }
         }
 
         // 20.11.2017 Switch MenuItem to SupportMenuItem and use noinspection RestrictedApi  TODO DOCU
@@ -1773,7 +1969,7 @@ public class MainActivity extends AppCompatActivity
             public boolean onMenuItemActionCollapse(MenuItem menuItem) {
                 searchItem.setVisible(true);
                 //adp.cleanMap();
-                //adp.getFilter().filter("");                                                                                                         // TODO RE-TEST
+                //adp.getFilter().filter("");                                  // TODO RE-TEST
                 return true;
             }
         });
@@ -1794,7 +1990,7 @@ public class MainActivity extends AppCompatActivity
                 return true;
             }
         });
-
+        // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
         return super.onCreateOptionsMenu(menu);
         //return true;
     }
@@ -1871,7 +2067,7 @@ public class MainActivity extends AppCompatActivity
             // - create a provider - this is what we do here - see lalatex docu
             // we just send out the
             //File attachment_file = new File(getApplicationContext().getFilesDir(), localJson);
-            File attachment_file = new File(getApplicationContext().getFilesDir(), SHUFFLE_DEBUG_LOG);
+            File attachment_file = new File(getApplicationContext().getFilesDir(), DEBUG_LOG);
             Uri contentUri = FileProvider.getUriForFile(MainActivity.this,
                     "de.herb64.funinspace.fileprovider",
                     attachment_file);
@@ -1905,10 +2101,23 @@ public class MainActivity extends AppCompatActivity
             }
             return true;
         }
+        if (id == R.id.action_showlog) {
+            File shufflelog= new File(getApplicationContext().getFilesDir(),
+                    DEBUG_LOG);
+            String loginfo = "No logfile data available";
+            if (shufflelog.exists()) {
+                loginfo = "\nFunInSpace log data:\nYou may send this to Herbert using the email function.\n";
+                loginfo += utils.readf(getApplicationContext(), DEBUG_LOG);
+            }
+            new dialogDisplay(MainActivity.this, loginfo, "FunInSpace debug log", 10f);
+            return true;
+        }
+
         if (id == R.id.dropbox_sync) {
             // Refresh metatata with dropbox. This allows to refresh without a new installation.
             //https://stackoverflow.com/questions/2115758/how-do-i-display-an-alert-dialog-on-android
-            AlertDialog.Builder builder;
+            // TODO docu... what was this? now using my confirmDialog, which basically does the same
+            /*AlertDialog.Builder builder;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 //builder = new AlertDialog.Builder(getApplicationContext(), android.R.style.Theme_Material_Dialog_Alert);
                 // java.lang.IllegalStateException: You need to use a Theme.AppCompat theme (or descendant) with this activity.
@@ -1917,33 +2126,24 @@ public class MainActivity extends AppCompatActivity
                         android.R.style.Theme_Material_Dialog_Alert);
             } else {
                 builder = new AlertDialog.Builder(MainActivity.this);
-            }
+            }*/
 
-            // we could add an extended dialog with selection of different contents to load, e.g.
-            // having data filtered by criteria on refresh
-            // - only videos, no videos, only youtube or vimeo
-            // - only images newer than, older than, timerange
-            // - only images larger than given size
-            builder.setTitle(R.string.refresh_dropbox_title)
-                    .setMessage(R.string.refresh_dropbox_message)
-                    .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
-                        public void onClick(DialogInterface dialog, int which) {
-                            // asyncload requires an implementation of processFinish(), which is
-                            // called after data has been loaded
-                            new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_JSON);
-                            //new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(DROPBOX_MINI);
-                        }
-                    })
-                    .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
-                        public void onClick(DialogInterface dialog, int which) {
-                            // nothing done
-                        }
-                    })
-                    .setIcon(android.R.drawable.ic_dialog_alert)
-                    .show();
+            Bundle fragArguments = new Bundle();
+            //fragArguments.putString("RESULT", data.getStringExtra("wallpaperfile"));
+            fragArguments.putString("TITLE",
+                    getString(R.string.refresh_dropbox_title));
+            //fragArguments.putInt("ICON_ID", R.drawable.vimeo_icon);
+            fragArguments.putString("MESSAGE",
+                    getString(R.string.refresh_dropbox_message));
+            fragArguments.putString("POS", getString(R.string.hfcm_yes));
+            fragArguments.putString("NEG", getString(R.string.hfcm_no));
+            FragmentManager fm = getSupportFragmentManager();
+            confirmDialog dlg = new confirmDialog();
+            dlg.setArguments(fragArguments);
+            // dlg.setTargetFragment(); // only if calling from fragment, not from activity!
+            dlg.show(fm, "DROPBOX_REFRESH");
             return true;
         }
-
         if (id == R.id.restore_wallpaper) {
             new dialogDisplay(MainActivity.this,
                     getString(R.string.dlg_revert_wp),
@@ -1953,35 +2153,37 @@ public class MainActivity extends AppCompatActivity
         if (id == R.id.action_search_apod) {
             new dialogDisplay(MainActivity.this,
                     "Searching the NASA APOD Archive is not yet available.", "TODO");
+
+            // TODO testing thumbloader via scheduler job - still problems, reverted
+            /*ArrayList<String> urllist = new ArrayList<>();
+            for (spaceItem item2 : myList) {
+                urllist.add(item2.getLowres());
+            }
+            scheduleThumbLoader(urllist.toArray(new String[0]));*/
+
         }
-        if (id == R.id.action_schedule_wallpaper_change) {
-            // TODO: WP_SELECT_LIST -- if "" - handle this - no shuffle possible, also if only 1 single wp exists
+        if (id == R.id.action_schedule_apod_json_load) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-                List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
-                if (allPendingJobs.size() > 0) {
-                    String jobs = "Job IDs cancelled:\n";
-                    for (JobInfo jobinfo : allPendingJobs) {
-                        jobs += jobinfo.getId() + "\n";
+                JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+                List<JobInfo> allPendingJobs = scheduler.getAllPendingJobs();
+                for (JobInfo pending : allPendingJobs) {
+                    if (pending.getId() == JOB_ID_APOD) {
+                        // we are in pending state, so this means that this action should cancel
+                        // this job
+                        scheduler.cancel(JOB_ID_APOD);
+                        utils.logAppend(getApplicationContext(),
+                                DEBUG_LOG,
+                                "Cancelled APOD Load scheduler");
+                        item.setTitle("Start Schedule APOD (Debug)");
+                        return true;
                     }
-                    File shufflelog= new File(getApplicationContext().getFilesDir(), SHUFFLE_DEBUG_LOG);
-                    if (shufflelog.exists()) {
-                        jobs += "\nShuffle log data:\nYou may send this information to me by using the test email function\n";
-                        jobs += utils.readf(getApplicationContext(), SHUFFLE_DEBUG_LOG);
-                    }
-                    new dialogDisplay(MainActivity.this, jobs, "Shuffle Job cancel", 10f);
-                    //new dialogDisplay(MainActivity.this,
-                    //        "The following scheduled jobs get cancelled now, stopping the wallpaper shuffle functionality:\n" + jobs, "DEBUG ONLY!");
-                    utils.cancelAllJobs(getApplicationContext());
-                    utils.logAppend(getApplicationContext(), loc, SHUFFLE_DEBUG_LOG, "Cancel all jobs");
-                    item.setTitle("Start WP Shuffle (Debug)");
-                } else {
-                    utils.scheduleJob(getApplicationContext());
-                    utils.logAppend(getApplicationContext(), loc, SHUFFLE_DEBUG_LOG, "Start Wallpaper Shuffle");
-                    new dialogDisplay(MainActivity.this,
-                            "Schedule has been set to shuffle the wallpaper every 30 minutes, even if app is closed. For now, this is not reboot persistent.", "DEBUG ONLY!");
-                    item.setTitle("Stop WP Shuffle (Debug)");
                 }
+                // Reaching this point, job id was not in the pending job list, so start it
+                scheduleApod();
+                utils.logAppend(getApplicationContext(),
+                        DEBUG_LOG,
+                        "Started APOD Load scheduler");
+                item.setTitle("Stop Schedule APOD (Debug)");
             } else {
                 new dialogDisplay(MainActivity.this,
                         "Scheduling not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
@@ -2112,11 +2314,14 @@ public class MainActivity extends AppCompatActivity
      */
     public void checkMissingThumbs() {
         int count = 0;
+        // TODO: keep old logic for < lollipop for now...
+        // OLD CODE
         for(int i=0; i<myList.size(); i++) {
             if (myList.get(i).getBmpThumb() == null && !myList.get(i).getLowres().equals("")) {
                 // TODO unknown not yet checked...
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
                 // TODO: check parallel execution - seems to not load all images / and duplicates
+                // TODO: EVEN BETTER - use jobscheduler, so that load also continues in background.... WIFI mandatory??
                 new asyncLoad(MainActivity.this,
                         "THUMB_" + i).
                         execute(myList.get(i).getLowres());
@@ -2124,6 +2329,17 @@ public class MainActivity extends AppCompatActivity
                 count ++;
             }
         }
+        // NEW CODE, using Jobscheduler
+        /*ArrayList<String> urllist = new ArrayList<>();
+        for (spaceItem item : myList) {
+            if (item.getBmpThumb() == null && !item.getLowres().equals("")){
+                urllist.add(item.getLowres());
+                item.setThumbLoadingState(View.VISIBLE);
+                count ++;
+            }
+        }
+        scheduleThumbLoader(urllist.toArray(new String[0]));*/
+
         if (count > 0) {
             Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, count),
                     Toast.LENGTH_LONG).show();
@@ -2131,21 +2347,137 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
+     * Resync local json data with dropbox json data. A merge is done so that
+     * - Existing local items on the device are not deleted or changed
+     * - Items found on dropbox which do not exist in local array are copied only if
+     *   they have not been previously deleted by user explicitly. These are typically missed APOD
+     *   images (app not used for some time)
+     * - A full reload may be forced by option - this will reload even deleted items
+     * - Items keep their order by timestamp
+     * @param dropbox The JSON Array from dropbox, that has been loaded
+     * @param forceFull if set to true, this forces to reload even previously deleted images
+     */
+    private void resyncWithDropbox (JSONArray dropbox, boolean forceFull) {
+        Set<String> deleted_items= sharedPref.getStringSet("DELETED_ITEMS", new HashSet<String>());
+        Set<String> dropbox_items = new HashSet<>();
+        JSONArray newjson = new JSONArray();
+        int db_skip = 0;
+        int db_add = 0;
+        int l_add = 0;
+
+        for (int i = 0; i < dropbox.length(); i++) {
+            try {
+                String title = dropbox.getJSONObject(i).getJSONObject("Content").getString("Title");
+                dropbox_items.add(title);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        int dbidx = 0;
+        for (int lidx = 0; lidx < parent.length(); lidx++) {
+            try {
+                JSONObject lobj = parent.getJSONObject(lidx);
+                JSONObject lcontent = lobj.getJSONObject("Content");
+                String ltitle = lcontent.getString("Title");
+                long lepoch = lcontent.getLong("DateTime");
+                String dbtitle = "";
+                long dbepoch = 0;
+                if (dbidx < dropbox.length()) {
+                    JSONObject dbobj = dropbox.getJSONObject(dbidx);
+                    JSONObject dbcontent = dbobj.getJSONObject("Content");
+                    dbtitle = dbcontent.getString("Title");
+                    dbepoch = dbcontent.getLong("DateTime");
+                } else {
+                    Log.i("HFCM", "DB end - adding local '" + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    continue;
+                }
+
+                if (ltitle.equals(dbtitle)) {
+                    Log.i("HFCM", "DB idx: " + dbidx + " - Adding local (A): " + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    dbidx++;
+                } else if (!dropbox_items.contains(ltitle)) {
+                    // local title not present on dropbox at all
+                    Log.i("HFCM", "DB idx: " + dbidx + " - Title '" + ltitle + "' not on dropbox");
+                    while (dbepoch <= lepoch) {
+                        if (!deleted_items.contains(dbtitle) || forceFull) {
+                            Log.i("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(B) '" + dbtitle + "'");
+                            newjson.put(dropbox.getJSONObject(dbidx));
+                            db_add++;
+                        } else {
+                            Log.i("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (B): '" + dbtitle + "'");
+                            db_skip++;
+                        }
+                        dbidx++;
+                        dbepoch = dropbox.getJSONObject(dbidx).getJSONObject("Content").getLong("DateTime");
+                        dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
+                    }
+                    Log.i("HFCM", "DB idx: " + dbidx + " - Adding local (B): " + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    dbidx++;
+                } else {
+                    // local title is on dropbox, just fill any possible missing items
+                    while (!dbtitle.equals(ltitle)) {
+                        if (!deleted_items.contains(dbtitle) || forceFull) {
+                            Log.i("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(C) '" + dbtitle + "'");
+                            newjson.put(dropbox.getJSONObject(dbidx));
+                            db_add++;
+                        } else {
+                        Log.i("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (C): '" + dbtitle + "'");
+                        db_skip++;
+                        }
+                        dbidx++;
+                        dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
+                    }
+                    Log.i("HFCM", "DB idx: " + dbidx + " - Adding local (C): '" + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    dbidx++;
+                }
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        utils.logAppend(getApplicationContext(),
+                MainActivity.DEBUG_LOG,
+                String.format(loc, "Dropbox resync: LOCAL ADD=%d, DB ADD=%d, DB SKIP=%d",
+                        l_add, db_add, db_skip));
+
+        // TODO how to handle the shared prefs DELETED_ITEMS info?
+
+        // Activate the contents of the new json array
+        parent = newjson;
+        utils.writeJson(getApplicationContext(), localJson, parent);
+        myList.clear();
+        addItems();
+        checkMissingThumbs();
+        utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_MB * 1024, -1);
+        adp.notifyDataSetChanged();
+        getLatestAPOD();
+    }
+
+    /** TODO - remove later, new function resyncWithDropbox() does a smoother merge
      * Refresh the local json array with contents from the dropbox. The current array is replaced
-     * by the new array, which might contain more ore less images as the current array.
+     * by the new array by brute force...
      * - Existing rating values in the local array are preserved
      * - Thumbnail files of images are deleted, if they are not referenced any more in the new array
      * @param dropbox   a JSONArray returned from the call asyncLoad call to dropbox
      */
-    private void refreshFromDropbox(JSONArray dropbox) {
-        // TODO: filters for things to load and: KEEP NEWER IMAGES already present on device?? (now, apod is removed if not in dropbox and then reloaded)
-        // for now, just overwrite existing data by brute force, which means
-        // 1. metadata on the device which is not on dropbox is lost - could be restored from local nasa json info, if already stored (timestamp.json)
-        // 2. deleted items are loaded again - no problem, because deletes are not yet persistent yet, but also later: how to determine, why not to restore an item?
+    /*private void refreshFromDropbox(JSONArray dropbox) {
+        // 1. metadata on the device which is not on dropbox is lost
+        // 2. deleted items are loaded again and reappear in the list
         JSONObject obj = null;
         JSONObject content = null;
         HashMap<String, Integer> ratings;
         HashMap<String, String> thumbsToDelete;
+        Set<String> deleted_items= sharedPref.getStringSet("DELETED_ITEMS", new HashSet<String>());
 
         // Iterate the currently active json array to fill maps for rating / thumbfilenames
         ratings = new HashMap<>();
@@ -2182,7 +2514,14 @@ public class MainActivity extends AppCompatActivity
             if (content == null) {
                 continue;
             }
+
             try {
+                if (deleted_items.contains(content.getString("Title"))) {
+                    Log.i("HFCM", "Skipping dropbox load for user deleted item: '" + content.getString("Title") + "'");
+                    // TODO - make skip active - we might use an option here to force overall load!
+                    // remove the item from dropbox JSON array
+                    //continue;
+                }
                 if (ratings.containsKey(content.getString("Title"))) {
                     if (ratings.get(content.getString("Title")) != content.getInt("Rating")) {
                         Log.i("HFCM", "Adjust rating for '" + content.getString("Title") +
@@ -2213,6 +2552,12 @@ public class MainActivity extends AppCompatActivity
                 // TODO: should we remove the active one as well?
                 wpFile.delete();        // TODO check returncode
             }
+            String hdFileName = thumbsToDelete.get(key).replace("th_", "hd_");
+            File hdFile = new File(hdFileName);
+            if (hdFile.exists()) {
+                Log.i("HCFM", "Removing hires orphan " + hdFileName);
+                hdFile.delete();        // TODO check returncode
+            }
         }
 
         // Activate the contents of the new json array
@@ -2223,7 +2568,7 @@ public class MainActivity extends AppCompatActivity
         checkMissingThumbs();
         adp.notifyDataSetChanged();
         getLatestAPOD();
-    }
+    }*/
 
     /**
      * Try to get the latest APOD. This is called on each start of the app and after a refresh from
@@ -2231,24 +2576,50 @@ public class MainActivity extends AppCompatActivity
      * (yet?) the case.
      * Check the age of the current latest image and avoid any NASA query, if it is already up to
      * date. In this case, the time until next image is calculated.
-     * TODO: this time might be used to start a ScheduledJob..
      */
     private void getLatestAPOD() {
-        ArrayList<Long> epochs = utils.getNASAEpoch(loc, myList.get(0).getDateTime());
-        if (epochs.get(2) > 0) {
-            // the next image is scheduled in given milliseconds. We should add some random offset
+        // TODO
+        // First check for any _sched.json files - these have been collected by the scheduler and
+        // should be added first. Most likely, the current APOD is already captured.
+        long timeToNext = 0;
+        if (!myList.isEmpty()) {
+            // FIRST item in myList is latest that has been loaded. This is the LAST item in JSON.
+            ArrayList<Long> epochs = utils.getNASAEpoch(myList.get(0).getDateTime());
+            timeToNext = epochs.get(2);
+        }
+        if (timeToNext > 0) {
+            // the next image is scheduled in given milliseconds. We later add some random offset
             // into the schedule to avoid all application instances running to NASA at same
             // time - just in case we have thousands of running devices around the world :)
             Toast.makeText(MainActivity.this,
                     String.format(loc, getString(R.string.apod_already_loaded),
-                            (float)epochs.get(2)/(float)3600000),
+                            (float)timeToNext/(float)3600000),
                     Toast.LENGTH_LONG).show();
         } else {
             if (sharedPref.getBoolean("get_apod", true)) {
+                // Check for active connection: e.g. AVD with wifi connected on host but no external
+                // access (DSL unplugged): Failure is NOT detected by isConnected() - this means,
+                // we run into DNS timeouts - we catch them, but it takes 40 seconds (depending on
+                // number of ip's resolved for the name)
+                long conntime = utils.testSocketConnect(2000);
+                if (conntime == 2000) {
+                //if (!utils.isNetworkConnected(getApplicationContext())) {
+                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                            "Timeout testSocketConnect()");
+                    new dialogDisplay(MainActivity.this,
+                            getString(R.string.no_network_for_apod),
+                            getString(R.string.no_network));
+                    return;
+                } else {
+                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                            "testSocketConnect(): " + conntime + "ms");
+                }
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "Kick off asyncLoad: APOD_LOAD");
                 new asyncLoad(MainActivity.this,
                         "APOD_LOAD",
                         sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                        execute(sharedPref.getBoolean("get_apod_simulate", false) ? APOD_SIMULATE : nS());
+                        execute(sharedPref.getBoolean("get_apod_simulate", false) ? dAS() : nS());
             } else {
                 new dialogDisplay(this, getString(R.string.warn_apod_disable),
                         getString(R.string.reminder));
@@ -2260,15 +2631,29 @@ public class MainActivity extends AppCompatActivity
      * This is the interface implementation of processFinish() for asyncLoad class. This is called
      * when the asyncLoad task has finished retrieving the requested data.
      * Note: for parallel asynctask execution (executeonexecutor), see also my lalatex document...
-     * @param status    return status
-     * @param tag       the tag string set by caller to identify the calling procedure
-     * @param output    the returned output (e.g. json string, bitmap)
+     * @param status   Return status. This can either be
+     *                 - HttpURLConnection.HTTP_x - http connection status, 200, 404 etc..
+     *                 - aysncLoad.IOEXCEPTION or similar: connection problems BEFORE http..
+     * @param tag      the tag string set by caller to identify the calling procedure
+     * @param output   the returned output (e.g. json string, bitmap, exception string)
      */
     @Override
     public void processFinish(int status, String tag, Object output) {
         // switch-case for String type available since Java version 7
 
-        // no switch-case with string "segments", so first check this...
+        // Status returned from asyncload: everything not HTTP OK 200 is assumed to be bad
+        if (status != HttpURLConnection.HTTP_OK) {
+            Log.e("HFCM", tag + " > '" + output + "'");
+            utils.logAppend(getApplicationContext(),
+                    MainActivity.DEBUG_LOG,
+                    tag + " > '" + output + "'");
+            new dialogDisplay(MainActivity.this,
+                    tag + " > '" + output + "'",
+                    "Network - debug");
+            return;
+        }
+
+        // no switch-case with string segments, so first check for wildcard stuff...
         if (tag.startsWith("THUMB_")) {
             int idx = Integer.parseInt(tag.replace("THUMB_",""));
             Log.i("HFCM", "Returned from asyncLoad() THUMB with index " + idx);
@@ -2287,6 +2672,7 @@ public class MainActivity extends AppCompatActivity
             return;
         }
 
+        // now for the "exact matches"
         switch (tag) {
             case "DROPBOX_REFRESH":
                 Object json;
@@ -2297,11 +2683,13 @@ public class MainActivity extends AppCompatActivity
                     return;
                 }
                 if (json != null && json instanceof JSONArray) {
-                    refreshFromDropbox((JSONArray) json);
+                    //refreshFromDropbox((JSONArray) json);
+                    resyncWithDropbox((JSONArray) json,
+                            sharedPref.getBoolean("force_full_dropbox_sync", false));
                 }
                 break;
             case "DROPBOX_INIT":
-                // Todo: we might use refreshFromDropbox Code as well, maybe with parm "init" ?
+                // Todo: we might use code from dropbox sync (have now parameter force)
                 // On 25.10.2017, loadFromDropboxTask() has been retired. some comments from old code
                 // TODO - needs retained fragment to run, so do not rotate phone while thumbs are loading
                 // TODO - also found problems if Wifi is not available after new installation of app
@@ -2327,9 +2715,9 @@ public class MainActivity extends AppCompatActivity
             case "VIMEO_INFO":
                 String thumbUrl = "n/a";
                 String videoId = null;
-                if (status == asyncLoad.FILENOTFOUND) {
+                /*if (status == asyncLoad.FILENOTFOUND) {  // bad status fails in beginning ...
                     break;
-                }
+                }*/
                 try {
                     JSONObject parent = new JSONObject((String) output);
                     videoId = parent.getString("video_id");
@@ -2347,25 +2735,26 @@ public class MainActivity extends AppCompatActivity
                 new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(thumbUrl);
                 break;
             case "APOD_LOAD":
-                // 26.10.2017 - apodTask - move into asyncLoad as well
-                if (status == asyncLoad.FILENOTFOUND) {
-                    Log.e("HFCM", "APOD Loader asyncLoad returned: File not found, " + output);
-                    break;
-                }
-                // todo: this check needs to be done better via status - which exception is thrown?
                 String h = (String)output;
+                // TODO: test 4.1 with tls off - need to handle return code...
                 if (h.startsWith("Connection")) {
                     new dialogDisplay(MainActivity.this, h + "\n" + getString(R.string.enable_tls), "NASA Connect");
                     return;
                 }
-                createApodFromJson((String) output);
+                if (utils.isJson(h) == utils.JSON_OBJ) {
+                    createApodFromJson((String) output);
+                } else {
+                    String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
+                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                            "APOD_LOAD: JSON exception: " + first100);
+                    new dialogDisplay(MainActivity.this,
+                            "No JSON object received - might be html from a redirect to a login page in free wifi network\nContent: '" +
+                                    first100 + "......'", "Debug Info");
+                    return;
+                }
                 break;
             case "IMG_LOWRES_LOAD":
                 if (output instanceof Bitmap) {
-                    //Log.i("HFCM", "Lowres bitmap returned by asyncLoad");
-                    // moved to finalize
-                    //apodItem.setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
-                    //        String.valueOf(((Bitmap) output).getHeight()));
                     finalizeApodWithLowresImage((Bitmap) output);
                 } else {
                     Log.e("HFCM", "asyncLoad for lowres image did not return a bitmap");
@@ -2404,7 +2793,6 @@ public class MainActivity extends AppCompatActivity
      */
     public void changeWallpaper(String filename) {
         // https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/app/WallpaperManager.java
-        // public static final int FLAG_LOCK = 1 << 1;
         // below: api23+ required
         String wpToSet = filename;
         //WallpaperManager wpm = (WallpaperManager)getSystemService(WallpaperManager.class);
@@ -2460,7 +2848,7 @@ public class MainActivity extends AppCompatActivity
         editor.apply(); // apply is recommended by inspection instead of commit()
         // Refresh adapter (to update wp symbols on thumbnails)
         adp.notifyDataSetChanged();
-        utils.setWPShuffleCandidates(getApplicationContext(), loc, myList);
+        utils.setWPShuffleCandidates(getApplicationContext(), myList);
 
         // Get these as well, if present - actually, we do not need this...
         Drawable sysWall = null;
@@ -2490,37 +2878,132 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     *
+     * Schedule the initial wallpaper shuffle. This one is run within a short deadline, just to
+     * be able to see if it works.
      */
-    /*private void scheduleJob() {
-        // https://github.com/googlesamples/android-JobScheduler/blob/master/Application/src/main/java/com/example/android/jobscheduler/MainActivity.java
-        // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
+    private void scheduleShuffle() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_APOD, serviceComponent);
-            // set jobinfo data here into builder
-            builder.setMinimumLatency(60000);    // but: not with periodic
-            //builder.setOverrideDeadline(15000);
-            // builder.setPersisted(true);      // survice reboots
-
-            // Extras to pass to the job - well, passing filename not good...
+            ComponentName serviceComponent = new ComponentName(this, shuffleJobService.class);
+            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_SHUFFLE, serviceComponent);
+            builder.setMinimumLatency(5000);
+            builder.setOverrideDeadline(10000);
             PersistableBundle extras = new PersistableBundle();
-            //String wpFile = setNextWallpaperFile();
-            //String wpFile = utils.setNextRandomWallpaper(getApplicationContext(), loc, myList);
-            //extras.putString("WPFILE", wpFile);
             extras.putInt("COUNT", 1);
             builder.setExtras(extras);
-
             JobInfo jobInfo = builder.build();
-            Log.i("HFCM", jobInfo.toString());
-
-            JobScheduler scheduler = null;
-            scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            scheduler.schedule(builder.build());
-        } else {
-            new dialogDisplay(getApplicationContext(), "Job schedule not available pre lollipop");
+            Log.i("HFCM", "SHUFFLE jobinfo: " + jobInfo.toString());
+            JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            sched.schedule(jobInfo);
         }
-    }*/
+    }
 
+    private void scheduleApod() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            ComponentName serviceComponent = new ComponentName(this, apodJobService.class);
+            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_APOD, serviceComponent);
+            builder.setMinimumLatency(5000);
+            builder.setOverrideDeadline(10000);
+            PersistableBundle extras = new PersistableBundle();
+            extras.putInt("COUNT", 1);
+            extras.putString("URL", nS());
+            // java.lang.IllegalAccessError: Method 'void android.os.BaseBundle.putBoolean(java.lang.String, boolean)' is inaccessible to class 'de.herb64.funinspace.MainActivity'
+            //extras.putBoolean("PRE_LOLLOPOP_TLS", sharedPref.getBoolean("enable_tls_pre_lollipop", true));
+            builder.setExtras(extras);
+            JobInfo jobInfo = builder.build();
+            Log.i("HFCM", "APOD jobinfo: " + jobInfo.toString());
+            JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            sched.schedule(jobInfo);
+        }
+    }
+
+    private void scheduleThumbLoader(String[] urls) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            ComponentName serviceComponent = new ComponentName(this, thumbLoaderJobService.class);
+            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_THUMB, serviceComponent);
+            builder.setMinimumLatency(2000);
+            builder.setOverrideDeadline(4000);
+            PersistableBundle extras = new PersistableBundle();
+            extras.putStringArray("URLS", urls);
+            builder.setExtras(extras);
+            JobInfo jobInfo = builder.build();
+            Log.i("HFCM", "THUMBLOADER jobinfo: " + jobInfo.toString());
+            JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            sched.schedule(jobInfo);
+        }
+    }
+
+    /**
+     * Called at very first launch of the app after installation.
+     */
+    private void initialLaunch() {
+        utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                "Starting initialLaunch()...");
+        Bundle fragArguments = new Bundle();
+        fragArguments.putString("TITLE",
+                "Welcome to FunInSpace");
+        long connecttime = utils.testSocketConnect(1000);
+        if (connecttime < 1000) {
+        //if (utils.isNetworkConnected(getApplicationContext())) {
+            int type = utils.getActiveNetworkType(getApplicationContext());
+            switch (type) {
+                case ConnectivityManager.TYPE_MOBILE:
+                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                            "MOBILE network isConnected() at initialLaunch(), (" + connecttime + "ms)");
+                    fragArguments.putString("MESSAGE",
+                            getString(R.string.dropbox_init_mobile));
+                    fragArguments.putString("POS",
+                            getString(R.string.hfcm_yes));
+                    fragArguments.putString("NEG",
+                            getString(R.string.hfcm_no));
+                    break;
+                case ConnectivityManager.TYPE_WIFI:
+                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                            "WIFI network isConnected() at initialLaunch(), (" + connecttime + "ms)");
+                    fragArguments.putString("MESSAGE",
+                            getString(R.string.dropbox_init_wifi));
+                    fragArguments.putString("POS",
+                            getString(R.string.hfcm_proceed));
+                    fragArguments.putString("NEG",
+                            getString(R.string.hfcm_cancel));
+                    break;
+                default:
+                    // handle unknown network - e.g. bluetooth...
+                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                            utils.getActiveNetworkTypeName(getApplicationContext()) +
+                                    " network isConnected() at initialLaunch() - cannot be used");
+                    fragArguments.putString("MESSAGE",
+                            "Cannot use network " + utils.getActiveNetworkTypeName(getApplicationContext()));
+                    fragArguments.putString("NEG",
+                            getString(R.string.hfcm_ok));
+                    break;
+            }
+        } else {
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "NO network access poossible at initialLaunch()");
+            fragArguments.putString("MESSAGE",
+                    getString(R.string.dropbox_init_no_network));
+            fragArguments.putString("NEG",
+                    getString(R.string.hfcm_ok));
+        }
+        FragmentManager fm = getSupportFragmentManager();
+        confirmDialog confirmdlg = new confirmDialog();
+        confirmdlg.setArguments(fragArguments);
+        confirmdlg.show(fm, "INITLAUNCH");
+    }
+
+    public void terminateApp() {
+        // see also
+        // https://developer.android.com/guide/components/activities/tasks-and-back-stack.html
+        Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+        // from android docu about Intent: FLAG_ACTIVITY_CLEAR_TOP
+        // If set, and the activity being launched is already running in the current task, then
+        // instead of launching a new instance of that activity, all of the other activities on
+        // top of it will be closed and this Intent will be delivered to the (now on top) old
+        // activity as a new Intent.
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.putExtra("EXIT", true);
+        startActivity(intent);
+    }
 
     /**   DEVEL HELPER ONLY!!!
      * CHANGE IN EPOCH VALUE CALCULATION - JUST TO BE RUN ONCE ON A WELL PREAPARED JSON FILE

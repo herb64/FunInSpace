@@ -8,6 +8,12 @@
         android:title="TLS v1 Security" />
 
     <SwitchPreference
+        android:defaultValue="false"
+        android:key="force_full_dropbox_sync"
+        android:summary="Setting this option to on causes ALL items on dropbox being merged into your list, even those, that you have deleted before. This might result in a large list."
+        android:title="Dropbox force full sync" />
+
+    <SwitchPreference
         android:defaultValue="true"
         android:key="get_apod"
         android:summary="Try to load APOD on each start of app. Turn this off for debugging purposes only."

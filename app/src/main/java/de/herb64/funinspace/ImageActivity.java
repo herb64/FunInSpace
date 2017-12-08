@@ -180,6 +180,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
 
         // Handle restored instance state to recover from phone rotation
         // https://stackoverflow.com/questions/19856359/imageview-not-retaining-image-when-screen-rotation-occurs
+        // New logic: use RESULT_CANCELED as default. If user returns before image has been loaded,
+        // onActivityResult for HIRES_LOAD_REQUEST gets called with canceled result...
         if (savedInstanceState != null) {
             // TODO: Docu note: using noinspection for ResourceType to avoid complaint in setVisibility()
             //       about non correct value, because we restore this from Bundle...
@@ -207,8 +209,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             if (myBitmap != null) {
                 initializeMatrix();
             }
-            // TODO Docu: it is important to call setResult here again
-            setResult(RESULT_OK, returnIntent);
+            // TODO Docu: it is important to call setResult after restoring instance state again
+            setResult(RESULT_CANCELED, returnIntent);
         } else {
             Intent intent = getIntent();
             strHires = intent.getStringExtra("hiresurl");
@@ -221,6 +223,14 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             // We now can start the activity in select mode without need to first long press
             wallPaperSelectMode = intent.getBooleanExtra("wpselect", false);
             returnIntent = new Intent();
+
+            // null pointer on data in returnintent - was never set
+            //returnIntent.putExtra("sizeHires", originalSize);
+            returnIntent.putExtra("lstIdx", listIdx);
+            returnIntent.putExtra("hiresurl", strHires);
+            returnIntent.putExtra("logString", "hires load canceled");
+            returnIntent.putExtra("filename", imageName);
+            setResult(RESULT_CANCELED, returnIntent);
 
             // TODO Docu
             // OLD CODE: start the asynctask to load the image
@@ -802,7 +812,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         returnIntent.putExtra("hiresurl", strHires);
         returnIntent.putExtra("logString", logstring);
         returnIntent.putExtra("filename", imageName);
-        setResult(RESULT_OK,returnIntent);
+        setResult(RESULT_OK, returnIntent);
 
         // Initialize wallpaper selection rectangle, if we already started in active selection mode
         if (wallPaperSelectMode) {

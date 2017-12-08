@@ -2,7 +2,6 @@ package de.herb64.funinspace.services;
 
 import android.app.Notification;
 import android.app.NotificationManager;
-import android.app.Service;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
@@ -10,35 +9,43 @@ import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PersistableBundle;
-import android.preference.PreferenceManager;
-import android.support.annotation.IntDef;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
-import android.widget.Toast;
 
-import com.google.android.youtube.player.YouTubeStandalonePlayer;
-
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Locale;
+import java.util.Random;
+import java.util.TimeZone;
 
 import de.herb64.funinspace.MainActivity;
 import de.herb64.funinspace.R;
-import de.herb64.funinspace.helpers.dialogDisplay;
+import de.herb64.funinspace.apodJsonLoader;
 import de.herb64.funinspace.helpers.utils;
-import de.herb64.funinspace.wallPaperActivator;
 
 /**
  * Created by herbert on 11/26/17.
+ * If schedule is reached, this loads the new json metadata information from NASA into a file, that
+ * can later be read on startup of the app. This makes sure, that we do not miss any APODs if the
+ * app has not been started for some days.
+ * TODO - if this schedule is missed and not executed, we miss an item. But this can be "survived"
+ * either by the NASA APOD archive search or by trying to sync with my dropbox. The dropbox sync
+ * needs to be changed, so that no user specifics get lost, but also that the reload does not
+ * "revive" items, that have been actively deleted by the user.
+ * ---> need a deletion list stored in shared prefs
  */
 
 public class apodJobService extends JobService {
 
-    private ComponentName serviceComponent;
+    // Randomize NASA Server access with scheduled operations to avoid "DDOS behaviour"
+    private static final int MIN_DELAY = 300000;
+    private static final int MAX_DELAY = 1200000;
 
     /**
      *
@@ -46,10 +53,10 @@ public class apodJobService extends JobService {
     @Override
     public void onCreate() {
         super.onCreate();
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+        /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             serviceComponent = new ComponentName(this, apodJobService.class);
-        }
-        Log.i("HFCM", "Service has been created");
+        }*/
+        Log.i("HFCM", "APOD service has been created");
     }
 
     /**
@@ -58,10 +65,12 @@ public class apodJobService extends JobService {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.i("HFCM", "Service has been destroyed");
+        Log.i("HFCM", "APOD service has been destroyed");
     }
 
     /**
+     * This seems only to be called if starting the service via intent from activity
+     * TODO why should we do that? Doing a start of 2 services might have crashed  my KlausS4 AVD - permanently running into trouble - see doc...
      * @param intent intent
      * @param flags flags
      * @param startId start id
@@ -69,13 +78,14 @@ public class apodJobService extends JobService {
      */
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i("HFCM", "OnStartCommand: ID=" + startId);
+        Log.e("HFCM", "OnStartCommand: ID=" + startId);
         return super.onStartCommand(intent, flags, startId);
     }
 
     /**
-     * We read the next wp file from shared prefs instead of passed wallpaper filename instead of
-     * passing a fixed filename into the job parameters!
+     * Load a new APOD JSON information and store into a special file. No more activity at this
+     * point. This allows to pickup the app on next start all files written since last start and
+     * add these into the list of space items.
      * @param jobParameters parameters
      * @return boolean
      */
@@ -84,105 +94,126 @@ public class apodJobService extends JobService {
         // This is executed on main thread, so put logic in extra thread, then call jobfinshed
         // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
         // Service is destroyed on app close, but is recreated when job is scheduled
-        String wpfile = utils.getRandomWpFileName(this);
-        Log.i("HFCM", "Job has been started - wpfile = '" + wpfile + "'");
 
-        Locale loc;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
+        Locale loc = Locale.getDefault();
+        /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
             loc = getResources().getConfiguration().getLocales().get(0);
         } else{
             //noinspection deprecation
             loc = getResources().getConfiguration().locale;
-        }
+        }*/
 
         int count = jobParameters.getExtras().getInt("COUNT");
-        Toast.makeText(getApplicationContext(), "Job (" + count + ") now started for WP = '" + wpfile + "'",
-                Toast.LENGTH_LONG).show();
+        String actNetType = utils.getActiveNetworkTypeName(getApplicationContext());
+        utils.logAppend(getApplicationContext(),
+                MainActivity.DEBUG_LOG,
+                "Job" + count + " - APOD - currently active network type: " + actNetType);
 
-        if (!wpfile.isEmpty()) {
-            wallPaperActivator wpact = new wallPaperActivator(getApplicationContext(), wpfile);
-            Thread activator = new Thread(wpact);
-            activator.start();  // of course, we do not join() :)
+        String url = jobParameters.getExtras().getString("URL");
+        //boolean tls = jobParameters.getExtras().getBoolean("PRE_LOLLOPOP_TLS");
+        // java.lang.IllegalAccessError: Method 'void android.os.BaseBundle.putBoolean(java.lang.String, boolean)' is inaccessible to class 'de.herb64.funinspace.MainActivity'
+        boolean tls = true;
 
-            // Store filename of current wallpaper into shared preferences - it looks like we only
-            // can access the defaultSharedPrefs from our service - de.herb..funinspace_preferences
-            // so we moved the current_wp shared pref to this from MainActivity.xml private file
-            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-            SharedPreferences.Editor editor = sharedPref.edit();
-            editor.putString("CURRENT_WALLPAPER_FILE", wpfile);
-            editor.apply();
-
-            // logfile for debugging
-            utils.logAppend(getApplicationContext(),
-                    loc,
-                    MainActivity.SHUFFLE_DEBUG_LOG,
-                    "Job" + count + " - " + wpfile);
-
-            // TODO: notify user if task is done - notification appears (white in upper left only)
-            // seems we need custom big view to make it appear expanded...
-            Notification notification  = new NotificationCompat.Builder(this)
-                    //.setCategory(Notification.CATEGORY_MESSAGE)
-                    .setContentTitle("Wallpaper shuffle")
-                    .setContentText("Your wallpaper has been shuffled to '" + wpfile + "'")
-                    .setSmallIcon(R.mipmap.ic_launcher)
-                    .setAutoCancel(true)
-                    .setSound(Uri.parse("android.resource://"
-                            + this.getPackageName() + "/" + R.raw.nouveau_image))
-                    //.setVibrate()
-                    //.setVisibility(Notification.VISIBILITY_PUBLIC)
-                    .build();
-            NotificationManager notificationManager =
-                    (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            notificationManager.notify(999, notification );
-
-            /* for docu only... do we need an icon mandatory?
-            11-26 14:32:09.180 1525-1525/system_process E/NotificationService: Not posting notification with icon==0: Notification(pri=0 contentView=null vibrate=null sound=null defaults=0x0 flags=0x10 color=0x00000000 category=msg vis=PUBLIC)
-            11-26 14:32:09.180 1525-1525/system_process E/NotificationService: WARNING: In a future release this will crash the app: de.herb64.funinspace
-             */
-
-            jobFinished(jobParameters, false);  // false: need no reschedule, work is done
-            // Schedule next job in chain
-            scheduleNext(loc, count);
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        Calendar cNASA = Calendar.getInstance(tzNASA);
+        String yyyymmddNASA = String.format(loc, "%04d-%02d-%02d",
+                cNASA.get(Calendar.YEAR),
+                cNASA.get(Calendar.MONTH) + 1,
+                cNASA.get(Calendar.DAY_OF_MONTH));
+        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
+        long epoch = 0;
+        try {
+            dF.setCalendar((Calendar) cNASA.clone()); // clone to avoid timezone overwrite
+            epoch = dF.parse(yyyymmddNASA).getTime();
+        } catch (ParseException e) {
+            e.printStackTrace();
         }
+
+        apodJsonLoader loader = new apodJsonLoader(getApplicationContext(),
+                url,
+                String.format(loc, "%d_sched.json", epoch),
+                tls);
+        Thread activator = new Thread(loader);
+        activator.start();
+
+        // logfile for debugging
+        utils.logAppend(getApplicationContext(),
+                MainActivity.DEBUG_LOG,
+                "Job" + count + " - APOD - " + String.format(loc, "%d_sched.json", epoch));
+
+        // TODO - seems we need custom big view to make it appear expanded...
+        // TODO - notification ids... (998...)
+        Notification notification  = new NotificationCompat.Builder(this)
+                //.setCategory(Notification.CATEGORY_MESSAGE)
+                .setContentTitle("New APOD")
+                .setContentText("New apod loaded")
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setAutoCancel(true)
+                .setSound(Uri.parse("android.resource://"
+                        + this.getPackageName() + "/" + R.raw.newapod))
+                //.setVibrate()
+                //.setVisibility(Notification.VISIBILITY_PUBLIC)
+                .build();
+        NotificationManager notificationManager =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        notificationManager.notify(998, notification);
+
+        // send a broadcast - not needed here ???
+        /*Intent intent = new Intent();
+        intent.putExtra("??", ??);
+        intent.setAction(MainActivity.BCAST_APOD);
+        sendBroadcast(intent);*/
+
+        // TODO Action - for now, just one toast and no reschedule
+        Log.i("HFCM", "Job ID " + jobParameters.getJobId() + " now finished");
+        jobFinished(jobParameters, false);  // false: need no reschedule, work is done
+        // Schedule next job in chain
+        scheduleNext(count, url, epoch);
         return true;    // no more work to be done with this job
     }
 
+    /**
+     * This method is called if the system has determined that you must stop execution of your
+     * job even before you've had a chance to call
+     * @param jobParameters
+     * @return
+     */
     @Override
     public boolean onStopJob(JobParameters jobParameters) {
-        Log.i("HFCM", "Job has been stopped");
+        Log.i("HFCM", "onStopJob received: APOD");
         return false;   // false: drop the job
     }
 
     /**
-     * Schedule again...
+     * Reschedule again as onetime job
+     * @param count count
+     * @param url url
+     * @param lastEpoch The last epoch of NASA, for which a new json has been loaded
      */
-    private void scheduleNext(Locale loc, int count) {
+    private void scheduleNext(int count, String url, long lastEpoch) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            ComponentName serviceComponent = new ComponentName(this, apodJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_APOD, serviceComponent);
-            // set jobinfo data here into builder
-            builder.setMinimumLatency(1800000);
-            builder.setOverrideDeadline(1920000);
+            int random = MIN_DELAY + new Random().nextInt((MAX_DELAY - MIN_DELAY));
+            ArrayList<Long> data = utils.getNASAEpoch(lastEpoch);
+            builder.setMinimumLatency(data.get(2) + random);
+            builder.setOverrideDeadline(data.get(2) + random + 60000);  // 1 minute addition deadline
             //builder.setPersisted(true);      // survive reboots
 
             // Extras to pass to the job - well, passing filename not good...
             PersistableBundle extras = new PersistableBundle();
-            //String wpFile = "no-more-passed-filename";
             extras.putInt("COUNT", count+1);
+            extras.putString("URL", url);
             builder.setExtras(extras);
 
             JobInfo jobInfo = builder.build();
             Log.i("HFCM", jobInfo.toString());
 
-            // Just in preparation of scheduling apod retrieve job
-            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-            ArrayList<Long> data = utils.getNASAEpoch(loc,
-                    sharedPref.getLong("LATEST_APOD_EPOCH", 0));
-            String logentry = String.format(loc,
-                    "schedNext: %d, Time to next APOD: %.1f hours",
+            String logentry = String.format(Locale.getDefault(),
+                    "schedNext: %d, Time to next APOD: %.1f hours + random delay of " + random + "ms",
                     count + 1, (float)data.get(2)/3600000f);
             utils.logAppend(getApplicationContext(),
-                    loc,
-                    MainActivity.SHUFFLE_DEBUG_LOG,
+                    MainActivity.DEBUG_LOG,
                     logentry);
 
             JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);

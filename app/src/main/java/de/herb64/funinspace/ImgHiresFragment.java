@@ -13,6 +13,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.IntegerRes;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
@@ -23,6 +24,9 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
+import java.util.concurrent.Executor;
+
+import javax.net.ssl.HttpsURLConnection;
 
 import de.herb64.funinspace.helpers.dialogDisplay;
 import de.herb64.funinspace.helpers.utils;
@@ -91,7 +95,10 @@ public class ImgHiresFragment extends Fragment {
         texLimit = getArguments().getInt("maxTextureSize");
         imageName = getArguments().getString("imageName");
         Log.i("HFCM", "ImageHiresFragment called for '" + imageName + "'");
-        new hiresTask().execute(Url2Load);
+        //new hiresTask().execute(Url2Load);
+        // Run as a parallel request to possible running APOD_LOAD task - in case of dns
+        // resolution problems because of missing 'real' internet access...
+        new hiresTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, Url2Load);
     }
 
     // TODO - onAttach() - context vs. activity as parameter
@@ -163,18 +170,11 @@ public class ImgHiresFragment extends Fragment {
         @Override
         protected Bitmap doInBackground(String... params) {
             Bitmap bmp = null;
-
-            // avoid complaints on String.format()...
-            Locale loc;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
-                loc = getResources().getConfiguration().getLocales().get(0);
-            } else{
-                //noinspection deprecation
-                loc = getResources().getConfiguration().locale;
-            }
+            Log.i("HFCM", "doInBackground() imghiresfragment");
+            Locale loc = Locale.getDefault();
 
             // If we have a local file to load: url contains file path of basename
-            // TODO - check for OOM, if memory allocation is not sufficient
+            // TODO - check for OOM, if memory allocation is not sufficient at file load
             if (!params[0].startsWith("http")) {
                 Log.i("HFCM", "Loading file locally: " + params[0]);
                 bmp = BitmapFactory.decodeFile(params[0]);
@@ -200,9 +200,33 @@ public class ImgHiresFragment extends Fragment {
                     myStream = (InputStream) imgurl.getContent();
                     bitmap = BitmapFactory.decodeStream(myStream);*/
 
+
+                    // test code for network connection
+                    HttpsURLConnection conn = null;
+
+                    // checking, if https or http - use android webkit classes TODO: tls android 4 ...
+                    // check: imgurl.openStream();
+                    conn = (HttpsURLConnection) imgurl.openConnection();
+                    int status = conn.getResponseCode();
+                    if (status != HttpsURLConnection.HTTP_OK) {
+                        Log.e("HFCM", "Hires thread: " + conn.getResponseMessage());
+                        return null;
+                    }
+                    InputStream istream = conn.getInputStream();
+                    // buffered... to check, but did not make a difference in my tests
+                    //BufferedInputStream bStream = new BufferedInputStream(istream);
+
+                    /* Trying to speedup the test - no success - this one even hangs longer...
+                    if (!utils.isInternetReachable(null, "https://8.8.8.8")) {
+                        Log.e("HFCM", "no internet connection working...");
+                        return null;
+                    }*/
+
+                    Log.i("HFCM", "Starting stream decode with 'options.inJustDecodeBounds'");
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inJustDecodeBounds = true;
-                    BitmapFactory.decodeStream((InputStream)imgurl.getContent(),null,options);
+                    //BitmapFactory.decodeStream((InputStream)imgurl.getContent(),null,options);
+                    BitmapFactory.decodeStream(istream,null,options);
                     options.inJustDecodeBounds = false;
                     int fullW = options.outWidth;
                     int fullH = options.outHeight;
@@ -353,36 +377,34 @@ public class ImgHiresFragment extends Fragment {
                     // https://stackoverflow.com/questions/41719305/android-bitmapfactory-decodestream-return-null-on-samsung-devices
                     // hmmm, very strange...
 
-
+                    Log.i("HFCM", "Starting decode with 'full image stream'");
+                    long tstart = System.currentTimeMillis();
                     InputStream iStream = (InputStream) imgurl.getContent();
                     // TODO possible performance improvement? 8k is default buffer
-                    BufferedInputStream bStream = new BufferedInputStream(iStream, 10240);
+                    BufferedInputStream bStream = new BufferedInputStream(iStream, 8192);
                     bmp = BitmapFactory.decodeStream(bStream, null, options);
+                    String delta = String.format(loc, "%.1f", (float)(System.currentTimeMillis() - tstart) / 1000f);
+                    Log.i("HFCM", "Decoding done, " + delta + " seconds");
                     //bmp = BitmapFactory.decodeStream((InputStream) imgurl.getContent(), null, options);
                     if (bmp != null) {
                         bmp.setDensity(Bitmap.DENSITY_NONE);        // to FIX problems in imageview
-                        //int allocByteCount = utils.getBMPBytes(bmp);
-                        /*int allocByteCount;
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                            allocByteCount = bmp.getAllocationByteCount();
-                        } else {
-                            allocByteCount = bmp.getByteCount();
-                        }*/
                         logString += String.format(loc, "\n\nResulting Bitmap:\n" +
                                         "Scaled Size: %d/%d\n" +
                                         "Used Memory: %.2f MiB\n" +
-                                        "Byte Count: %d",
+                                        "Byte Count: %d\n" +
+                                        "Load time: %s seconds",
                                 bmp.getWidth(), bmp.getHeight(),
                                 (float) bmp.getWidth() * (float) bmp.getHeight() * 4f / (float) MIB,
-                                utils.getBMPBytes(bmp));
-                                //allocByteCount);
+                                utils.getBMPBytes(bmp),
+                                delta);
                     } else {
                         logString += "\n\nA problem occurred while decoding the bitmap stream for this image";
                     }
-                } catch (IOException e) {
+                //} catch (IOException e) {
+                } catch (Exception e) {
                     logString += String.format(loc,
-                            "\n\nNo image was found on URL '%s' provided by NASA",
-                            imgurl);
+                            "URL '%s' - %s",
+                            imgurl, e.getMessage());
                     e.printStackTrace();
                 }
             } catch (IOException e) {

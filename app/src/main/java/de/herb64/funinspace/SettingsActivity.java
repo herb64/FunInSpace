@@ -64,9 +64,9 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
                 // the preference's 'entries' list.
                 ListPreference listPreference = (ListPreference) preference;
                 int index = listPreference.findIndexOfValue(stringValue);
-                if (listPreference.getKey().equals("item_order")) {
+                /*if (listPreference.getKey().equals("item_order")) {
                     returnIntent.putExtra("order", listPreference.getValue());
-                }
+                }*/
                 if (listPreference.getKey().equals("wallpaper_quality")) {
                     returnIntent.putExtra("wallpaper_quality", listPreference.getValue());
                 }
@@ -207,9 +207,9 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             // updated to reflect the new value, per the Android Design
             // guidelines.
             bindPreferenceSummaryToValue(findPreference("example_text"));
-            bindPreferenceSummaryToValue(findPreference("example_list"));
+            //bindPreferenceSummaryToValue(findPreference("example_list"));
             // important to have listener called
-            bindPreferenceSummaryToValue(findPreference("item_order"));
+            //bindPreferenceSummaryToValue(findPreference("item_order"));
             bindPreferenceSummaryToValue(findPreference("date_format"));
         }
 

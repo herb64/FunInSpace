@@ -2,6 +2,11 @@
     <string name="app_name">FunInSpace</string>
     <string name="action_settings">Einstellungen</string>
 
+    <string name="hfcm_yes">JA</string>
+    <string name="hfcm_no">NEIN</string>
+    <string name="hfcm_cancel">ABBRUCH</string>
+    <string name="hfcm_proceed">WEITER</string>
+
     <string name="lowres">Lowres: %s</string>
     <string name="hires">Hires: %s</string>
     <string name="already_loaded">Das letzte verfügbare Bild des Tages ist bereits geladen</string>
@@ -36,34 +41,55 @@
     <string name="wallpaper_nothing_to_revert">Du hast noch kein FunInSpace HintergrundBild gesetzt, daher ist nichts zurückzusetzen.</string>
     <string name="wallpaper_backup_current">Du hast ein neues Hintergrundbild ausgewählt. Dein aktuelles Bild wird nun gesichert, so daß Du es über \'Alten Hintergrund wiederherstellen\' im Hauptmenü zurückspielen kannst.\nAchtung, das ist nicht mehr möglich, wenn Du die App deinstallierst, bevor Du Dein altes Wallpaper wiederhergestellt hast.</string>
     <string name="restore_original_wallpaper">Alten Hintergrund wiederherstellen</string>
+    <!--
     <string-array name="order_titles">
         <item>Neueste zuerst</item>
         <item>Älteste zuerst</item>
     </string-array>
+    -->
 
     <!-- Strings for wallpaper image quality preferences -->
     <string name="wallpaper_quality">Qualität für Hintergrundbild</string>
-    <string name="hires_no_wifi">WiFi ist nicht aktiv, daher werden keine hochauflösenden Bilder und Videos geladen. Du kannst das in den Einstellungen ändern.</string>
+    <string name="hires_no_wifi">WLAN ist benötigt, um hochauflösende Bilder und Videos zu laden.
+        Im Moment hast Du keine aktive WLAN Verbindung. Du kannst in den Einstellungen wählen, ob
+        Du das Laden auch ohne WLAN erlauben möchtest.</string>
     <string name="wp_no_delete_active">Das Bild \'%s\' ist Dein aktuelles Hintergrundbild. Es wird nicht gelöscht.</string>
     <string name="wp_confirm_dlg_msg">Möchtest Du \'%s\' als neues Hintergrundbild setzen?</string>
     <string name="wp_confirm_dlg_title">Hintergrund ändern?</string>
     <string name="wp_confirm_dlg_pos_button">JA</string>
     <string name="wp_confirm_dlg_neg_button">NEIN</string>
     <string name="dlg_title_info">Info</string>
-    <string name="temp_wp_dialog_info">In diesem Menue kann noch kein Hintergrundbild gesetzt werden. Bitte in der Vollbildanzeige einfach lange klicken, um ein Hintergrundbild zu erstellen.</string>
+    <string name="temp_wp_dialog_info">In diesem Menue kann noch kein Hintergrundbild gesetzt
+        werden. Bitte in der Vollbildanzeige einfach lange klicken, um ein Hintergrundbild
+        zu erstellen.</string>
     <string name="toast_wp_start_select">Start der Hintergrundbild Auswahl…</string>
     <string name="toast_wp_select_finished">Hintergrundbild wurde ausgewählt…</string>
     <string name="wp_select_rect_string">Hintergrund Auswahl</string>
-    <string name="dlg_revert_wp">Aktuelles Hintergrundbild wird entfernt und Dein ursprüngliches Bild wird wiederhergestellt…</string>
+    <string name="dlg_revert_wp">Aktuelles Hintergrundbild wird entfernt und Dein ursprüngliches
+        Bild wird wiederhergestellt…</string>
     <string name="action_filter">Filter</string>
-    <string name="refresh_content">Refresh Bilderliste</string>
+
+    <!-- Dropbox related stuff -->
+    <string name="dropbox_init_mobile">FunInSpace does now initialize and you can choose to load a
+        bunch of more historical image data. You have no wifi active currently. Do you want to
+        load the data anyway? You can decide to load at a later time using Resync</string>
+    <string name="dropbox_init_wifi">FunInSpace does now initialize and you can choose to load a
+        bunch of historical data to have some images available. You can later on sync as well.</string>
+    <string name="dropbox_init_no_network">Du hast keine aktive Netzwerkverbindung. Bitte starte die
+        App neu, wenn Du in ein Netzwerk verbunden bist.</string>
+    <string name="refresh_content">Sync mit Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Bilderliste aktualisieren</string>
-    <string name="refresh_dropbox_message">Möchtest Du Deine Bilderliste mit meiner (Herbert\'s) Dropbox aktualisieren? Bilder, die nicht in der Liste der Dropbox vorhanden sind
-    werden dabei entfernt. Deine persönlichen Bewertungen für Bilder bleiben erhalten. Falls Bilder fehlen sollten, versuche es zu einem anderen Zeitpunkt nochmal, da die
-    Dropbox Liste nicht unbedingt täglich aktualisiert wird.</string>
+    <string name="refresh_dropbox_message">Möchtest Du Deine Bilderliste mit meiner (Herbert\'s)
+        Dropbox aktualisieren? Du kannst dies jederzeit tun. Bilder, die Du einmal gelöscht hast,
+        werden nicht erneut von der Dropbox Liste geladen. Bilder, die Du verpaßt hast, können in
+        der Liste auftauchen, wenn auf der Dropbox inzwischen ein Link hinterlegt wurde. Das passiert
+        allerdings nur von Zeit zu Zeit.</string>
+
     <string name="search_option">Vollsuche</string>
     <string name="full_search_explain">Suche in Titel und zusätzlich in Beschreibungstext</string>
-    <string name="test_mail_text">Nur eine Test e-mail. Im Anhang ist ein Test Logfile für die Hintergrund-Bilder Shuffle Funktion während der Testphase :)</string>
+    <string name="test_mail_text">Nur eine Test e-mail. Im Anhang ist das Debug Logfile für die App
+        während der Testphase. TIP: setze Dich auf Kopie, dann kannst Du lesen, was
+        verschickt wurde. :)</string>
     <string name="test_mail_subject">Grüße von FunInSpace</string>
     <string name="credits_first_testers">First pre alpha testers credits: Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger</string>
     <string name="rating">Bewertung</string>
@@ -71,7 +97,8 @@
     <string name="reselect_wallpaper">Hintergrund Ausschnitt neu wählen</string>
     <string name="remove_as_wallpaper">Lösche Hintergrundbild</string>
     <string name="wp_tip_long_press">==TIP==\nLong Press erlaubt Hintergrundbild Auswahl.</string>
-    <string name="pref_summary_read_text">Den Erklärungstext bei jedem Aufklappen vorlesen. Über das Kontextmenü kann ebenfalls das Vorlesen gestartet werden.</string>
+    <string name="pref_summary_read_text">Den Erklärungstext bei jedem Aufklappen vorlesen.
+        Über das Kontextmenü kann ebenfalls das Vorlesen gestartet werden.</string>
     <string name="pref_title_read_text">Vorlesen der Erklärung</string>
     <string name="cab_read">Vorlesen</string>
 
@@ -83,11 +110,20 @@
     </string-array>
 
     <string name="df_title">Datums Format</string>
-    <string name="wp_quality_summary">Qualität neu erstellter Hintergrundbilder. Bereits gespeicherte Bilder werden hierdurch nicht verändert.</string>
+    <string name="wp_quality_summary">Qualität neu erstellter Hintergrundbilder. Bereits
+        gespeicherte Bilder werden hierdurch nicht verändert.</string>
     <string name="df_summary">Wähle ein Datumsformat für die Anzeige in der Liste der Bilder.</string>
-    <string name="hires_save_summary">Speichert lokale Kopien der hochaufösenden Bilder auf deinem Gerät.\nHinweis: Videos werden immer online gespielt und nicht lokal gespeichert.</string>
+    <string name="hires_save_summary">Speichert lokale Kopien der hochaufösenden Bilder auf deinem
+        Gerät.\nHinweis: Videos werden immer online gespielt und nicht lokal gespeichert.</string>
     <string name="hires_save_title">Bilder lokal speichern</string>
     <string name="rgb565_thumbs_summary">Benutze Thumbnail Bilder in niedrigerer Farbauflösung um Speicher zu sparen.</string>
     <string name="rgb565_thumbs_title">Thumbnail Farbauflösung</string>
     <string name="apod_already_loaded">Bild des Tages bereits geladen. Nächstes Bild in %.1f Stunden verfügbar.</string>
+    <string name="email_log">Email Log an Herbert</string>
+    <string name="search_nasa_archive">Suche NASA Archiv (inaktiv)</string>
+    <string name="wp_shuffle_enabled">Das Hintergrundbild wird in ein paar Sekunden geändert und dann jede volle Stunde mit einem Bild zufällig ersetzt. Neustart des Geräts schaltet die Option vorerst wieder aus.</string>
+    <string name="no_network_for_apod">Ein neues Bild ist zwar verfügbar, aber Du hast keine aktive Netzwerkverbindung. Möglichweise ist der Flugmodus eingeschaltet?</string>
+    <string name="no_network_for_hd">Du hast keine aktive Netzwerkverbindung um Bilder oder Videos anzusehen. Möglichweise ist der Flugmodus eingeschaltet?</string>
+    <string name="no_network">Keine Netzwerkverbindung</string>
+    <string name="show_log">Logdatei anzeigen (debug)</string>
 </resources>

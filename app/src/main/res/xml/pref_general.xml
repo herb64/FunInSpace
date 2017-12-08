@@ -1,5 +1,6 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
     <ListPreference
         android:defaultValue="@string/newest_first"
         android:entries="@array/order_titles"
@@ -8,9 +9,10 @@
         android:negativeButtonText="@null"
         android:positiveButtonText="@null"
         android:title="@string/item_order" />
+        -->
 
     <SwitchPreference
-        android:defaultValue="false"
+        android:defaultValue="true"
         android:key="wifi_switch"
         android:summary="@string/pref_description_wifi_required"
         android:title="@string/pref_title_wifi_required" />
@@ -58,8 +60,8 @@
     <SwitchPreference
         android:defaultValue="false"
         android:key="wallpaper_shuffle"
-        android:summary="Daily shuffle between the FunInSpace wallpapers you previously selected. This should be available soon - please recheck after updates"
-        android:title="Wallpaper shuffle (not yet implemented)" />
+        android:summary="Now available for debug testing - shuffle is done at each full hour, if switched on. Still needs some fixing - test it!"
+        android:title="Wallpaper shuffle (DEBUG)" />
 
     <SwitchPreference
         android:defaultValue="true"
@@ -97,6 +99,7 @@
     <!-- NOTE: Hide buttons to simplify the UI. Users can touch outside the dialog to
          dismiss it. -->
     <!-- NOTE: ListPreference's summary should be set to its value by the activity code. -->
+    <!--
     <ListPreference
         android:defaultValue="1"
         android:entries="@array/pref_example_list_titles"
@@ -105,5 +108,6 @@
         android:negativeButtonText="@null"
         android:positiveButtonText="@null"
         android:title="@string/pref_title_add_friends_to_messages" />
+        -->
 
 </PreferenceScreen>

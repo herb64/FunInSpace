@@ -12,7 +12,7 @@
 
     <header
         android:fragment="de.herb64.funinspace.SettingsActivity$DebugPreferenceFragment"
-        android:icon="@drawable/ic_debug_black_24dp"
+        android:icon="@drawable/ic_bug_report_black_24px"
         android:title="@string/pref_debug" />
 
     <header

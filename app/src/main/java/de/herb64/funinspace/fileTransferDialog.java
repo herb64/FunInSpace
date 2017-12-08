@@ -2,15 +2,10 @@ package de.herb64.funinspace;
 
 
 import android.app.Dialog;
-import android.app.DialogFragment;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
-import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.SystemClock;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatDialogFragment;
 import android.util.Log;
@@ -66,7 +61,7 @@ public class fileTransferDialog extends AppCompatDialogFragment {
             @Override
             public boolean accept(File file) {
                 if (file.toString().endsWith(".json") ||
-                        (file.toString().endsWith(MainActivity.SHUFFLE_DEBUG_LOG)) ||
+                        (file.toString().endsWith(MainActivity.DEBUG_LOG)) ||
                         (file.toString().endsWith(".jpg") &&
                                 !file.toString().contains("files/wp_") &&
                                 !file.toString().contains("files/hd_"))

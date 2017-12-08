@@ -2,6 +2,12 @@
     <string name="app_name">FunInSpace</string>
     <string name="action_settings">Settings</string>
 
+    <string name="hfcm_yes">YES</string>
+    <string name="hfcm_no">NO</string>
+    <string name="hfcm_cancel">CANCEL</string>
+    <string name="hfcm_proceed">PROCEED</string>
+    <string name="hfcm_ok">OK</string>
+
     <string name="lowres">Lowres: %s</string>
     <string name="hires">Hires: %s</string>
     <string name="already_loaded">Latest available image of the day has already been loaded</string>
@@ -20,7 +26,7 @@
     <string name="title_activity_settings">Settings</string>
 
     <!-- Strings related to Settings -->
-    <string name="item_order">Item order - unused</string>
+    <!--<string name="item_order">Item order - unused</string>
     <string-array name="order_titles">
         <item>Newest first</item>
         <item>Oldest first</item>
@@ -28,7 +34,7 @@
     <string-array name="order_values">
         <item>newest_first</item>
         <item>oldest_first</item>
-    </string-array>
+    </string-array>-->
 
     <string name="wallpaper_quality">Wallpaper image Quality</string>
     <string-array name="wp_quality_titles">
@@ -68,6 +74,7 @@
     <string name="pref_title_display_name">Display name - UNUSED </string>
     <string name="pref_default_display_name">John Smith</string>
 
+    <!--
     <string name="pref_title_add_friends_to_messages">Add friends to messages</string>
     <string-array name="pref_example_list_titles">
         <item>Always</item>
@@ -79,6 +86,7 @@
         <item>0</item>
         <item>-1</item>
     </string-array>
+    -->
 
     <!-- Example settings for Data & Sync -->
     <string name="pref_header_data_sync">Data &amp; sync (not used)</string>
@@ -142,7 +150,9 @@
     <string name="wallpaper_nothing_to_revert">You did not set any FunInSpace Wallpaper yet, so there\'s nothing to restore</string>
     <string name="wallpaper_backup_current">You have set a new wallpaper. Saving your current Wallpaper, so that you can restore this by using \'Restore Original Wallpaper\' in Main Menu.\nNote, that this is not possible any more, if you deinstall the App before restoring</string>
     <string name="restore_original_wallpaper">Restore Original Wallpaper</string>
-    <string name="hires_no_wifi">WiFi connection not active, will not load video or hires now. Please check settings.</string>
+    <string name="hires_no_wifi">A WiFi connection is needed to load video or hires images to save
+        bandwidth. You do not have a WiFi connection currently. You can adjust your settings
+    to allow loading video or hires images without WiFi as well.</string>
     <string name="wp_no_delete_active">Image \'%s\' is your current wallpaper. This will not be deleted.</string>
     <string name="wp_confirm_dlg_msg">Do you want to set \'%s\' as your new wallpaper?</string>
     <string name="wp_confirm_dlg_title">Change wallpaper?</string>
@@ -156,13 +166,25 @@
     <string name="wp_select_rect_string">Wallpaper select</string>
     <string name="dlg_revert_wp">Removing FunInSpace Wallpaper and reverting to your original image…</string>
     <string name="action_filter">Filter</string>
-    <string name="refresh_content">Refresh image list</string>
+
+
+    <!-- Dropbox related stuff -->
+    <string name="dropbox_init_mobile">FunInSpace does now initialize and you can choose to load
+        a bunch of more historical image data. You have no wifi active currently. Do you want
+        to load the data anyway? You can decide to load at a later time using Resync</string>
+    <string name="dropbox_init_wifi">FunInSpace does now initialize and you can choose to load a
+        bunch of historical data to have some images available. You can later on sync as well.</string>
+    <string name="dropbox_init_no_network">You do not have any active network connection. Please
+        start the app again with an active network.</string>
+    <string name="refresh_content">Resync with Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Refresh of image list</string>
-    <string name="refresh_dropbox_message">Do you want to refresh your list with my (Herbert\'s) Dropbox informations? Images not found on the Dropbox are deleted.
-    Your personal ratings for remaining images will not be changed. If images are missing, just try to reload later, as dropbox might not be updated every day.</string>
+    <string name="refresh_dropbox_message">Do you want to refresh your list with my (Herbert\'s)
+        Dropbox informations? If images are missing, just try to reload later, as dropbox might
+        not be updated every day. Images, you have deleted, will not be loaded again.</string>
+
     <string name="search_option">Full Search</string>
     <string name="full_search_explain">Search in explanation text in addition to title only</string>
-    <string name="test_mail_text">Just a test email sent by the famous FunInSpace App. The attachment contains the scheduler log infos from wallpaper shuffle tests :)</string>
+    <string name="test_mail_text">Just a test email sent by the FunInSpace App. The attachment contains a debugging logfile. TIP: Add yourself as .cc to see, what has been sent.</string>
     <string name="test_mail_subject">Greetings from FunInSpace</string>
     <string name="credits_first_testers">First pre alpha testers credits: Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger</string>
     <string name="rating">Rating</string>
@@ -175,9 +197,17 @@
     <string name="cab_read">Read out</string>
     <string name="wp_quality_summary">Quality of newly saved wallpaper images. Images that have already been saved are not changed by this setting.</string>
     <string name="df_summary">Choose the format of date you like to be shown in the list of images.</string>
-    <string name="hires_save_summary">Keep local copy of hires images on your device.\nNote: Videos will always be streamed and never get stored locally.</string>
+    <string name="hires_save_summary">Keep local copy of hires images on your device.\nNote:
+        Videos will always be streamed and never get stored locally.</string>
     <string name="hires_save_title">Save Hires Images locally</string>
     <string name="rgb565_thumbs_summary">Use lower color resolution Thumbnail pictures to save memory. Check, if you see any difference in the list.</string>
     <string name="rgb565_thumbs_title">Thumbnail color quality</string>
     <string name="apod_already_loaded">Image of today already loaded. Next image available in %.1f hours</string>
+    <string name="email_log">Email log to Herbert</string>
+    <string name="search_nasa_archive">Search NASA Archive (inactive)</string>
+    <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper in a few seconds and then every full hour, also if the app user interface is closed. This is not yet reboot persistent.</string>
+    <string name="no_network_for_apod">A new image is available, but you do not have an active network connection. Maybe flightmode is enabled?</string>
+    <string name="no_network_for_hd">You do not have an active network connection to load the image or video. Maybe flightmode is enabled?</string>
+    <string name="no_network">No network connection</string>
+    <string name="show_log">Display logfile (debug)</string>
 </resources>

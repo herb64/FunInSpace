@@ -38,3 +38,13 @@ JNIEXPORT jstring JNICALL
 Java_de_herb64_funinspace_MainActivity_vHH(JNIEnv *env, jobject instance) {
     return (*env)->NewStringUTF(env, dHH);
 }
+
+JNIEXPORT jstring JNICALL
+Java_de_herb64_funinspace_MainActivity_dPJ(JNIEnv *env, jobject instance) {
+    return (*env)->NewStringUTF(env, dPJ);
+}
+
+JNIEXPORT jstring JNICALL
+Java_de_herb64_funinspace_MainActivity_dAS(JNIEnv *env, jobject instance) {
+    return (*env)->NewStringUTF(env, dAS);
+}

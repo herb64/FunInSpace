@@ -4,10 +4,10 @@
     tools:context="de.herb64.funinspace.MainActivity">
 
     <item
-        android:id="@+id/action_schedule_wallpaper_change"
-        android:icon="@android:drawable/ic_lock_idle_alarm"
+        android:id="@+id/action_schedule_apod_json_load"
+        android:icon="@android:drawable/ic_menu_recent_history"
         android:orderInCategory="96"
-        android:title="Schedule WP change (Debug)"
+        android:title="Start Schedule APOD (Debug)"
         app:showAsAction="ifRoom" />
 
     <item
@@ -25,16 +25,23 @@
 
     <item
         android:id="@+id/action_search_apod"
+        android:icon="@android:drawable/ic_menu_search"
         android:orderInCategory="94"
-        android:title="Search NASA Archive"
-        android:icon="@drawable/ic_archive_black_24px"
+        android:title="@string/search_nasa_archive"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_mail"
         android:icon="@android:drawable/ic_dialog_email"
         android:orderInCategory="95"
-        android:title="Email test" />
+        android:title="@string/email_log" />
+
+    <item
+        android:id="@+id/action_showlog"
+        android:icon="@android:drawable/ic_menu_set_as"
+        android:orderInCategory="95"
+        android:title="@string/show_log" />
+
     <item
         android:id="@+id/action_about"
         android:icon="@android:drawable/ic_menu_info_details"
