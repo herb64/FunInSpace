@@ -76,6 +76,7 @@ public class asyncLoad extends AsyncTask {
     private boolean preLollipopTLS = true;
     private Rect region = null;         // for testing bitmap region decode
     private int scale = 1;              // region decode with insamplesize
+    private int socketTimeout = 0;
 
     // Constants
     protected static final int EXCEPTION = -1000;
@@ -102,6 +103,18 @@ public class asyncLoad extends AsyncTask {
         this.delegate = delegate;
         this.tag = tag;
         //status = OK;
+    }
+
+    /**
+     * This constructor is used to pass a socket timeout // TODO activate for use, inactive now
+     * @param delegate
+     * @param tag
+     * @param socketTimeout timeout in milliseconds
+     */
+    public asyncLoad(AsyncResponse delegate, String tag, int socketTimeout) {
+        this.delegate = delegate;
+        this.tag = tag;
+        this.socketTimeout = socketTimeout;
     }
 
     /**
@@ -177,7 +190,8 @@ public class asyncLoad extends AsyncTask {
     }
 
     /**
-     * Load an object from a given URL. Called for each element passed in
+     * Load an object from a given URL. Called for each element passed in. Important: if not used
+     * with socketTimeout, this may hang for 10s * #of resolved IPs if DNS is not available.
      * @param url2load the URL from which to load
      * @return should be 200 (HTTP ok)
      */
@@ -186,24 +200,28 @@ public class asyncLoad extends AsyncTask {
         BufferedReader reader = null;
 
         try {
-            // new: first test with socket to dns server - check before calling asyncload at all!
-            if (utils.testSocketConnect(1000) == 1000) {
+            // if socketTimeout has been passed in constructor, trigger a test first to avoid DNS
+            // IOException timeout.
+            /*if (socketTimeout != 0 && utils.testSocketConnect(socketTimeout) == socketTimeout) {
                 status = NOSOCKET;
                 return "Socket test failed";
-            }
+            }*/
 
             // checking, if https or http - use android webkit classes
-            //URLUtil.isHttpUrl((String) params[0]);    // TODO - determine type of url and put TLS stuff in here!!
+            // TODO - determine type of url and put TLS stuff in here!!
+            // URLUtil.isHttpUrl((String) params[0]);
+            // openConnection: IOException may take 40 seconds in case of DNS problems
             URL url = new URL(url2load);
             conn = (HttpsURLConnection) url.openConnection();
+            // conn.setInstanceFollowRedirects(true);
             status = conn.getResponseCode();
 
             if (status != HttpsURLConnection.HTTP_OK) {
                 return "[" + conn.getResponseCode() + "] " + conn.getResponseMessage();
             }
+
             // Actually, the connection is already setup on openConnection() - do not need to run
-            // connect() again... ???
-            // conn.setInstanceFollowRedirects(true);
+            // connect() again. Did do that before as found in some example code, now removed again
             /*try {
                 conn.connect();
             } catch (Exception e) {
@@ -211,18 +229,19 @@ public class asyncLoad extends AsyncTask {
                 Log.e("HFCM", e.getMessage());
                 return e.getMessage();
             }*/
-            // Read data from this connection into a buffered input stream
+
+            // Read data from this connection into a buffered input stream (default: 8192 bytes)
             InputStream istream = conn.getInputStream();
             //InputStream istream = (InputStream) url.getContent();
-            BufferedInputStream bStream = new BufferedInputStream(istream);  // default 8192 buffer
+            BufferedInputStream bStream = new BufferedInputStream(istream);
+
             String contenttype = conn.getContentType();
             String type = MimeTypeMap.getFileExtensionFromUrl(contenttype);
             // MediaMetadataRetriever also provides MIME information and more...
             Log.i("HFCM", "URL: " + url2load + ", Content type: " + contenttype + ", Typemap info" + type);
-            // https://api.nasa.gov/planetary/apod?api_key=nnn, Content type: application/json
-            // https://dl.dropboxusercontent.com/s/./nnn.json.json, Content type: text/plain; charset=utf-8
-            // https://apod.nasa.gov/apod/image/1710/nnn.jpg, Content type: image/jpeg
-
+            // https://api.nasa.gov/planetary/apod?api_key=X, Content type: application/json
+            // https://dl.dropboxusercontent.com/s/./X.json, Content type: text/plain; charset=utf-8
+            // https://apod.nasa.gov/apod/image/1710/X.jpg, Content type: image/jpeg
             // TODO this must be done better (image/*) etc...
             if (contenttype.startsWith("image")) {
                 if (region != null) {
@@ -255,21 +274,8 @@ public class asyncLoad extends AsyncTask {
             status = EXCEPTION;
             return e.getMessage();
         /*} catch (MalformedURLException e) {
-            e.printStackTrace();
-            status = MALFORMEDURL;
-            return e.getMessage();
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
-            status = FILENOTFOUND;
-            return e.getMessage();
-        } catch (IOException e) {
-            // IOException: AVD on host with active WIFI, but DSL plugged out - leads to
-            // Unable to resolve host "api.nasa.gov": No address associated with hostname
-            // Note: AVD on Win10 host: LAN card and Wifi present in host show same effect
-            e.printStackTrace();
-            String q = e.toString(); // includes exception name and message...
-            status = IOEXCEPTION;
-            return e.getMessage();*/
+        } catch (IOException e) */
         } finally {
             // return within finally - should not use it!
             if(conn != null) {

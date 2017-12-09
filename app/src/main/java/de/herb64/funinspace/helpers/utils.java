@@ -81,6 +81,10 @@ public final class utils {
     public static final int JSON_OBJ = 1;
     public static final int JSON_ARRAY = 2;
 
+    public static final int UNKNOWN = 0;
+    public static final int YES = 1;
+    public static final int NO = -1;
+
     /**
      * Read contents of a text file
      * @param ctx context
@@ -730,13 +734,16 @@ public final class utils {
     }
 
     /**
-     * Check internet connectivity without running into possible DNS timeouts. This function
-     * implements a Callable to be able to be called from main thread.
+     * Check internet connectivity without running into possible DNS timeouts.
+     * TODO: check how this works with open WLAN and redirect to a credentials page (e.g. hotel)
+     *       It might be, that the test fails in this case..
+     * TODO - maybe ask alternative dns
      * 208.67.222.222 - openDNS
      * 208.67.220.220 - openDNS
      * 8.8.8.8 - google dns
      * 8.8.4.4 - google dns
-     * @return
+     * @param timeout integer with max timeout allowed
+     * @return long value with connection time, if fails: timeout value
      */
     public static long testSocketConnect(final int timeout) {
         // using a class derived from Callable
@@ -865,9 +872,20 @@ public final class utils {
             if (networkInfo != null && networkInfo.isConnected()) {
                 //int subtype = networkInfo.getSubtype();
                 String networkdetails = String.format(Locale.getDefault(),
-                        "Network: ExtraInfo: %s, SubType: %s",
+                        "Network: ExtraInfo: %s, SubType: %s, Detailed State: %s",
                         networkInfo.getExtraInfo(),
-                        networkInfo.getSubtypeName());
+                        networkInfo.getSubtypeName(),
+                        networkInfo.getDetailedState().toString());
+                logAppend(ctx, MainActivity.DEBUG_LOG, networkdetails);
+                //String ttt = networkInfo.getDetailedState().toString();
+                //NetworkInfo.DetailedState.CAPTIVE_PORTAL_CHECK.toString();
+                return networkInfo.getTypeName();
+            } else if (networkInfo != null) {
+                String networkdetails = String.format(Locale.getDefault(),
+                        "Network: ExtraInfo: %s, SubType: %s, Detailed State: %s",
+                        networkInfo.getExtraInfo(),
+                        networkInfo.getSubtypeName(),
+                        networkInfo.getDetailedState().toString());
                 logAppend(ctx, MainActivity.DEBUG_LOG, networkdetails);
                 return networkInfo.getTypeName();
             } else {
@@ -886,6 +904,32 @@ public final class utils {
             status.put("MOBILE", networkInfo.getType() == ConnectivityManager.TYPE_MOBILE);
             status.put("BLUETOOTH", networkInfo.getType() == ConnectivityManager.TYPE_BLUETOOTH);
         }*/
+    }
+
+    /**
+     * Check, if a captive portal is present, which redirected us to a special page before granting
+     * access to the network, as often found on airports and in hotels.
+     * https://en.wikipedia.org/wiki/Captive_portal
+     * @param ctx Context
+     * @return YES, NO or UNKNOWN
+     */
+    public static int isActiveNetworkCaptivePortal(Context ctx) {
+        ConnectivityManager connManager = (ConnectivityManager) ctx.
+                getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connManager != null) {
+            NetworkInfo networkInfo = connManager.getActiveNetworkInfo();
+            if (networkInfo != null) {
+                if (networkInfo.getDetailedState() == NetworkInfo.DetailedState.CAPTIVE_PORTAL_CHECK) {
+                    return YES;
+                } else {
+                    return NO;
+                }
+            } else {
+                return UNKNOWN;
+            }
+        } else {
+            return UNKNOWN;
+        }
     }
 
     /**

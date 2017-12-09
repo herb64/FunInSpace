@@ -42,7 +42,7 @@ public class confirmDialog extends AppCompatDialogFragment {
         final String msg = getArguments().getString("MESSAGE");
         final String pos = getArguments().getString("POS");
         final String neg = getArguments().getString("NEG");
-        final String neu = getArguments().getString("NEUTRAL");
+        final String neu = getArguments().getString("NEU");
         // TODO - this is just an int... what about other ... Parcelable
         final int idx = getArguments().getInt("IDX");
         final int iconid = getArguments().getInt("ICON_ID");

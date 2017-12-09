@@ -134,10 +134,7 @@ public class MainActivity extends AppCompatActivity
     protected TimeZone tzNASA;
     protected Calendar cNASA;
     protected SimpleDateFormat formatter;
-
     private TextToSpeech tts;
-    //private ComponentName serviceComponent;
-
     private BroadcastReceiver receiver = null;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
@@ -153,7 +150,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.5.3 (alpha)\nBuild Date 2017-12-04\n\nFor special friends only :)\n";
+    private static final String ABOUT_VERSION = "0.5.3 (alpha)\nBuild Date 2017-12-04\n";
 
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
@@ -786,13 +783,15 @@ public class MainActivity extends AppCompatActivity
                 jsonData = utils.readf(getApplicationContext(), localJson);
             }
 
+            // -------------------------------------------------------------------
+            // DECIDE, IF WE ARE IN "FIRST LAUNCH" BY PRESENCE OF jsonData CONTENT
+            // -------------------------------------------------------------------
             if (jsonData != null) {
                 SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
                 maxTextureSize = shPref.getInt("maxtexsize", 0);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
                 // TODO: if shared preferences are lost for some reason, run texsize check again
-
-                // TODO: check if it is a valid json array instead of testing for ""
+                // TODO: check if it is a valid json array instead of testing for "" ??
                 if (jsonData.equals("")) {
                     jsonData = "[]";
                 }
@@ -804,10 +803,9 @@ public class MainActivity extends AppCompatActivity
                     e.printStackTrace();
                 }
                 // Parse the local json file contents and add these to ArrayList
-                //tstart = System.currentTimeMillis();
                 addItems();
-                //utils.logAppend(getApplicationContext(), DEBUG_LOG, "* addItems()", tstart);
                 checkMissingThumbs();
+                getLatestAPOD();
             } else {
                 // It looks like we do not have a local json file yet - FIRST LAUNCH most likely
                 // TODO: later offer a restore option from sd card...
@@ -815,12 +813,33 @@ public class MainActivity extends AppCompatActivity
                 Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
                 startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
+                SharedPreferences.Editor editor = sharedPref.edit();
+                editor.putBoolean("INITIAL_LAUNCH", true);
+                editor.apply();
                 parent = new JSONArray();
-                initialLaunch();
+                // at initial run, do a network test which does not fall into DNS wait...
+                long conntime = utils.testSocketConnect(2000);
+                if (conntime == 2000) {
+                    Bundle fragArguments = new Bundle();
+                    fragArguments.putString("TITLE",
+                            "Welcome to FunInSpace");
+                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                            "INITIAL_LAUNCH - testSocketConnect TIMEOUT (" + conntime + "ms)");
+                    fragArguments.putString("MESSAGE",
+                            getString(R.string.dropbox_init_no_network));
+                    fragArguments.putString("NEG",
+                            getString(R.string.hfcm_ok));
+                    FragmentManager fm = getSupportFragmentManager();
+                    confirmDialog confirmdlg = new confirmDialog();
+                    confirmdlg.setArguments(fragArguments);
+                    confirmdlg.show(fm, "INITLAUNCH");
+                } else {
+                    getLatestAPOD();    // getLatestAPOD does not need to do the socket check again
+                }
             }
 
             // Get latest APOD item to append from NASA (or a simulation item from dropbox)
-            getLatestAPOD();
+            //getLatestAPOD();
 
             // JUST A CONVERSION UTILITY USED DURING DEVELOPMENT - CONVERTED EPOCH VALUES INTO A NEW
             // JSON FILE FOR UPLOAD TO DROPBOX - NEW TIMEZONE HANDLING NEEDS THIS CHANGE
@@ -936,12 +955,8 @@ public class MainActivity extends AppCompatActivity
                 }
             }
         }
-        //utils.logAppend(getApplicationContext(),
-        //        DEBUG_LOG, "* check/restart shuffle service", tstart);
-
         utils.logAppend(getApplicationContext(), DEBUG_LOG, "Current active network type: " +
                 utils.getActiveNetworkTypeName(getApplicationContext()));
-
         utils.logAppend(getApplicationContext(),
                 DEBUG_LOG,
                 "onCreate() finished... ",
@@ -1109,7 +1124,7 @@ public class MainActivity extends AppCompatActivity
         String sDate = "";
         JSONObject parent = null;
         Uri resource_uri = null;
-        // TODO - might go for new utils function parseNASAJson ...
+        // TODO - might go for new utils function parseNASAJson which returns hashmap of strings
         try {
             parent = new JSONObject(s);
             sMediaType = parent.getString("media_type");
@@ -1141,7 +1156,7 @@ public class MainActivity extends AppCompatActivity
 
         // At this point sMediaType contains the NASA delivered string. This gets changed now to
         // a more specific media type information. It's a little bit messy, because NASA delivered
-        // an MP4 stream as media type "image" on 13.11.2017... need to catch that error situation
+        // an MP4 stream as media type "image" on 13.11.2017... need to catch such error situations
         if (resource_uri != null) {
             String hiresPS = Uri.parse(sHiresUrl).getLastPathSegment();
             if (sMediaType.equals("video")) {
@@ -1247,12 +1262,15 @@ public class MainActivity extends AppCompatActivity
     // private class ImgLowresTask extends AsyncTask<String, String, Bitmap> {
     // .. 26.20.2017 - now also retired and replaced by asyncLoad with bitmap support
 
+
+    /**
+     * @param bitmap bitmap object of the lowres image - used for thumbnail creation
+     */
     void finalizeApodWithLowresImage(Bitmap bitmap) {
         // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
         // item should match anyway, because latest image is on top of the list.
-        // TODO  better: for (spaceItem item : myList) if i is not needed elsewhere
-        for(int i=0; i<myList.size();i++) {
-            if(apodItem.getTitle().equals(myList.get(i).getTitle())) {
+        for (spaceItem item : myList) {
+            if (apodItem.getTitle().equals(item.getTitle())) {
                 // TODO here's the point to check, if the thumbnail file exists (and reload)
                 Toast.makeText(MainActivity.this, R.string.already_loaded,
                         Toast.LENGTH_LONG).show();
@@ -1316,9 +1334,9 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * Implementation of interface ConfirmListener in confirmDialog class.
-     * @param button
-     * @param tag
-     * @param o
+     * @param button button (pos/neg/neutral)
+     * @param tag TAG
+     * @param o some object that may be returned
      */
     @Override
     public void processConfirmation(int button, String tag, Object o) {
@@ -1340,9 +1358,11 @@ public class MainActivity extends AppCompatActivity
                         break;
                     case "INITLAUNCH":
                         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                                "Kick off asyncLoad:  DROPBOX_INIT");
-                        new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
+                                "INITLAUNCH - Kick off asyncLoad:  DROPBOX_REFRESH");
+                        //new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
+                        new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
                         break;
+
                     case "DROPBOX_REFRESH":
                         new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
                         break;
@@ -1372,6 +1392,7 @@ public class MainActivity extends AppCompatActivity
             case DialogInterface.BUTTON_NEUTRAL:
                 switch (tag) {
                     case "INITLAUNCH":
+                        //getLatestAPOD();
                         break;
                     default:
                         break;
@@ -1452,7 +1473,6 @@ public class MainActivity extends AppCompatActivity
                 return;
             }
 
-            //if (utils.getActiveNetworkTypeName(getApplicationContext()).equals("NONE")) {
             if (!utils.isNetworkConnected(getApplicationContext())) {
                 new dialogDisplay(MainActivity.this,
                         getString(R.string.no_network_for_hd),
@@ -2357,7 +2377,7 @@ public class MainActivity extends AppCompatActivity
      * @param dropbox The JSON Array from dropbox, that has been loaded
      * @param forceFull if set to true, this forces to reload even previously deleted images
      */
-    private void resyncWithDropbox (JSONArray dropbox, boolean forceFull) {
+    private void resyncWithDropbox(JSONArray dropbox, boolean forceFull) {
         Set<String> deleted_items= sharedPref.getStringSet("DELETED_ITEMS", new HashSet<String>());
         Set<String> dropbox_items = new HashSet<>();
         JSONArray newjson = new JSONArray();
@@ -2383,6 +2403,7 @@ public class MainActivity extends AppCompatActivity
                 long lepoch = lcontent.getLong("DateTime");
                 String dbtitle = "";
                 long dbepoch = 0;
+                // Dropbox items done, only local items remain to be added to new json array
                 if (dbidx < dropbox.length()) {
                     JSONObject dbobj = dropbox.getJSONObject(dbidx);
                     JSONObject dbcontent = dbobj.getJSONObject("Content");
@@ -2394,15 +2415,16 @@ public class MainActivity extends AppCompatActivity
                     l_add++;
                     continue;
                 }
-
+                // Dropbox matches local title - add into new json array
                 if (ltitle.equals(dbtitle)) {
                     Log.i("HFCM", "DB idx: " + dbidx + " - Adding local (A): " + ltitle + "'");
                     newjson.put(lobj);
                     l_add++;
                     dbidx++;
                 } else if (!dropbox_items.contains(ltitle)) {
-                    // local title not present on dropbox at all
-                    Log.i("HFCM", "DB idx: " + dbidx + " - Title '" + ltitle + "' not on dropbox");
+                    // Local title is not contained on dropbox at all. We now iterate dropbox until
+                    // local epoch is not matched or dropbox index limit reached
+                    Log.i("HFCM", "Info - DB idx: " + dbidx + " - Current local title '" + ltitle + "' not on dropbox");
                     while (dbepoch <= lepoch) {
                         if (!deleted_items.contains(dbtitle) || forceFull) {
                             Log.i("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(B) '" + dbtitle + "'");
@@ -2413,6 +2435,9 @@ public class MainActivity extends AppCompatActivity
                             db_skip++;
                         }
                         dbidx++;
+                        if (dbidx == dropbox.length()) {
+                            break;
+                        }
                         dbepoch = dropbox.getJSONObject(dbidx).getJSONObject("Content").getLong("DateTime");
                         dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
                     }
@@ -2442,6 +2467,7 @@ public class MainActivity extends AppCompatActivity
 
             } catch (JSONException e) {
                 e.printStackTrace();
+                Log.e("HFCM", e.getMessage());
             }
         }
 
@@ -2460,7 +2486,7 @@ public class MainActivity extends AppCompatActivity
         checkMissingThumbs();
         utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_MB * 1024, -1);
         adp.notifyDataSetChanged();
-        getLatestAPOD();
+        //getLatestAPOD();
     }
 
     /** TODO - remove later, new function resyncWithDropbox() does a smoother merge
@@ -2578,19 +2604,15 @@ public class MainActivity extends AppCompatActivity
      * date. In this case, the time until next image is calculated.
      */
     private void getLatestAPOD() {
-        // TODO
-        // First check for any _sched.json files - these have been collected by the scheduler and
-        // should be added first. Most likely, the current APOD is already captured.
+        // TODO: check for _sched.json files collected by scheduler, if APOD is already captured
         long timeToNext = 0;
         if (!myList.isEmpty()) {
             // FIRST item in myList is latest that has been loaded. This is the LAST item in JSON.
             ArrayList<Long> epochs = utils.getNASAEpoch(myList.get(0).getDateTime());
             timeToNext = epochs.get(2);
         }
+        // No load needed, if time to next is > 0
         if (timeToNext > 0) {
-            // the next image is scheduled in given milliseconds. We later add some random offset
-            // into the schedule to avoid all application instances running to NASA at same
-            // time - just in case we have thousands of running devices around the world :)
             Toast.makeText(MainActivity.this,
                     String.format(loc, getString(R.string.apod_already_loaded),
                             (float)timeToNext/(float)3600000),
@@ -2600,22 +2622,22 @@ public class MainActivity extends AppCompatActivity
                 // Check for active connection: e.g. AVD with wifi connected on host but no external
                 // access (DSL unplugged): Failure is NOT detected by isConnected() - this means,
                 // we run into DNS timeouts - we catch them, but it takes 40 seconds (depending on
-                // number of ip's resolved for the name)
+                // number of ip's resolved for the name) - If called at initial launch - very bad!
+                //if (!utils.isNetworkConnected(getApplicationContext())) {
                 long conntime = utils.testSocketConnect(2000);
                 if (conntime == 2000) {
-                //if (!utils.isNetworkConnected(getApplicationContext())) {
                     utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "Timeout testSocketConnect()");
+                            "getLatestAPOD() - testSocketConnect TIMEOUT (" + conntime + "ms)");
                     new dialogDisplay(MainActivity.this,
                             getString(R.string.no_network_for_apod),
                             getString(R.string.no_network));
                     return;
                 } else {
                     utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "testSocketConnect(): " + conntime + "ms");
+                            "getLatestAPOD() - testSocketConnect OK (" + conntime + "ms)");
                 }
                 utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                        "Kick off asyncLoad: APOD_LOAD");
+                        "getLatestAPOD() - Kick off asyncLoad: APOD_LOAD");
                 new asyncLoad(MainActivity.this,
                         "APOD_LOAD",
                         sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
@@ -2629,7 +2651,8 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * This is the interface implementation of processFinish() for asyncLoad class. This is called
-     * when the asyncLoad task has finished retrieving the requested data.
+     * when the asyncLoad task has finished retrieving the requested data. The asyncLoad class is
+     * currently used for different tasks.
      * Note: for parallel asynctask execution (executeonexecutor), see also my lalatex document...
      * @param status   Return status. This can either be
      *                 - HttpURLConnection.HTTP_x - http connection status, 200, 404 etc..
@@ -2675,6 +2698,7 @@ public class MainActivity extends AppCompatActivity
         // now for the "exact matches"
         switch (tag) {
             case "DROPBOX_REFRESH":
+                // TODO - phone rotation?
                 Object json;
                 try {
                     json = new JSONTokener((String) output).nextValue();
@@ -2688,7 +2712,7 @@ public class MainActivity extends AppCompatActivity
                             sharedPref.getBoolean("force_full_dropbox_sync", false));
                 }
                 break;
-            case "DROPBOX_INIT":
+            case "DROPBOX_INIT":        // RETIRED
                 // Todo: we might use code from dropbox sync (have now parameter force)
                 // On 25.10.2017, loadFromDropboxTask() has been retired. some comments from old code
                 // TODO - needs retained fragment to run, so do not rotate phone while thumbs are loading
@@ -2698,7 +2722,7 @@ public class MainActivity extends AppCompatActivity
                 // function. Because code in onPostExecute() does belong to the main thread
                 // for the same reason: do not block during checkMissingThumbs!!!
                 // https://stackoverflow.com/questions/10686107/what-does-runs-on-ui-thread-for-onpostexecute-really-mean
-                try {
+                /*try {
                     json = new JSONTokener((String) output).nextValue();
                 } catch (JSONException e) {
                     e.printStackTrace();
@@ -2710,7 +2734,8 @@ public class MainActivity extends AppCompatActivity
                     addItems();
                     checkMissingThumbs();
                     adp.notifyDataSetChanged();
-                }
+                    getLatestAPOD();
+                }*/
                 break;
             case "VIMEO_INFO":
                 String thumbUrl = "n/a";
@@ -2756,6 +2781,9 @@ public class MainActivity extends AppCompatActivity
             case "IMG_LOWRES_LOAD":
                 if (output instanceof Bitmap) {
                     finalizeApodWithLowresImage((Bitmap) output);
+                    if (sharedPref.getBoolean("INITIAL_LAUNCH", false)) {
+                        initialLaunch();
+                    }
                 } else {
                     Log.e("HFCM", "asyncLoad for lowres image did not return a bitmap");
                 }
@@ -2933,7 +2961,8 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * Called at very first launch of the app after installation.
+     * Called after running finalizeApodWithLowresImage() at end of the "APODchain", if the initial
+     * launch flag is set to true in shared prefs "INITIAL_LAUNCH"
      */
     private void initialLaunch() {
         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
@@ -2941,50 +2970,55 @@ public class MainActivity extends AppCompatActivity
         Bundle fragArguments = new Bundle();
         fragArguments.putString("TITLE",
                 "Welcome to FunInSpace");
+        // TODO skip socket test, as we get called only after a previous successful apod load
         long connecttime = utils.testSocketConnect(1000);
-        if (connecttime < 1000) {
+        //if (connecttime < 1000) {
         //if (utils.isNetworkConnected(getApplicationContext())) {
-            int type = utils.getActiveNetworkType(getApplicationContext());
-            switch (type) {
-                case ConnectivityManager.TYPE_MOBILE:
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "MOBILE network isConnected() at initialLaunch(), (" + connecttime + "ms)");
-                    fragArguments.putString("MESSAGE",
-                            getString(R.string.dropbox_init_mobile));
-                    fragArguments.putString("POS",
-                            getString(R.string.hfcm_yes));
-                    fragArguments.putString("NEG",
-                            getString(R.string.hfcm_no));
-                    break;
-                case ConnectivityManager.TYPE_WIFI:
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "WIFI network isConnected() at initialLaunch(), (" + connecttime + "ms)");
-                    fragArguments.putString("MESSAGE",
-                            getString(R.string.dropbox_init_wifi));
-                    fragArguments.putString("POS",
-                            getString(R.string.hfcm_proceed));
-                    fragArguments.putString("NEG",
-                            getString(R.string.hfcm_cancel));
-                    break;
-                default:
-                    // handle unknown network - e.g. bluetooth...
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            utils.getActiveNetworkTypeName(getApplicationContext()) +
-                                    " network isConnected() at initialLaunch() - cannot be used");
-                    fragArguments.putString("MESSAGE",
-                            "Cannot use network " + utils.getActiveNetworkTypeName(getApplicationContext()));
-                    fragArguments.putString("NEG",
-                            getString(R.string.hfcm_ok));
-                    break;
-            }
-        } else {
+        int type = utils.getActiveNetworkType(getApplicationContext());
+        switch (type) {
+            case ConnectivityManager.TYPE_MOBILE:
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "MOBILE network isConnected() at initialLaunch(), (" + connecttime + "ms)");
+                fragArguments.putString("MESSAGE",
+                        getString(R.string.dropbox_init_mobile));
+                fragArguments.putString("POS",
+                        getString(R.string.hfcm_yes));
+                fragArguments.putString("NEG",
+                        getString(R.string.hfcm_no));
+                break;
+            case ConnectivityManager.TYPE_WIFI:
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "WIFI network isConnected() at initialLaunch(), (" + connecttime + "ms)");
+                fragArguments.putString("MESSAGE",
+                        getString(R.string.dropbox_init_wifi));
+                fragArguments.putString("POS",
+                        getString(R.string.hfcm_proceed));
+                fragArguments.putString("NEG",
+                        getString(R.string.hfcm_cancel));
+                break;
+            default:
+                // handle unknown network - e.g. bluetooth... should not be reached at all
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        utils.getActiveNetworkTypeName(getApplicationContext()) +
+                                " network isConnected() at initialLaunch() - cannot be used");
+                fragArguments.putString("MESSAGE",
+                        "Cannot use network " + utils.getActiveNetworkTypeName(getApplicationContext()));
+                fragArguments.putString("NEG",
+                        getString(R.string.hfcm_ok));
+                break;
+        }
+        /*} else {
+            // should not be reached...
             utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                     "NO network access poossible at initialLaunch()");
             fragArguments.putString("MESSAGE",
                     getString(R.string.dropbox_init_no_network));
             fragArguments.putString("NEG",
                     getString(R.string.hfcm_ok));
-        }
+        }*/
+        SharedPreferences.Editor editor = sharedPref.edit();
+        editor.putBoolean("INITIAL_LAUNCH", false);
+        editor.apply();
         FragmentManager fm = getSupportFragmentManager();
         confirmDialog confirmdlg = new confirmDialog();
         confirmdlg.setArguments(fragArguments);
