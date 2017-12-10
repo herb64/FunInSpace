@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatDialogFragment;
+import android.widget.TextView;
 
 /**
  * Created by herbert on 11/12/17.
@@ -17,6 +18,7 @@ import android.support.v7.app.AppCompatDialogFragment;
 public class confirmDialog extends AppCompatDialogFragment {
 
     private String tag;
+    private AlertDialog ddd;
 
     public interface ConfirmListener {
         void processConfirmation(int button, String tag, Object o);
@@ -46,6 +48,7 @@ public class confirmDialog extends AppCompatDialogFragment {
         // TODO - this is just an int... what about other ... Parcelable
         final int idx = getArguments().getInt("IDX");
         final int iconid = getArguments().getInt("ICON_ID");
+        final float textsize = getArguments().getFloat("MSGSIZE");
 
         final DialogInterface.OnClickListener listener = new DialogInterface.OnClickListener() {
 
@@ -85,6 +88,17 @@ public class confirmDialog extends AppCompatDialogFragment {
         if (neu != null) {
             builder.setNeutralButton(neu, listener);
         }
-        return builder.create();
+
+        ddd = builder.create();
+        if (textsize != 0) {
+            ddd.show();         // need to call this to be able to get the TextView as non-null pointer
+            TextView tv = (TextView) ddd.findViewById(android.R.id.message);
+            if (tv != null) {
+                tv.setTextSize(textsize);
+            }
+        }
+        return ddd;
+
+        //return builder.create();
     }
 }

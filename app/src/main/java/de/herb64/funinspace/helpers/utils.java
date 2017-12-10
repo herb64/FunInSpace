@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapRegionDecoder;
+import android.net.CaptivePortal;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
@@ -849,14 +850,11 @@ public final class utils {
                 getSystemService(Context.CONNECTIVITY_SERVICE);
         if (connManager != null) {
             NetworkInfo networkInfo = connManager.getActiveNetworkInfo();
-            if (networkInfo != null && networkInfo.isConnected()) {
+            if (networkInfo != null) {
                 return networkInfo.getType();
-            } else {
-                return -1;      // TODO - is this ok?
             }
-        } else {
-            return -1;
         }
+        return -1;
     }
 
     /**
@@ -869,31 +867,20 @@ public final class utils {
                 getSystemService(Context.CONNECTIVITY_SERVICE);
         if (connManager != null) {
             NetworkInfo networkInfo = connManager.getActiveNetworkInfo();
-            if (networkInfo != null && networkInfo.isConnected()) {
+            if (networkInfo != null) {
                 //int subtype = networkInfo.getSubtype();
-                String networkdetails = String.format(Locale.getDefault(),
-                        "Network: ExtraInfo: %s, SubType: %s, Detailed State: %s",
-                        networkInfo.getExtraInfo(),
-                        networkInfo.getSubtypeName(),
-                        networkInfo.getDetailedState().toString());
-                logAppend(ctx, MainActivity.DEBUG_LOG, networkdetails);
                 //String ttt = networkInfo.getDetailedState().toString();
                 //NetworkInfo.DetailedState.CAPTIVE_PORTAL_CHECK.toString();
-                return networkInfo.getTypeName();
-            } else if (networkInfo != null) {
-                String networkdetails = String.format(Locale.getDefault(),
+                /*String networkdetails = String.format(Locale.getDefault(),
                         "Network: ExtraInfo: %s, SubType: %s, Detailed State: %s",
                         networkInfo.getExtraInfo(),
                         networkInfo.getSubtypeName(),
                         networkInfo.getDetailedState().toString());
-                logAppend(ctx, MainActivity.DEBUG_LOG, networkdetails);
+                logAppend(ctx, MainActivity.DEBUG_LOG, networkdetails);*/
                 return networkInfo.getTypeName();
-            } else {
-                return "NONE";
             }
-        } else {
-            return "NONE";
         }
+        return "";
         /*for (Network net : connManager.getAllNetworks()) {
             Log.i("HFCM", "Network: " + net.toString());
         }*/
@@ -907,9 +894,18 @@ public final class utils {
     }
 
     /**
+     * TODO: remove - is useless, this is just the state within wifi state machine
+     * But important:
+     * https://stackoverflow.com/questions/26982762/get-wifi-captive-portal-info
+     * " However, new to Lollipop is that the mobile data connection is used when WiFi does
+     * not have connectivity. This means my ping method will still return results, and
+     * that a redirect would not happen, as the request would be routed over the mobile data."
+     *
      * Check, if a captive portal is present, which redirected us to a special page before granting
      * access to the network, as often found on airports and in hotels.
      * https://en.wikipedia.org/wiki/Captive_portal
+     * See also infos about captive portal detection
+     * https://android.stackexchange.com/questions/100657/how-to-disable-captive-portal-detection-how-to-remove-exclamation-mark-on-wi-fi
      * @param ctx Context
      * @return YES, NO or UNKNOWN
      */
@@ -929,6 +925,40 @@ public final class utils {
             }
         } else {
             return UNKNOWN;
+        }
+    }
+
+
+    public static void getAllNetworksInfo(Context ctx) {
+        // see also https://www.androidhive.info/2012/07/android-detect-internet-connection-status/
+        ConnectivityManager connManager = (ConnectivityManager) ctx.
+                getSystemService(Context.CONNECTIVITY_SERVICE);
+        //CaptivePortal cp =
+        if (connManager == null) {
+            Log.e("HFCM", "getAllNetworksInfo: no connectionmanager found");
+            return;
+        }
+        //NetworkInfo act = connManager.getActiveNetworkInfo();
+        //String flag;
+        //Log.i("HFCM", "ACT" + act.toString());
+        for (Network net : connManager.getAllNetworks()) {
+            /*NetworkInfo inf = connManager.getNetworkInfo(net);
+            String extra = inf.getExtraInfo();
+            String type = inf.getTypeName();
+            String subtype = inf. getSubtypeName();
+            String detailedstate = inf.getDetailedState().toString();
+            Log.i("HFCM", "INF" + inf.toString());
+            flag = act.toString().equals(inf.toString()) ? " (*)" : "";
+            String networkdetails = String.format(Locale.getDefault(),
+                    "Network: ExtraInfo: %s, Type/SubType: %s/%s, Detailed State: %s%s",
+                    extra,
+                    type,
+                    subtype,
+                    detailedstate,
+                    flag);*/
+            logAppend(ctx, MainActivity.DEBUG_LOG, "NETINFO: " +
+                    connManager.getNetworkInfo(net).toString());
+            //connManager.bindProcessToNetwork(net);
         }
     }
 

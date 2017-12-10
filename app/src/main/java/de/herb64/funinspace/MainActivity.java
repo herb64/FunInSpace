@@ -1,6 +1,7 @@
 package de.herb64.funinspace;
 
 import android.annotation.SuppressLint;
+import android.app.Dialog;
 import android.app.WallpaperManager;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
@@ -53,6 +54,9 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -955,8 +959,9 @@ public class MainActivity extends AppCompatActivity
                 }
             }
         }
-        utils.logAppend(getApplicationContext(), DEBUG_LOG, "Current active network type: " +
-                utils.getActiveNetworkTypeName(getApplicationContext()));
+        //utils.logAppend(getApplicationContext(), DEBUG_LOG, "Current active network type: " +
+        //        utils.getActiveNetworkTypeName(getApplicationContext()));
+        utils.getAllNetworksInfo(getApplicationContext());
         utils.logAppend(getApplicationContext(),
                 DEBUG_LOG,
                 "onCreate() finished... ",
@@ -1385,6 +1390,13 @@ public class MainActivity extends AppCompatActivity
                         // it fails with processfinish calling a dialogdisplay, while activity is gone
                         //terminateApp();
                         break;
+                    case "SHOW_LOG":
+                        Log.i("HFCM", "Clear log");
+                        File logFile = new File(getFilesDir(), MainActivity.DEBUG_LOG);
+                        if (logFile.exists()) {
+                            logFile.delete();
+                        }
+                        break;
                     default:
                         break;
                 }
@@ -1393,6 +1405,10 @@ public class MainActivity extends AppCompatActivity
                 switch (tag) {
                     case "INITLAUNCH":
                         //getLatestAPOD();
+                        break;
+                    case "SHOW_LOG":
+                        Log.i("HFCM", "Email to herbert");
+                        emailToHerbert();
                         break;
                     default:
                         break;
@@ -2066,7 +2082,8 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_mail) {
-            // TODO AVD failures - seems to be known
+            emailToHerbert();
+            /*// TODO AVD failures - seems to be known
             // https://stackoverflow.com/questions/27528236/mailto-android-unsupported-action-error
             //Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto",vE(), null));
             Intent i = new Intent(Intent.ACTION_SENDTO);  // ACTION_SEND - also shows whatsapp etc..
@@ -2118,7 +2135,7 @@ public class MainActivity extends AppCompatActivity
                             Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 }
                 startActivity(i);
-            }
+            }*/
             return true;
         }
         if (id == R.id.action_showlog) {
@@ -2129,7 +2146,19 @@ public class MainActivity extends AppCompatActivity
                 loginfo = "\nFunInSpace log data:\nYou may send this to Herbert using the email function.\n";
                 loginfo += utils.readf(getApplicationContext(), DEBUG_LOG);
             }
-            new dialogDisplay(MainActivity.this, loginfo, "FunInSpace debug log", 10f);
+
+            Bundle fragArguments = new Bundle();
+            fragArguments.putString("TITLE", "FunInSpace debug log");
+            fragArguments.putString("MESSAGE", loginfo);
+            fragArguments.putString("NEG", getString(R.string.hfcm_ok));
+            fragArguments.putString("POS", "CLEAR LOG");
+            fragArguments.putString("NEU", "EMAIL");
+            fragArguments.putFloat("MSGSIZE", 10f);
+            FragmentManager fm = getSupportFragmentManager();
+            confirmDialog dlg = new confirmDialog();
+            dlg.setArguments(fragArguments);
+            dlg.show(fm, "SHOW_LOG");
+            //new dialogDisplay(MainActivity.this, loginfo, "FunInSpace debug log", 10f);
             return true;
         }
 
@@ -3037,6 +3066,62 @@ public class MainActivity extends AppCompatActivity
         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
         intent.putExtra("EXIT", true);
         startActivity(intent);
+    }
+
+    private void emailToHerbert() {
+        // TODO AVD failures - seems to be known
+        // https://stackoverflow.com/questions/27528236/mailto-android-unsupported-action-error
+        //Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto",vE(), null));
+        Intent i = new Intent(Intent.ACTION_SENDTO);  // ACTION_SEND - also shows whatsapp etc..
+        // just info
+        // i.setPackage("com.pkgname"); // see https://faq.whatsapp.com/en/android/28000012
+        i.setData(Uri.parse("mailto:" + vE()));
+        //i.setType("message/rfc822");    // had to be removed
+        //String to[] = {"user@domain.com","user2@domain.com"};
+        //i.putExtra(Intent.EXTRA_EMAIL, new String[]{"user@domain.com"});
+        //String cc[] = {vKE() + "," + vHH()};
+        //i.putExtra(Intent.EXTRA_EMAIL, cc);
+        i.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.test_mail_subject));
+        i.putExtra(Intent.EXTRA_TEXT, getString(R.string.test_mail_text));
+
+        // == ADDING A SINGLE FILE ATTACHMENT TO THE MAIL ==  // TODO multiple
+        // E-mail apps do not have access to my storage - prohibited by Android security
+        // - use external storage
+        // - create a provider - this is what we do here - see lalatex docu
+        // we just send out the
+        //File attachment_file = new File(getApplicationContext().getFilesDir(), localJson);
+        File attachment_file = new File(getApplicationContext().getFilesDir(), DEBUG_LOG);
+        Uri contentUri = FileProvider.getUriForFile(MainActivity.this,
+                "de.herb64.funinspace.fileprovider",
+                attachment_file);
+        if (attachment_file.exists()) {
+            i.putExtra(Intent.EXTRA_STREAM, contentUri);
+        }
+
+        //i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);    // TODO check
+
+        // Finding matching apps for the intent - see more details in lalatex docu
+        // a) if (i.resolveActivity(getPackageManager()) != null)
+        // b) try {startActivity(Intent.createChooser(i, "Send mail..."));}
+        //    catch (android.content.ActivityNotFoundException ex) {}
+        // c) List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);
+
+        List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);   // flags ?
+        if(pkgs.size() == 0) {
+            new dialogDisplay(MainActivity.this,
+                    getString(R.string.no_email_client));
+        } else {
+            for (ResolveInfo pkg : pkgs) {
+                // see more infos in lalatex -
+                // TODO: how to restrict grant to one selected app? / default app
+                Log.i("HFCM", "Granting shared rights for package: " +
+                        pkg.activityInfo.packageName);
+                grantUriPermission(pkg.activityInfo.packageName,
+                        contentUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+            startActivity(i);
+        }
     }
 
     /**   DEVEL HELPER ONLY!!!
