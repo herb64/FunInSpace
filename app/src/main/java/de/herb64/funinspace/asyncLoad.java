@@ -4,6 +4,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapRegionDecoder;
 import android.graphics.Rect;
+import android.media.MediaMetadataRetriever;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.preference.PreferenceManager;
@@ -26,6 +28,7 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -102,7 +105,6 @@ public class asyncLoad extends AsyncTask {
     public asyncLoad(AsyncResponse delegate, String tag) {
         this.delegate = delegate;
         this.tag = tag;
-        //status = OK;
     }
 
     /**
@@ -111,9 +113,10 @@ public class asyncLoad extends AsyncTask {
      * @param tag
      * @param socketTimeout timeout in milliseconds
      */
-    public asyncLoad(AsyncResponse delegate, String tag, int socketTimeout) {
+    public asyncLoad(AsyncResponse delegate, String tag, boolean preLollipopTLS, int socketTimeout) {
         this.delegate = delegate;
         this.tag = tag;
+        this.preLollipopTLS = preLollipopTLS;
         this.socketTimeout = socketTimeout;
     }
 
@@ -127,7 +130,6 @@ public class asyncLoad extends AsyncTask {
     public asyncLoad(AsyncResponse delegate, String tag, boolean preLollipopTLS) {
         this.delegate = delegate;
         this.tag = tag;
-        //status = OK;
         this.preLollipopTLS = preLollipopTLS;
     }
 
@@ -181,7 +183,7 @@ public class asyncLoad extends AsyncTask {
                 publishProgress(getFromUrl(url));
             }
         } else if (params[0] instanceof String) {
-            Log.i("HFCM", "Called asyncLoad() with a single URL");
+            Log.i("HFCM", "Called asyncLoad(), tag = " + tag + ", single URL");
             return getFromUrl((String) params[0]);
         } else {
             Log.e("HFCM", "Called asyncLoad().execute() with bad type");
@@ -217,7 +219,7 @@ public class asyncLoad extends AsyncTask {
             status = conn.getResponseCode();
 
             if (status != HttpsURLConnection.HTTP_OK) {
-                return "[" + conn.getResponseCode() + "] " + conn.getResponseMessage();
+                return "[" + conn.getResponseCode() + "] " + conn.getResponseMessage() + ", URL: " + url2load;
             }
 
             // Actually, the connection is already setup on openConnection() - do not need to run
@@ -225,9 +227,7 @@ public class asyncLoad extends AsyncTask {
             /*try {
                 conn.connect();
             } catch (Exception e) {
-                e.printStackTrace();
-                Log.e("HFCM", e.getMessage());
-                return e.getMessage();
+                ...
             }*/
 
             // Read data from this connection into a buffered input stream (default: 8192 bytes)
@@ -250,10 +250,32 @@ public class asyncLoad extends AsyncTask {
                     options.inSampleSize = scale;
                     return rD.decodeRegion(region, options);
                 } else {
-                    return BitmapFactory.decodeStream(istream);
+                    // hires size check via asyncLoad before opening the image at all...
+                    if (tag.startsWith("SIZE_")) {
+                        //if (tag.equals("IMG_HIRES_SIZE_QUERY") || tag.startsWith("SIZE_")) {
+                        BitmapFactory.Options options = new BitmapFactory.Options();
+                        options.inJustDecodeBounds = true;
+                        BitmapFactory.decodeStream(istream, null, options);
+                        options.inJustDecodeBounds = false;
+                        int fullW = options.outWidth;
+                        int fullH = options.outHeight;
+                        //Log.i("HFCM", "Hires Size decode result: " + fullW + "x" + fullH);
+                        return String.valueOf(fullW) + "x" + String.valueOf(fullH);
+                    } else {
+                        return BitmapFactory.decodeStream(istream);
+                    }
                 }
+            } else if (contenttype.contains("video/mp4") && tag.startsWith("DUR")) {
+                MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+                retriever.setDataSource(Uri.parse(url2load).toString(), new HashMap<String, String>());
+                float bitrate = Float.parseFloat(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE));
+                float duration = Float.parseFloat(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
+                return String.format(Locale.getDefault(),
+                        "%.1f sec, Bitrate: %.1f MBit/s",
+                        duration/1000, bitrate/1024/1024);
             } else {
-                // TODO - bad to handle everything else just as string
+                // TODO - bad to handle everything else just as string ??
+                // distinguish html, text, json ... - we could even return a jsonarray/object
                 reader = new BufferedReader(new InputStreamReader(istream));
                 //StringBuffer jsonbuffer = new StringBuffer(); // better use StringBuilder - DOCU!
                 StringBuilder mybuilder = new StringBuilder();
@@ -272,10 +294,10 @@ public class asyncLoad extends AsyncTask {
             // Note: AVD on Win10 host: LAN card and Wifi present in host show same effect
             e.printStackTrace();
             status = EXCEPTION;
-            return e.getMessage();
-        /*} catch (MalformedURLException e) {
-        } catch (FileNotFoundException e) {
-        } catch (IOException e) */
+            return e.getMessage() + " URL: " + url2load;
+        //} catch (MalformedURLException e) {
+        //} catch (FileNotFoundException e) {
+        //} catch (IOException e)
         } finally {
             // return within finally - should not use it!
             if(conn != null) {

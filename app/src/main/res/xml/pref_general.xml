@@ -25,6 +25,12 @@
 
     <SwitchPreference
         android:defaultValue="false"
+        android:key="wallpaper_shuffle"
+        android:summary="Now available for debug testing with Android 5 and higher - shuffle is done at each full hour, if switched on. Still needs some fixing - test it!"
+        android:title="Wallpaper shuffle (DEBUG)" />
+
+    <SwitchPreference
+        android:defaultValue="false"
         android:key="rgb565_thumbs"
         android:summary="@string/rgb565_thumbs_summary"
         android:title="@string/rgb565_thumbs_title" />
@@ -56,12 +62,6 @@
         android:positiveButtonText="@null"
         android:summary="@string/df_summary"
         android:title="@string/df_title" />
-
-    <SwitchPreference
-        android:defaultValue="false"
-        android:key="wallpaper_shuffle"
-        android:summary="Now available for debug testing - shuffle is done at each full hour, if switched on. Still needs some fixing - test it!"
-        android:title="Wallpaper shuffle (DEBUG)" />
 
     <SwitchPreference
         android:defaultValue="true"

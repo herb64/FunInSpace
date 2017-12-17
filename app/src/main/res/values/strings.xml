@@ -205,7 +205,8 @@
     <string name="apod_already_loaded">Image of today already loaded. Next image available in %.1f hours</string>
     <string name="email_log">Email log to Herbert</string>
     <string name="search_nasa_archive">Search NASA Archive (inactive)</string>
-    <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper in a few seconds and then every full hour, also if the app user interface is closed. This is not yet reboot persistent.</string>
+    <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper in a few seconds and then every full hour, also if the app user interface is closed.
+    Between 23:00 and 06:00, no shuffle is done.</string>
     <string name="no_network_for_apod">A new image is available, but you do not have an active network connection. Maybe flightmode is enabled?</string>
     <string name="no_network_for_hd">You do not have an active network connection to load the image or video. Maybe flightmode is enabled?</string>
     <string name="no_network">No network connection</string>

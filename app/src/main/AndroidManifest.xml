@@ -7,6 +7,8 @@
     <!-- HFCM: Add this to play with wifi stuff. If not set, elephone P9000 crashes -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- Required for setPersistent() in JobInfo.builder -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <!-- android:hardwareAccelerated="true"
      in discussion on playing vimeo in webview... added on 13.10.2017-->

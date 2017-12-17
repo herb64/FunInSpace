@@ -14,6 +14,7 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Filter;
 import android.widget.Filterable;
+import android.widget.MultiAutoCompleteTextView;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -224,7 +225,16 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         // Note: setText and concat is bad, use resources and format string instead!
         // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
         holder.tvLowSize.setText(ctx.getString(R.string.lowres, iList.get(position).getLowSize()));
-        holder.tvHiSize.setText(ctx.getString(R.string.hires, iList.get(position).getHiSize()));
+        String media = iList.get(position).getMedia();
+        if (media.equals(MainActivity.M_VIMEO)) {
+            holder.tvHiSize.setText("Duration: " + iList.get(position).getHiSize() + " seconds");
+        } else if (media.equals(MainActivity.M_MP4)) {
+            holder.tvHiSize.setText(iList.get(position).getHiSize());
+        } else if (media.equals(MainActivity.M_IMAGE)){
+            holder.tvHiSize.setText(ctx.getString(R.string.hires, iList.get(position).getHiSize()));
+        } else {
+            holder.tvHiSize.setText("");
+        }
         return convertView;
     }
 

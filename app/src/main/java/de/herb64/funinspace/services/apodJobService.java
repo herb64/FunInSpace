@@ -35,10 +35,7 @@ import de.herb64.funinspace.helpers.utils;
  * can later be read on startup of the app. This makes sure, that we do not miss any APODs if the
  * app has not been started for some days.
  * TODO - if this schedule is missed and not executed, we miss an item. But this can be "survived"
- * either by the NASA APOD archive search or by trying to sync with my dropbox. The dropbox sync
- * needs to be changed, so that no user specifics get lost, but also that the reload does not
- * "revive" items, that have been actively deleted by the user.
- * ---> need a deletion list stored in shared prefs
+ * either by the NASA APOD archive search (to be investigated) or by syncing with dropbox.
  */
 
 public class apodJobService extends JobService {
@@ -71,6 +68,7 @@ public class apodJobService extends JobService {
     /**
      * This seems only to be called if starting the service via intent from activity
      * TODO why should we do that? Doing a start of 2 services might have crashed  my KlausS4 AVD - permanently running into trouble - see doc...
+     *      It might have been related to defect in ssd already, which died some days later completely...
      * @param intent intent
      * @param flags flags
      * @param startId start id
@@ -131,7 +129,8 @@ public class apodJobService extends JobService {
 
         apodJsonLoader loader = new apodJsonLoader(getApplicationContext(),
                 url,
-                String.format(loc, "%d_sched.json", epoch),
+                String.format(loc,
+                        MainActivity.APOD_SCHED_PREFIX + "%d.json", epoch),
                 tls);
         Thread activator = new Thread(loader);
         activator.start();
@@ -139,7 +138,9 @@ public class apodJobService extends JobService {
         // logfile for debugging
         utils.logAppend(getApplicationContext(),
                 MainActivity.DEBUG_LOG,
-                "Job" + count + " - APOD - " + String.format(loc, "%d_sched.json", epoch));
+                "Job" + count + " - APOD - " +
+                        String.format(loc,
+                                MainActivity.APOD_SCHED_PREFIX + "%d.json", epoch));
 
         // TODO - seems we need custom big view to make it appear expanded...
         // TODO - notification ids... (998...)
@@ -198,7 +199,7 @@ public class apodJobService extends JobService {
             ArrayList<Long> data = utils.getNASAEpoch(lastEpoch);
             builder.setMinimumLatency(data.get(2) + random);
             builder.setOverrideDeadline(data.get(2) + random + 60000);  // 1 minute addition deadline
-            //builder.setPersisted(true);      // survive reboots
+            builder.setPersisted(true);      // survive reboots
 
             // Extras to pass to the job - well, passing filename not good...
             PersistableBundle extras = new PersistableBundle();

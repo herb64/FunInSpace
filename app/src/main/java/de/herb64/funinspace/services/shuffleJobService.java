@@ -18,7 +18,9 @@ import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Locale;
+import java.util.TimeZone;
 
 import de.herb64.funinspace.MainActivity;
 import de.herb64.funinspace.R;
@@ -27,6 +29,9 @@ import de.herb64.funinspace.wallPaperActivator;
 
 /**
  * Created by herbert on 11/26/17.
+ * MP3 resources:
+ * new_wallpaper_1.mp3 https://notificationsounds.com/standard-ringtones/oringz-w427-371
+ * https://creativecommons.org/licenses/by/4.0/legalcode
  */
 
 public class shuffleJobService extends JobService {
@@ -117,7 +122,7 @@ public class shuffleJobService extends JobService {
                     .setSmallIcon(R.mipmap.ic_launcher)
                     .setAutoCancel(true)
                     .setSound(Uri.parse("android.resource://"
-                            + this.getPackageName() + "/" + R.raw.nouvelle_image))
+                            + this.getPackageName() + "/" + R.raw.new_wallpaper_1))
                     //.setVibrate()
                     //.setVisibility(Notification.VISIBILITY_PUBLIC)
                     .build();
@@ -176,9 +181,18 @@ public class shuffleJobService extends JobService {
             ComponentName serviceComponent = new ComponentName(this, shuffleJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_SHUFFLE, serviceComponent);
             long minDelay = utils.getMsToNextFullHour(loc);
+            // at 23:00, keep night calm and schedule for next day 06:00
+            TimeZone tzSYS = TimeZone.getDefault();
+            Calendar cSYS = Calendar.getInstance(tzSYS);
+            String hh = String.format(Locale.getDefault(), "%02d",
+                    cSYS.get(Calendar.HOUR_OF_DAY));
+            Log.i("HFCM", "Having hour string of '" + hh + "'");
+            if (hh.equals("23")) {
+                minDelay += 3600000 * 6;
+            }
             builder.setMinimumLatency(minDelay);
-            // builder.setOverrideDeadline(minDelay + 15000);   //no more deadline
-            //builder.setPersisted(true);      // survive reboots
+            builder.setOverrideDeadline(minDelay + 15000);  // TODO: why is deadline needed?
+            builder.setPersisted(true);                     // See also manifest!!
 
             // Extras to pass to the job - well, passing filename not good...
             PersistableBundle extras = new PersistableBundle();

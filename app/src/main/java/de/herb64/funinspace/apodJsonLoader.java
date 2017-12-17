@@ -92,6 +92,8 @@ public class apodJsonLoader implements Runnable {
             while ((jsonstring = reader.readLine()) != null) {
                 mybuilder.append(jsonstring);
             }
+            // TODO: verify epoch in filename against datetime contained within json file
+            //       THIS MUST MATCH, ELSE ERROR!!!
             utils.writef(ctx, file2save, mybuilder.toString());
             utils.logAppend(ctx,
                     MainActivity.DEBUG_LOG,

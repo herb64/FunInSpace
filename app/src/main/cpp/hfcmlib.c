@@ -4,8 +4,6 @@
 
 #include "hfcmlib.h"
 #include <jni.h>
-//#include <stdio.h>
-//#include <string.h>
 
 //TODO: this is not clean, need to use modified UTF8 conversion, unless it is 7-bit ascii for sure!!
 

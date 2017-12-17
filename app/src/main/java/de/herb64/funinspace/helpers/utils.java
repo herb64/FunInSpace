@@ -12,6 +12,7 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkInfo;
 import android.net.RouteInfo;
+import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -223,6 +224,17 @@ public final class utils {
     }
 
     /**
+     * Wrapper for logcat - allows to switch off all statements by constant
+     * @param content
+     */
+    public static void info(String content) {
+        if (MainActivity.LOGCAT_INFO) {
+            //String hugo = this.getClass().getSimpleName().toString();
+            Log.i("HFCM", content);
+        }
+    }
+
+    /**
      * Get size of a bitmap object
      * @param bmp btmap object
      * @return size of bitmap object in bytes
@@ -294,6 +306,12 @@ public final class utils {
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             HashSet<String> zoneids = (HashSet<String>) ZoneId.getAvailableZoneIds();
         }*/
+
+        // from code for docu:
+        // SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
+        // normally we would use code as below for correct locale, but we parse a specific
+        // format here :_ "date": "2017-09-17", as returned by NASA in their json
+        // DateFormat dF = SimpleDateFormat.getDateInstance();
 
         // Washington (NASA HQ) - matches with the observations, at which time new images appear in DE
         // https://www.timeanddate.de/stadt/info/usa/washington-dc
@@ -443,6 +461,23 @@ public final class utils {
     }
 
     /**
+     * Create epoch value from datestring passed in APOD. This is used to set value in spaceItem
+     * @param ds date string from APOD
+     * @return epoch value or 0 for error
+     */
+    public static long getEpochFromDatestring(String ds) {
+        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        try {
+            dF.setCalendar(Calendar.getInstance(tzNASA));
+            return dF.parse(ds).getTime();
+        } catch (ParseException e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
      * Get the milliseconds from current time to next full hour.
      * @param locale locale
      * @return long ms to wait for full hour
@@ -504,6 +539,9 @@ public final class utils {
     /**
      *  Cleanup: - remove any orphaned wallpaper/thumbnail/hires image files
      *           - remove hires images if max space exceeded (size and rating dependent)
+     *           - TODO: removing local json copies of nasa data (maybe those older than 100 days)
+     *                   note, that these are lost forever
+     *           - TODO: What if too many wallpaper files eating up memory?
      * @param ctx context
      * @param items arraylist with spaceitems
      * @param maxHdMem memory Limit in KiB that triggers cleanup
@@ -669,7 +707,7 @@ public final class utils {
         String current = sharedPref.getString("CURRENT_WALLPAPER_FILE", "");
         Random r = new Random();
         int i;
-        // Do not repeat previous image again
+        // Do not repeat previous image again - we force a change
         do {
             i = r.nextInt(wplist.size());
             Log.i("HFCM", "Testing index for wp:" + i);
@@ -694,14 +732,16 @@ public final class utils {
     }
 
     /**
-     * Parse a nasa json object - just flat object with strings.
-     * @param s
-     * @return
+     * Create a hashmap from a JSON object string
+     * TODO - keep this as some utility function, but currently no longer used - needs also recheck
+     * @param s String to be parsed...
+     * @return HashMap with key / value pairs from object
      */
-    public static HashMap<String, String> parseNASAJson(String s) {
+    public static HashMap<String, String> parseStringAsJsonObject(Context ctx, String s) {
         HashMap<String, String> map = new HashMap<>();
+        JSONObject parent;
         try {
-            JSONObject parent = new JSONObject(s);
+            parent = new JSONObject(s);
             Iterator<String> iterator = parent.keys();
             while (iterator.hasNext()) {
                 String key = iterator.next();
@@ -710,9 +750,259 @@ public final class utils {
         } catch (JSONException e) {
             e.printStackTrace();
             Log.e("HFCM", e.getMessage());
+            return map; // empty
         }
         return map;
     }
+
+    /**
+     * Create a spaceItem with null thumbnail image from a given json file
+     * @param ctx context
+     * @param filename JSON file
+     * @return spaceItem (empty if error)
+     */
+    public static spaceItem createSpaceItemFromJsonFile(Context ctx, String filename) {
+        spaceItem item = new spaceItem();
+        String content = readf(ctx, filename);
+        // TODO - check with isJson and check, if it is a NASA json (e.g. has correct attr)
+        if (content != null) {
+            item = createSpaceItemFromJsonString(ctx, content);
+        }
+        return item;
+    }
+
+    /**
+     * Create a spaceItem from a given JSON string, which must be one of NASA provided type.
+     * The returned item is not yet complete
+     * - null as thumbbitmap
+     * - no hires size information
+     * - for vimeo: no URL for Lowres (thumbnail link)
+     * @param ctx context
+     * @param s string containing json delivered by NASA
+     * @return spaceItem (empty item if json parsing does not work)
+     */
+    public static spaceItem createSpaceItemFromJsonString(Context ctx, String s) {
+        String imgUrl = "";
+        spaceItem item = new spaceItem();
+        String sTitle = "n/a";
+        String sCopyright = "";
+        String sExplanation = "";
+        String sMediaType = "";
+        String sHiresUrl = "";
+        String sDate = "";
+        JSONObject parent = null;
+        Uri resource_uri = null;
+        try {
+            parent = new JSONObject(s);
+            /* TODO: handle possible errors returned, e.g. 02.08.2017 - demo key exhausted??
+            {
+                "code": 500,
+                "msg": "Internal Service Error",
+                "service_version": "v1"
+            }*/
+            // also [503] Service Unavailable (15.12.2017)
+            sMediaType = parent.getString("media_type");
+            sDate = parent.getString("date");
+            // TODO copyright not yet finalized - replace newline or not, limit length
+            if (parent.has("copyright")) {
+                sCopyright = "Copyright: " + parent.getString("copyright").
+                        replaceAll(System.getProperty("line.separator"), " ");
+            }
+            sTitle = parent.getString("title");
+            imgUrl = parent.getString("url"); // TODO: missing url handling? see 11.09.2017
+            resource_uri = Uri.parse(imgUrl);
+            if (parent.has("hdurl")) {
+                sHiresUrl = parent.getString("hdurl");
+            } else {
+                // actually, we should not get here again after apod is already loaded.
+                if (sMediaType.equals("image")) {
+                    logAppend(ctx, MainActivity.DEBUG_LOG,
+                            "Missing hires image link - todo: fallback to lowres???");
+                }
+            }
+            sExplanation = parent.getString("explanation");
+
+            // Keep local copy of original NASA JSON as reference for debugging. This content can
+            // only be loaded on the specific day, else never again (see also cleanupFiles)
+            if (sDate != null) {
+                long epoch = getEpochFromDatestring(sDate);
+                utils.writeJson(ctx, String.valueOf(epoch) + ".json", parent);
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+            logAppend(ctx, MainActivity.DEBUG_LOG,
+                    "createSpaceItemFromJsonString() JSON exception: " +
+                            s.substring(0, s.length() > 50 ? 50 : s.length()));
+            return item;
+        }
+
+        // At this point sMediaType contains the NASA delivered string. This gets changed now to
+        // a more specific media type information. It's a little bit messy, because NASA delivered
+        // an MP4 stream as media type "image" on 13.11.2017... need to catch such error situations
+        if (resource_uri != null) {
+            String hiresPS = Uri.parse(sHiresUrl).getLastPathSegment();
+            if (sMediaType.equals("video")) {
+                // note, that this rewrites sMediaType variable!
+                String host = resource_uri.getHost();
+                List<String> path = resource_uri.getPathSegments();
+                item.setHires(resource_uri.toString());
+                if (host.equals("www.youtube.com")) {
+                    // TODO: now we just assume 'embed' link - might not be true always ??
+                    // url> https://www.youtube.com/embed/" + path.get(1) + "?rel=0
+                    // img> https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
+                    // TODO : MediaMetadataRetriever - also can retrieve image from video - FYI
+                    // it's not sure, if this works with youtube, but what about vimeo?
+                    sMediaType = MainActivity.M_YOUTUBE;
+                    item.setThumb("th_" + path.get(1) + ".jpg");
+                    sHiresUrl = imgUrl;
+                    imgUrl = "https://img.youtube.com/vi/" + path.get(1) + "/0.jpg";
+                    item.setLowres(imgUrl);
+                } else if (host.endsWith("vimeo.com")) { // vimeo.com / player.vimeo.com
+                    // Important: video link is in "url", NOT "hdurl"
+                    sMediaType = MainActivity.M_VIMEO;
+                    item.setThumb("th_VIMEO_unknown.jpg");
+                    sHiresUrl = imgUrl;
+                    // URL is the link that can be played in a WebView, just not using
+                    // iframe embed at all... doing it like this for now
+                    // TODO: extract video ID and thumbnail url from given video url
+                    // is solved now, but what about "MediaMetadataRetriever"
+                    // thumbnail image name: th_<video-id>.jpg
+                    // Note: this needs a REST API call to gather the required infos..
+                    item.setLowres("");     // to be filled with thumbnail URL later
+                } else {
+                    // TODO: MP4 handling for correct media type video
+                    if (hiresPS.endsWith(".mp4") || hiresPS.endsWith(".MP4")) {
+                        sMediaType = MainActivity.M_MP4;
+                        item.setThumb("th_" + resource_uri.getLastPathSegment());
+                        //apodItem.setHires(sHiresUrl);
+                        item.setLowres(imgUrl);
+                    } else {
+                        sMediaType = MainActivity.M_VIDEO_UNKNOWN;
+                        item.setThumb("th_UNKNOWN.jpg");
+                    }
+                }
+            } else {
+                // FIX for NASA sending wrong media type 'image' for MP4 video (13.11.2017)
+                if (hiresPS.endsWith(".mp4") || hiresPS.endsWith(".MP4")) {
+                    sMediaType = MainActivity.M_MP4;
+                }
+                item.setThumb("th_" + resource_uri.getLastPathSegment());
+                //apodItem.setHires(sHiresUrl);
+                item.setLowres(imgUrl);
+            }
+        }
+        // TODO shouldn't super be executed first ??? might have done this bad
+        //super.onPostExecute(s);
+        item.setTitle(sTitle);
+        item.setCopyright(sCopyright);
+        item.setExplanation(sExplanation);
+        item.setHires(sHiresUrl);
+        //long epoch = utils.getNASAEpoch(0).get(0);
+        long epoch = getEpochFromDatestring(sDate);   // FIX to use "date" string from apod
+        item.setDateTime(epoch);
+        item.setMedia(sMediaType);
+        item.setRating(0);
+        item.setLowSize("");
+        item.setHiSize("");
+        return item;
+    }
+
+    /**
+     * Create JSON object in funinspace specific format to be added into nasatest.json
+     * @param item spaceItem object
+     * @return the JSON object
+     */
+    public static JSONObject createJsonObjectFromSpaceItem(spaceItem item) {
+        JSONObject apodObj = new JSONObject();
+        JSONObject contentObj = new JSONObject();
+        try {
+            contentObj.put("Title", item.getTitle());
+            contentObj.put("DateTime", item.getDateTime());
+            contentObj.put("Copyright", item.getCopyright());
+            contentObj.put("Explanation", item.getExplanation());
+            contentObj.put("Lowres", item.getLowres());
+            contentObj.put("Hires", item.getHires());
+            contentObj.put("Thumb", item.getThumb());
+            contentObj.put("Rating", item.getRating());
+            contentObj.put("Media", item.getMedia());
+            contentObj.put("HiSize", item.getHiSize());
+            contentObj.put("LowSize", item.getLowSize());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        try {
+            apodObj.put("Type", "APOD");
+            apodObj.put("Content", contentObj);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return apodObj;
+    }
+
+    /**
+     * Ís the given string a valid json and if so, is it an ARRAY or an OBJECT?
+     * @param string
+     * @return
+     */
+    public static int isJson(String string) {
+        try {
+            new JSONObject(string);
+            return JSON_OBJ;
+        } catch (JSONException a) {
+            try {
+                new JSONArray(string);
+                return JSON_ARRAY;
+            } catch (JSONException b) {
+                return NO_JSON;
+            }
+        }
+        /* As reference: some code from my DROPBOX_REFRESH in processFinish() MainActivity:
+           also a way to get the infos... this creates the json array in this case
+        Object json;
+        try {
+            json = new JSONTokener((String) output).nextValue();
+        } catch (JSONException e) {
+            e.printStackTrace();
+            return;
+        }
+        String hhh = json.getClass().toString();    // class.org.MYTYPE
+        if (json != null && json instanceof JSONArray) {
+            refreshFromDropbox((JSONArray) json);
+        }
+        */
+    }
+
+    /**
+     * Insert a space item into the current list at position matching epoch value. Double titles
+     * are skipped.
+     * @param list The arraylist, into which items get inserted
+     * @param newitem The new item to be inserted
+     * @return true if success - currently not used
+     */
+    public static boolean insertSpaceItem(ArrayList<spaceItem> list, spaceItem newitem) {
+        // Iterate through the list. Most likely the item is to be added at the beginning of the
+        // list, because this is called for items with current epoch values - so iteration should
+        // be very short. ArrayList is sorted by descending epochs.
+        long newepoch = newitem.getDateTime();
+        String newtitle = newitem.getTitle();
+        int idx = 0;
+        for (spaceItem item : list) {
+            if (item.getTitle().equals(newtitle)) {
+                Log.i("HFCM", "insertSpaceItem() - title already in list, index " + idx + " - " + newtitle);
+                return false;
+            }
+            if (newepoch > item.getDateTime()) {
+                list.add(idx, newitem);
+                Log.i("HFCM", "insertSpaceItem() - insert at index " + idx + " - " + newtitle);
+                return true;
+            }
+            idx++;
+        }
+        Log.i("HFCM", "insertSpaceItem() - append at end - " + newtitle);
+        list.add(newitem);
+        return true;
+    }
+
 
     /**
      * Check, if network is connected.
@@ -910,6 +1200,8 @@ public final class utils {
      * @return YES, NO or UNKNOWN
      */
     public static int isActiveNetworkCaptivePortal(Context ctx) {
+        // see:
+        // https://github.com/aosp-mirror/platform_frameworks_base/blob/marshmallow-release/core/java/android/net/CaptivePortal.java
         ConnectivityManager connManager = (ConnectivityManager) ctx.
                 getSystemService(Context.CONNECTIVITY_SERVICE);
         if (connManager != null) {
@@ -929,8 +1221,30 @@ public final class utils {
     }
 
 
+    /**
+     * @param ctx context
+     */
     public static void getAllNetworksInfo(Context ctx) {
         // see also https://www.androidhive.info/2012/07/android-detect-internet-connection-status/
+        // Note: getAllNetworks: since API 21
+        // Problem: getAllNetworks does not return all networks, just the active one
+        // On 4.1 AVD with old getAllNetworkInfo, log is much nicer :)
+        //2017.12.11-07:38:51:377 > NetworkInfo: type: mobile[LTE], state: CONNECTED/CONNECTED, reason: simLoaded, extra: epc.tmobile.com, roaming: false, failover: false, isAvailable: true
+        //2017.12.11-07:38:51:377 > NetworkInfo: type: wifi[], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: false
+        //2017.12.11-07:38:51:377 > NetworkInfo: type: mobile_mms[LTE], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: true
+        //2017.12.11-07:38:51:377 > NetworkInfo: type: mobile_supl[LTE], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: true
+        //2017.12.11-07:38:51:377 > NetworkInfo: type: mobile_hipri[LTE], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: true
+        //2017.12.11-07:38:51:378 > NetworkInfo: type: mobile_fota[LTE], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: true
+        //2017.12.11-07:38:51:378 > NetworkInfo: type: mobile_ims[LTE], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: true
+        //2017.12.11-07:38:51:378 > NetworkInfo: type: mobile_cbs[LTE], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: true
+        //2017.12.11-07:38:51:378 > NetworkInfo: type: wifi_p2p[], state: UNKNOWN/IDLE, reason: (unspecified), extra: (none), roaming: false, failover: false, isAvailable: false
+
+        // But found, that on another wifi both networks are shown on Elephone using Android 6
+        // are shown, while my own wifi does not appear
+        // 2017.12.12-09:37:40:736 > NETINFO: [type: MOBILE[LTE], state: CONNECTED/CONNECTED, reason: connected, extra: internet, roaming: true, failover: false, isAvailable: true]
+        //2017.12.12-09:37:40:738 > NETINFO: [type: WIFI[], state: CONNECTED/CONNECTED, reason: (unspecified), extra: "Sengelxxx42", roaming: false, failover: false, isAvailable: true]
+
+
         ConnectivityManager connManager = (ConnectivityManager) ctx.
                 getSystemService(Context.CONNECTIVITY_SERVICE);
         //CaptivePortal cp =
@@ -941,7 +1255,9 @@ public final class utils {
         //NetworkInfo act = connManager.getActiveNetworkInfo();
         //String flag;
         //Log.i("HFCM", "ACT" + act.toString());
-        for (Network net : connManager.getAllNetworks()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            Network[] nets = connManager.getAllNetworks();
+            for (Network net : connManager.getAllNetworks()) {
             /*NetworkInfo inf = connManager.getNetworkInfo(net);
             String extra = inf.getExtraInfo();
             String type = inf.getTypeName();
@@ -956,9 +1272,15 @@ public final class utils {
                     subtype,
                     detailedstate,
                     flag);*/
-            logAppend(ctx, MainActivity.DEBUG_LOG, "NETINFO: " +
-                    connManager.getNetworkInfo(net).toString());
-            //connManager.bindProcessToNetwork(net);
+                logAppend(ctx, MainActivity.DEBUG_LOG, "NETINFO: " +
+                        connManager.getNetworkInfo(net).toString());
+                //connManager.bindProcessToNetwork(net);
+            }
+        } else {
+            NetworkInfo[] netinfos = connManager.getAllNetworkInfo();
+            for (NetworkInfo netinfo : netinfos) {
+                logAppend(ctx, MainActivity.DEBUG_LOG, netinfo.toString());
+            }
         }
     }
 
@@ -990,39 +1312,6 @@ public final class utils {
         long a = stat.getTotalBytes();
         long b = totalBlocks * blockSize;*/
         return stat.getTotalBytes();
-    }
-
-    /**
-     * Ís the given string a valid json and if so, is it an ARRAY or an OBJECT?
-     * @param string
-     * @return
-     */
-    public static int isJson(String string) {
-        try {
-            new JSONObject(string);
-            return JSON_OBJ;
-        } catch (JSONException a) {
-            try {
-                new JSONArray(string);
-                return JSON_ARRAY;
-            } catch (JSONException b) {
-                return NO_JSON;
-            }
-        }
-        /* As reference: some code from my DROPBOX_REFRESH in processFinish() MainActivity:
-           also a way to get the infos... this create the json array in this case
-        Object json;
-        try {
-            json = new JSONTokener((String) output).nextValue();
-        } catch (JSONException e) {
-            e.printStackTrace();
-            return;
-        }
-        String hhh = json.getClass().toString();    // class.org.MYTYPE
-        if (json != null && json instanceof JSONArray) {
-            refreshFromDropbox((JSONArray) json);
-        }
-        */
     }
 
 
