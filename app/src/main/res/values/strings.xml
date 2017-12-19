@@ -198,7 +198,9 @@
     <string name="wp_quality_summary">Quality of newly saved wallpaper images. Images that have already been saved are not changed by this setting.</string>
     <string name="df_summary">Choose the format of date you like to be shown in the list of images.</string>
     <string name="hires_save_summary">Keep local copy of hires images on your device.\nNote:
-        Videos will always be streamed and never get stored locally.</string>
+        Videos will always be streamed and never get stored locally. Currently, this is limited to
+        20 percent of free available storage, automatic deletion done if more memory is used. To be
+        configurable later…</string>
     <string name="hires_save_title">Save Hires Images locally</string>
     <string name="rgb565_thumbs_summary">Use lower color resolution Thumbnail pictures to save memory. Check, if you see any difference in the list.</string>
     <string name="rgb565_thumbs_title">Thumbnail color quality</string>
@@ -207,6 +209,11 @@
     <string name="search_nasa_archive">Search NASA Archive (inactive)</string>
     <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper in a few seconds and then every full hour, also if the app user interface is closed.
     Between 23:00 and 06:00, no shuffle is done.</string>
+    <string name="wp_shuffle_less_than_two">Schedule has been set to change the wallpaper every
+        full hour, also if the app user interface is closed. You currently do not have the minimum
+        of 2 FunInSpace wallpapers selected, so that no shuffle will take place now.
+        After selecting the minimum of 2 wallpapers, the shuffle function will start.
+        Between 23:00 and 06:00, no shuffle is done.</string>
     <string name="no_network_for_apod">A new image is available, but you do not have an active network connection. Maybe flightmode is enabled?</string>
     <string name="no_network_for_hd">You do not have an active network connection to load the image or video. Maybe flightmode is enabled?</string>
     <string name="no_network">No network connection</string>

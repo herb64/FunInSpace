@@ -18,6 +18,8 @@ import android.widget.TextView;
 import java.io.File;
 import java.io.FileFilter;
 
+import de.herb64.funinspace.helpers.utils;
+
 
 /**
  * Created by herbert on 9/18/17.
@@ -60,8 +62,9 @@ public class fileTransferDialog extends AppCompatDialogFragment {
         FileFilter myfilter = new FileFilter() {
             @Override
             public boolean accept(File file) {
+                utils.info("Transfer: " + file.toString());
                 if (file.toString().endsWith(".json") ||
-                        (file.toString().endsWith(MainActivity.DEBUG_LOG)) ||
+                        file.toString().endsWith(".log") ||
                         (file.toString().endsWith(".jpg") &&
                                 !file.toString().contains("files/wp_") &&
                                 !file.toString().contains("files/hd_"))
@@ -95,7 +98,7 @@ public class fileTransferDialog extends AppCompatDialogFragment {
 
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {
-                Log.i("HFCM", "Old code in onclick..." + i);
+                //Log.i("HFCM", "Old code in onclick..." + i);
                 /*if (i == DialogInterface.BUTTON_POSITIVE) {
                     // here we can start a thread, then wait until it finishes
                     fileSender xfer = new fileSender(getActivity(), "192.168.1.34", 9000, localJson);
@@ -214,7 +217,7 @@ public class fileTransferDialog extends AppCompatDialogFragment {
                             try {
                                 sender.join();
                                 String result = xfer.getLogString();
-                                Log.i("HFCM", "Got back: " + result);
+                                //Log.i("HFCM", "Got back: " + result);
                                 tv_log.setText(String.format("%s... %s", tv_log.getText(), result));
                                 //((AlertDialog) dlg).setButton(AlertDialog.BUTTON_NEGATIVE, "DONE", listener);
                             } catch (InterruptedException e) {

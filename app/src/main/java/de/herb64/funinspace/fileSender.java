@@ -94,7 +94,7 @@ class fileSender implements Runnable {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-                Log.i("HFCM", "connected...");
+                //Log.i("HFCM", "connected...");
                 try {
                     // 20.09.2017 - getting error "contains a path separator" if using path name
                     // http://www.praveenboyalapalli.com/2015/02/calling-openfileinputstring-name-gives-java-lang-illegalargumentexception-contains-a-path-separator/
@@ -145,7 +145,7 @@ class fileSender implements Runnable {
                 NetworkInterface intf = en.nextElement();
                 for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements();) {
                     InetAddress inetAddress = enumIpAddr.nextElement();
-                    Log.i("HFCM", "Found address: " + inetAddress.toString());
+                    //Log.i("HFCM", "Found address: " + inetAddress.toString());
                     //if (!inetAddress.isLoopbackAddress()) { return inetAddress.getHostAddress().toString(); }
                 }
             }

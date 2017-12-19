@@ -26,6 +26,8 @@ import android.os.PersistableBundle;
 import android.preference.PreferenceManager;
 import android.speech.tts.TextToSpeech;
 // import android.support.multidex.MultiDexApplication;
+import android.support.design.widget.CoordinatorLayout;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
@@ -103,7 +105,6 @@ IncomingMessageHandler(MainActivity activity) {
 public class MainActivity extends AppCompatActivity
         implements ratingDialog.RatingListener, asyncLoad.AsyncResponse, confirmDialog.ConfirmListener {
 
-    private spaceItem apodItem;                     // TODO: no longer needed
     private ArrayList<spaceItem> myList;
     //private LinkedHashMap<String, spaceItem> myMap; // abandoned, old class file still present
     private spaceAdapter adp;
@@ -142,7 +143,7 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.5.6 (alpha)\nBuild Date 2017-12-17\n";
+    private static final String ABOUT_VERSION = "0.5.8 (alpha)\nBuild Date 2017-12-19\n";
 
     // for logcat wrapper - utils.java
     public static final boolean LOGCAT_INFO = false;
@@ -173,11 +174,10 @@ public class MainActivity extends AppCompatActivity
     protected static final int WP_NONE = 0;
     public static final int WP_EXISTS = 1;
     protected static final int WP_ACTIVE = 3;   // just in case of bitmap interpretation
-    //private static final int DEFAULT_MAX_STORED_WP = 20;      // limit number of stored wallpapers - better use memory constraint ??
+    //private static final int DEFAULT_MAX_STORED_WP = 20;      // TODO - how to limit?
 
     public static final String APOD_SCHED_PREFIX = "s___";
-    protected static final int MAX_HIRES_MB = 100;  // limit (MB) for hires img on internal stg         // TODO - rework with percentage below
-    protected static final int MAX_HIRES_PERCENT = 10;  // percentage..                                 // TODO - config option
+    protected static final int MAX_HIRES_PERCENT = 20;          // TODO - make config option
     public static final int JOB_ID_SHUFFLE = 85407;
     public static final String BCAST_SHUFFLE = "SHUFFLE";
     public static final int JOB_ID_APOD = 3124;
@@ -209,16 +209,7 @@ public class MainActivity extends AppCompatActivity
         //actbar.setCustomView();
 
         utils.info("onCreate()...........");
-
-        // get the locale - using default leads to several warnings with String.format()
-        // https://stackoverflow.com/questions/14389349/android-get-current-locale-not-default
-        /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
-            loc = getResources().getConfiguration().getLocales().get(0);
-        } else{
-            //noinspection deprecation
-            loc = getResources().getConfiguration().locale;
-        }*/
-        loc = Locale.getDefault();
+        loc = Locale.getDefault();  // see also lalatex docu
 
         long starttime = System.currentTimeMillis();
         utils.logAppend(getApplicationContext(), DEBUG_LOG,
@@ -314,7 +305,7 @@ public class MainActivity extends AppCompatActivity
                 // Just reset the maxlines to a larger limit and remove the ellipse stuff. This
                 // is only temporarily and automatically disappears when scrolling or when clicking
                 // again.
-                // TODO - at background load of thumbs, the full text always disappears on refreshs
+                // TODO - at background load of thumbs, the full text always disappears on refreshs              XXXXXX first time user annoyance XXXXX
                 // TODO - do not ellipsize if explanation matches into minimum lines
                 TextView v = myItemsLV.findViewWithTag(position + MAX_ITEMS);
                 boolean read = sharedPref.getBoolean("read_out", false);
@@ -454,99 +445,28 @@ public class MainActivity extends AppCompatActivity
             public boolean onActionItemClicked(android.view.ActionMode actionMode, MenuItem menuItem) {
                 switch (menuItem.getItemId()) {
                     case R.id.cab_delete:
-                        // Within ArrayList - removal from back to front is essential!!
-                        Collections.sort(selected, Collections.<Integer>reverseOrder());
-                        boolean needShuffleListRefresh = false;
-                        for (int idx : selected) {
-                            // spaceAdapter.remove() has been overwritten, so that it deletes the
-                            // image in the full ArrayList plus (if filtered view) in the currently
-                            // presented view as well.
-                            if (parent.length() != myList.size()) {
-                                new dialogDisplay(MainActivity.this, "Some problem with json (" +
-                                        parent.length() + ") vs. list (" + myList.size() +
-                                        ") size", "Info for Herbert");
-                            }
-                            // Remove images BEFORE indexed item gets deleted from list. If the item
-                            // holds the active wallpaper, deletion is skipped
-                            Log.i("HFCM", "Attempting to delete: " + myList.get(idx).getThumb() +
-                                    " for '" + myList.get(idx).getTitle() + "'");
-                            if (myList.get(idx).getWpFlag() == WP_EXISTS) {
-                                File wpdel = new File(getApplicationContext().getFilesDir(),
-                                        myList.get(idx).getThumb().replace("th_", "wp_"));
-                                needShuffleListRefresh = true;
-                                if (!wpdel.delete()) {
-                                    Log.i("HFCM", "File delete for wallpaper did not return true");
-                                }
-                            } else if (myList.get(idx).getWpFlag() == WP_ACTIVE) {
-                                Log.i("HFCM", "File delete skipped for active wallpaper");
-                                new dialogDisplay(MainActivity.this,
-                                        getString(R.string.wp_no_delete_active,
-                                                myList.get(idx).getTitle()), "Warning");
-                                continue;
-                            }
-                            // Remove the thumbnail image
-                            File thdel = new File(getApplicationContext().getFilesDir(),
-                                    myList.get(idx).getThumb());
-                            if (!thdel.delete()) {
-                                Log.e("HFCM", "File delete for thumbnail did not return true");
-                            }
-                            // Remove existing hires image
-                            File hddel = new File(getApplicationContext().getFilesDir(),
-                                    myList.get(idx).getThumb().replace("th_", "hd_"));
-                            if (hddel.exists()) {
-                                if (!hddel.delete()) {
-                                    Log.e("HFCM", "File delete for hires cached image did not return true");
-                                }
-                            }
-
-                            // Deleted items - keep track to avoid dropbox sync to get these again
-                            Set<String> deleted_items = sharedPref.getStringSet("DELETED_ITEMS",
-                                    new HashSet<String>());
-                            // IMPORTANT: Need a copy, do NOT edit the gathered object itself!!!
-                            Set<String> newset = new HashSet<>(deleted_items);
-                            newset.add(myList.get(idx).getTitle());
-                            SharedPreferences.Editor editor = sharedPref.edit();
-                            editor.putStringSet("DELETED_ITEMS", newset);
-                            editor.apply();
-                            utils.logAppend(getApplicationContext(),
-                                    DEBUG_LOG,
-                                    "Delete item: '" + myList.get(idx).getTitle() + "'");
-
-                            // delete the json object from json array
-                            try {
-                                JSONObject obj = (JSONObject) parent.get(parent.length() - 1 - idx);
-                                String title = obj.getJSONObject("Content").getString("Title");
-
-                                // json array remove: parent.remove(index) requires API level 19
-                                // https://gist.github.com/emmgfx/0f018b5acfa3fd72b3f6
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                                    Log.i("HFCM", "json remove: " + title);
-                                    parent.remove(parent.length() - 1 - idx);
-                                } else {
-                                    Log.i("HFCM", "Doing PRE KITKAT json remove for " + title);
-                                    // no nice code here.... we should improve that, for example
-                                    // do only one iteration for ALL elements in "selected"
-                                    JSONArray tempjson = new JSONArray();
-                                    for (int i = 0; i < parent.length(); i++) {
-                                        JSONObject tobj = (JSONObject) parent.get(i);
-                                        if (!tobj.getJSONObject("Content").getString("Title").equals(title)) {
-                                            tempjson.put(tobj);
-                                        }
-                                    }
-                                    parent = tempjson;
-                                }
-                                // Make changes permanent by rewriting json file
-                                utils.writeJson(getApplicationContext(), localJson, parent);
-                            } catch (JSONException e) {
-                                e.printStackTrace();
-                            }
-                            adp.remove(myList.get(idx));
-                            // adp.setNotifyOnChange(true); // TODO - test this for auto notify ??
-                        }
-                        adp.notifyDataSetChanged();
-                        if (needShuffleListRefresh) {
-                            utils.setWPShuffleCandidates(getApplicationContext(), myList);
-                        }
+                        /* for a confirmation dialog, need to pass 'selected' to the dialog
+                        Bundle fragArgs = new Bundle();
+                        fragArgs.putInt("IDX", selected.get(0));
+                        fragArgs.putString("TITLE",
+                                "Confirm delete");
+                        fragArgs.putString("MESSAGE",
+                                "Are you sure you want to delete...");
+                        fragArgs.putString("POS",
+                                "DELETE");
+                        fragArgs.putString("NEG",
+                                "CANCEL");
+                        FragmentManager fmgr = getSupportFragmentManager();
+                        confirmDialog confirmdlg2 = new confirmDialog();
+                        confirmdlg2.setArguments(fragArgs);
+                        confirmdlg2.show(fmgr, "DELETE");*/
+                        deleteItems(selected);
+                        // activity_main.xml has CoordinatorLayout as base!
+                        final View coordinatorLayoutView = findViewById(R.id.id_coord);
+                        Snackbar.make(coordinatorLayoutView, "undo to be done...", Snackbar.LENGTH_LONG)
+                                .setAction("UNDO", undoListener)
+                                .show();
+                        new dialogDisplay(MainActivity.this, "Undo snackbar not yet active...", "Herbert TODO");
                         actionMode.finish();
                         return true;
                     case R.id.cab_share:
@@ -610,7 +530,7 @@ public class MainActivity extends AppCompatActivity
                                     hiresIntent.putExtra("imagename", basefn);
                                     // call image activity with wallpaper selection mode at startup
                                     hiresIntent.putExtra("wpselect", true);
-                                    Log.i("HFCM", "Changing wallpaper 'wp_" + basefn + "'");
+                                    //Log.i("HFCM", "Changing wallpaper 'wp_" + basefn + "'");
                                     startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
                                     break;
                                 case WP_EXISTS:
@@ -638,7 +558,7 @@ public class MainActivity extends AppCompatActivity
                                                 File wpdel = new File(getApplicationContext().getFilesDir(),
                                                         myList.get(selected.get(0)).getThumb().replace("th_", "wp_"));
                                                 if (!wpdel.delete()) {
-                                                    Log.i("HFCM", "File delete for wallpaper did not return true");
+                                                    Log.w("HFCM", "File delete for wallpaper did not return true");
                                                 }
                                                 myList.get(selected.get(0)).setWpFlag(WP_NONE);
                                                 adp.notifyDataSetChanged();
@@ -664,7 +584,7 @@ public class MainActivity extends AppCompatActivity
                                 File wpdel = new File(getApplicationContext().getFilesDir(),
                                         myList.get(idx).getThumb().replace("th_", "wp_"));
                                 if (!wpdel.delete()) {
-                                    Log.i("HFCM", "File delete for wallpaper did not return true");
+                                    Log.w("HFCM", "File delete for wallpaper did not return true");
                                 }
                                 myList.get(idx).setWpFlag(WP_NONE);
                             }
@@ -745,7 +665,7 @@ public class MainActivity extends AppCompatActivity
         // https://www.youtube.com/watch?v=9OWmnYPX1uc
 
         if (savedInstanceState != null) {
-            // The spaceItem internal structure and the json data string are restored.
+            // The spaceItem internal structure and the json data s tring are restored.
             // On Android 8.0 this fails with Transaction Too Large error, so we do not put this
             // structure onto the saved instance state and instead recreate it using addItems()
             //myList = savedInstanceState.getParcelableArrayList("myList");
@@ -777,12 +697,7 @@ public class MainActivity extends AppCompatActivity
                 maxTextureSize = shPref.getInt("maxtexsize", 0);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
                 // TODO: if shared preferences are lost for some reason, run texsize check again
-                // following can be skipped, is tested below
-                //if (jsonData.equals("")) {
-                //    jsonData = "[]";
-                //}
                 parent = null;
-
                 try {
                     parent = new JSONArray(jsonData);
                 } catch (JSONException e) {
@@ -791,11 +706,11 @@ public class MainActivity extends AppCompatActivity
                 }
                 // Parse the local json file contents and add these to ArrayList
                 addItems();
-                getScheduledAPODs();        // NEW: first add any scheduled apods
+                getScheduledAPODs();
                 getLatestAPOD();
+                listItemsDateInfo();
             } else {
-                // It looks like we do not have a local json file yet - FIRST LAUNCH most likely
-                // TODO: later offer a restore option from sd card...
+                // FIRST LAUNCH most likely - TODO: offer restore from sd card...
                 Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
                 startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
@@ -839,11 +754,10 @@ public class MainActivity extends AppCompatActivity
 
         utils.setWPShuffleCandidates(getApplicationContext(), myList);
 
-        // Adding our first test service here for JobScheduler testing
-        // Fails in Android 4.1 with
+        // Adding our first test service here for JobScheduler testing fails in Android 4.1 with
         // java.lang.NoClassDefFoundError: de.herb64.funinspace.services.shuffleJobService
         //     at de.herb64.funinspace.MainActivity.onCreate(MainActivity.java:845)
-        // Web shows: multidex enable as solution
+        // Finding on web: multidex enable as solution
         // https://stackoverflow.com/questions/31829350/app-crashes-with-noclassdeffounderror-only-on-android-4-x
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             serviceComponent = new ComponentName(this, shuffleJobService.class);
@@ -872,7 +786,7 @@ public class MainActivity extends AppCompatActivity
                 switch (intent.getAction()) {
                     case BCAST_SHUFFLE:
                         String newwp = intent.getStringExtra("NEWWP");
-                        Log.i("HFCM", "Broadcast received, new WP: " + newwp);
+                        //Log.i("HFCM", "Broadcast received, new WP: " + newwp);
                         // TODO - better way than just iterating? at least some cut if met condition
                         // or change order of check - to avoid string comparison
                         for (spaceItem item : myList) {
@@ -885,8 +799,8 @@ public class MainActivity extends AppCompatActivity
                         adp.notifyDataSetChanged();
                         break;
                     case BCAST_THUMB:
-                        String thname = intent.getStringExtra("THUMBNAIL");
-                        Log.i("HFCM", "Broadcast received, THUMBFILE: " + thname);
+                        //String thname = intent.getStringExtra("THUMBNAIL");
+                        //Log.i("HFCM", "Broadcast received, THUMBFILE: " + thname);
                         // ugly code here...
                         /*int i = 0;
                         boolean match = false;
@@ -995,8 +909,20 @@ public class MainActivity extends AppCompatActivity
      *
      */
     @Override
+    protected void onPause() {
+        // actions here TODO: unregisterOnSharedPreferenceChangeListener
+        // https://developer.android.com/guide/topics/ui/settings.html
+        super.onPause();
+    }
+
+    /**
+     *
+     */
+    @Override
     protected void onResume() {
         super.onResume();
+        // actions here TODO: registerOnSharedPreferenceChangeListener
+        // https://developer.android.com/guide/topics/ui/settings.html
     }
 
     /**
@@ -1123,7 +1049,7 @@ public class MainActivity extends AppCompatActivity
                 switch (tag) {
                     case "WP":
                         String wpfile = myList.get((int)o).getThumb().replace("th_", "wp_");
-                        Log.i("HFCM", "Reached confirmation: " + wpfile);
+                        //Log.i("HFCM", "Reached confirmation: " + wpfile);
                         if (!wpfile.equals("")) {
                             // update index values
                             if (currentWallpaperIndex >= 0) {
@@ -1163,10 +1089,13 @@ public class MainActivity extends AppCompatActivity
                         //terminateApp();
                         break;
                     case "SHOW_LOG":
-                        Log.i("HFCM", "Clear log");
+                        //Log.i("HFCM", "Clear log");
                         File logFile = new File(getFilesDir(), MainActivity.DEBUG_LOG);
                         if (logFile.exists()) {
-                            logFile.delete();
+                            if (!logFile.delete()) {
+                                // it might fail if email client is still accessing contents
+                                Log.e("HFCM", "Error deleting file: " + logFile);
+                            }
                         }
                         break;
                     default:
@@ -1176,8 +1105,13 @@ public class MainActivity extends AppCompatActivity
             case DialogInterface.BUTTON_NEUTRAL:
                 switch (tag) {
                     case "SHOW_LOG":
-                        Log.i("HFCM", "Email to herbert");
                         emailLogFileToHerbert();
+                        break;
+                    case "DROPBOX_REFRESH":
+                        utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                                tag + " - Kick off asyncLoad: DROPBOX_FORCE_REFRESH");
+                        //new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
+                        new asyncLoad(MainActivity.this, "DROPBOX_FORCE_REFRESH").execute(dPJ());
                         break;
                     default:
                         break;
@@ -1426,14 +1360,15 @@ public class MainActivity extends AppCompatActivity
 
                 // Get the wallpaper info from returned intent (returning bmp is bad - trx size)
                 // String testsize = data.getStringExtra("sizeHires");
-                //String hUrl = data.getStringExtra("hiresurl");
+                // String hUrl = data.getStringExtra("hiresurl");
                 int listidx = data.getIntExtra("lstIdx", 0);
 
                 // If a new cache file has been written, we trigger a file cleanup.
                 if (data.getBooleanExtra("new_hd_cached_file", false)) {
                     ArrayList<Integer> del = utils.cleanupFiles(getApplicationContext(),
                             myList,
-                            MAX_HIRES_MB * 1024,
+                            //MAX_HIRES_MB * 1024,
+                            MAX_HIRES_PERCENT,
                             listidx);
                     for (int i : del) {
                         myList.get(i).setCached(false);
@@ -1464,27 +1399,6 @@ public class MainActivity extends AppCompatActivity
                     // dlg.setTargetFragment(); // only if calling from fragment, not from activity!
                     dlg.show(fm, "WP");
                 }
-
-                /* SKIP THIS, WE ALREADY GET HIRES IMAGE WIDTH/HEIGHT AT APOD LOAD TIME NOW
-                if (!(myList.get(listidx).getHiSize().equals(testsize) ||
-                        testsize.equals("no-change"))) {
-                    //return;     // no action needed if hires size already in data
-                    // TODO DOCU MetaDataRetriever  did not work for jpg in my tests (only video)
-                    try {
-                        // data in json is reverse ordered as in list
-                        JSONObject content = parent.getJSONObject(parent.length() - 1 - listidx).
-                                getJSONObject("Content");
-                        Log.i("HFCM", "HIRES_LOAD: index=" + listidx +
-                                ", list: " + myList.get(listidx).getTitle() +
-                                ", json: " + content.getString("Title"));
-                        content.put("HiSize", testsize);
-                        utils.writeJson(getApplicationContext(), localJson, parent);
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                        Log.e("HFCM", e.toString());
-                    }
-                }
-                myList.get(listidx).setHiSize(testsize);*/
                 adp.notifyDataSetChanged();
             } else if (resultCode == RESULT_CANCELED) {
                 Log.w("HFCM", "Returning from imageactivity with RESULT_CANCELLED");
@@ -1511,9 +1425,7 @@ public class MainActivity extends AppCompatActivity
                 //       e.g. ordering of elements in list...
                 // Check for any changed preference items, which have been marked by the listener.
                 if (thumbQualityChanged) {
-                    //SharedPreferences shPref = PreferenceManager.getDefaultSharedPreferences(this);
-                    //Log.i("HFCM", "Low quality thumbs enabled: " + shPref.getBoolean("rgb565_thumbs", false));
-                    Log.i("HFCM", "Low quality thumbs enabled: " + sharedPref.getBoolean("rgb565_thumbs", false));
+                    Log.d("HFCM", "Low quality thumbs enabled: " + sharedPref.getBoolean("rgb565_thumbs", false));
                     thumbQualityChanged = false;
                     myList.clear();
                     addItems();
@@ -1532,28 +1444,27 @@ public class MainActivity extends AppCompatActivity
                     wpShuffleChanged = false;
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                         boolean shuffle = sharedPref.getBoolean("wallpaper_shuffle", false);
-                        Log.i("HFCM", "WP Shuffle has changed to " + shuffle);
+                        //Log.d("HFCM", "WP Shuffle has changed to " + shuffle);
                         if (shuffle) {
                             scheduleShuffle();
                             utils.logAppend(getApplicationContext(),
                                     DEBUG_LOG,
                                     "Enabled wallpaper shuffle in settings");
-                            new dialogDisplay(MainActivity.this,
-                                    getString(R.string.wp_shuffle_enabled), "DEBUG ONLY!");
+                            if (utils.getNumWP(myList) < 2) {
+                                new dialogDisplay(MainActivity.this,
+                                        getString(R.string.wp_shuffle_less_than_two), "DEBUG ONLY!");
+                            } else {
+                                new dialogDisplay(MainActivity.this,
+                                        getString(R.string.wp_shuffle_enabled), "DEBUG ONLY!");
+                            }
                         } else {
                             JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
                             scheduler.cancel(JOB_ID_SHUFFLE);
                             utils.logAppend(getApplicationContext(),
                                     DEBUG_LOG,
                                     "Disabled wallpaper shuffle in settings");
-                            File shufflelog= new File(getApplicationContext().getFilesDir(),
-                                    DEBUG_LOG);
-                            String loginfo = "No logfile data available";
-                            if (shufflelog.exists()) {
-                                loginfo = "\nFunInSpace log data:\nYou may send this to Herbert using  the email function.\n";
-                                loginfo += utils.readf(getApplicationContext(), DEBUG_LOG);
-                            }
-                            new dialogDisplay(MainActivity.this, loginfo, "Shuffle Job cancelled", 10f);
+                            Toast.makeText(MainActivity.this, "Wallpaper shuffle switched off",
+                                    Toast.LENGTH_LONG).show();
                         }
                     } else {
                         new dialogDisplay(MainActivity.this,
@@ -1595,8 +1506,11 @@ public class MainActivity extends AppCompatActivity
                         adp.setFullSearch(sharedPref.getBoolean("full_search", false));
                     }
                     if (changed.equals("wallpaper_quality")) {
-                        Log.i("HFCM", "Changed wall paper quality to " +
+                        Log.d("HFCM", "Changed wall paper quality to " +
                                 sharedPref.getString("wallpaper_quality", "80"));
+                    }
+                    if (changed.equals("hires_save")) {
+                        boolean hs = sharedPref.getBoolean("hires_save", false);
                     }
                 }
             };
@@ -1812,7 +1726,7 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_help) {
-            new dialogDisplay(MainActivity.this, "Help page not yet available, to be done hopefully soon...", "TODO");
+            new dialogDisplay(MainActivity.this, "Help page not yet available, to be done soon...", "TODO");
             return true;
         }
         if (id == R.id.action_about) {
@@ -1820,7 +1734,7 @@ public class MainActivity extends AppCompatActivity
                     "\nTODO credits:\nflaticons.com for movie_other_64.png\n\n" +
                     getString(R.string.credits_first_testers) +
                     utils.getFileStats(getApplicationContext(), loc) +
-                    "\nLimit: " + MAX_HIRES_MB + "MB (no active cleanup yet)",
+                    "\nLimit: " + utils.getAvailableInternalMem() * MAX_HIRES_PERCENT / (1024*1024*100) + " MiB",
                     "Infos (in development)");
             return true;
         }
@@ -1860,6 +1774,7 @@ public class MainActivity extends AppCompatActivity
                     getString(R.string.refresh_dropbox_message));
             fragArguments.putString("POS", getString(R.string.hfcm_yes));
             fragArguments.putString("NEG", getString(R.string.hfcm_no));
+            fragArguments.putString("NEU", "Force full sync");
             FragmentManager fm = getSupportFragmentManager();
             confirmDialog dlg = new confirmDialog();
             dlg.setArguments(fragArguments);
@@ -1981,42 +1896,45 @@ public class MainActivity extends AppCompatActivity
             newitem.setHiSize(strHiSize);
             newitem.setLowSize(strLowSize);
             newitem.setMaxLines(MAX_ELLIPSED_LINES); // # of explanation lines in ellipsized view
-            // Load the corresponding bitmap for thumbail from th_xxx.jpg and set into
-            // the list item. If the file is not found, set bitmap to null.
-            File thumbFile = new File(getApplicationContext().getFilesDir(), strThumb);
-            if (thumbFile.exists()) {
-                Bitmap thumb = null;
-                // we use this option to save some memory - experimental
-                if (sharedPref.getBoolean("rgb565_thumbs", false)) {
-                    BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inPreferredConfig = Bitmap.Config.RGB_565;
-                    thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath(), options);
+
+            if (!strThumb.isEmpty()) {
+                // Load the corresponding bitmap for thumbail from th_xxx.jpg and set into
+                // the list item. If the file is not found, set bitmap to null.
+                File thumbFile = new File(getApplicationContext().getFilesDir(), strThumb);
+                if (thumbFile.exists()) {
+                    Bitmap thumb = null;
+                    // we use this option to save some memory - experimental
+                    if (sharedPref.getBoolean("rgb565_thumbs", false)) {
+                        BitmapFactory.Options options = new BitmapFactory.Options();
+                        options.inPreferredConfig = Bitmap.Config.RGB_565;
+                        thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath(), options);
+                    } else {
+                        thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
+                    }
+                    newitem.setBmpThumb(thumb);
                 } else {
-                    thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
+                    newitem.setBmpThumb(null);
                 }
-                newitem.setBmpThumb(thumb);
-            } else {
-                newitem.setBmpThumb(null);
-            }
-            // Wallpaper filename is just derived from thumb filename, no extra storage space used
-            String wpName = strThumb.replace("th_", "wp_");
-            File wpFile = new File(getApplicationContext().getFilesDir(), wpName);
-            if (wpFile.exists()) {
-                if (wpName.equals(wpFileCurrent)) {
-                    //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found AS ACTIVE");
-                    newitem.setWpFlag(WP_ACTIVE);
-                    currentWallpaperIndex = count;
+                // Wallpaper filename is just derived from thumb filename, no extra storage space used
+                String wpName = strThumb.replace("th_", "wp_");
+                File wpFile = new File(getApplicationContext().getFilesDir(), wpName);
+                if (wpFile.exists()) {
+                    if (wpName.equals(wpFileCurrent)) {
+                        //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found AS ACTIVE");
+                        newitem.setWpFlag(WP_ACTIVE);
+                        currentWallpaperIndex = count;
+                    } else {
+                        //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found");
+                        newitem.setWpFlag(WP_EXISTS);
+                    }
                 } else {
-                    //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found");
-                    newitem.setWpFlag(WP_EXISTS);
+                    newitem.setWpFlag(WP_NONE);
                 }
-            } else {
-                newitem.setWpFlag(WP_NONE);
+                // Hires cache image filename derived from thumb filename, th_ > hd_
+                String hdName = strThumb.replace("th_", "hd_");
+                File hdFile = new File(getApplicationContext().getFilesDir(), hdName);
+                newitem.setCached(hdFile.exists());
             }
-            // Hires cache image filename derived from thumb filename, th_ > hd_
-            String hdName = strThumb.replace("th_", "hd_");
-            File hdFile = new File(getApplicationContext().getFilesDir(), hdName);
-            newitem.setCached(hdFile.exists());
             myList.add(newitem);
             count++;
         }
@@ -2046,14 +1964,14 @@ public class MainActivity extends AppCompatActivity
                 String imgSize = myList.get(i).getHiSize();
                 if (sMediaType.equals(M_VIMEO) && imgUrl.isEmpty()) {
                     // Query vimeo thumbnail URL via oembed API
-                    Log.i("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG VIM_" + i + ": " + sHiresUrl);
+                    Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG VIM_" + i + ": " + sHiresUrl);
                     new asyncLoad(MainActivity.this, "VIM_" + i).
                             execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
                 } else if (sMediaType.equals(M_IMAGE) && imgSize.isEmpty()) {
-                    Log.i("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG SIZE_" + i + ": " + sHiresUrl);
+                    Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG SIZE_" + i + ": " + sHiresUrl);
                     new asyncLoad(MainActivity.this, "SIZE_" + i).execute(sHiresUrl);
                 } else if (sMediaType.equals(M_MP4)) {
-                    Log.i("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG DUR_" + i + ": " + sHiresUrl);
+                    Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG DUR_" + i + ": " + sHiresUrl);
                     new asyncLoad(MainActivity.this, "DUR_" + i).execute(sHiresUrl);
                 } else {
                     if (imgUrl.isEmpty()) {
@@ -2064,7 +1982,7 @@ public class MainActivity extends AppCompatActivity
                         //       this could be done while loading hires first... think about options
                         continue;
                     }
-                    Log.i("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG THUMB_" + i + ": " + imgUrl);
+                    Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG THUMB_" + i + ": " + imgUrl);
                     new asyncLoad(MainActivity.this, "THUMB_" + i).execute(imgUrl);
                 }
             }
@@ -2120,26 +2038,26 @@ public class MainActivity extends AppCompatActivity
                     dbtitle = dbcontent.getString("Title");
                     dbepoch = dbcontent.getLong("DateTime");
                 } else {
-                    Log.i("HFCM", "DB end - adding local '" + ltitle + "'");
+                    Log.d("HFCM", "DB end - adding local '" + ltitle + "'");
                     newjson.put(lobj);
                     l_add++;
                     continue;
                 }
                 // Dropbox matches local title - add into new json array
                 if (ltitle.equals(dbtitle)) {
-                    Log.i("HFCM", "DB idx: " + dbidx + " - Adding local (A): " + ltitle + "'");
+                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (A): " + ltitle + "'");
                     newjson.put(lobj);
                     l_add++;
                     dbidx++;
                 } else if (!dropbox_items.contains(ltitle)) {
-                    Log.i("HFCM", "Info - DB idx: " + dbidx + " - Current local title '" + ltitle + "' not on dropbox");
+                    Log.d("HFCM", "Info - DB idx: " + dbidx + " - Current local title '" + ltitle + "' not on dropbox");
                     while (dbepoch <= lepoch) {
                         if (!deleted_items.contains(dbtitle) || forceFull) {
-                            Log.i("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(B) '" + dbtitle + "'");
+                            Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(B) '" + dbtitle + "'");
                             newjson.put(dropbox.getJSONObject(dbidx));
                             db_add++;
                         } else {
-                            Log.i("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (B): '" + dbtitle + "'");
+                            Log.d("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (B): '" + dbtitle + "'");
                             db_skip++;
                         }
                         dbidx++;
@@ -2149,7 +2067,7 @@ public class MainActivity extends AppCompatActivity
                         dbepoch = dropbox.getJSONObject(dbidx).getJSONObject("Content").getLong("DateTime");
                         dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
                     }
-                    Log.i("HFCM", "DB idx: " + dbidx + " - Adding local (B): " + ltitle + "'");
+                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (B): " + ltitle + "'");
                     newjson.put(lobj);
                     l_add++;
                     dbidx++;
@@ -2157,17 +2075,17 @@ public class MainActivity extends AppCompatActivity
                     // local title is on dropbox, just fill any possible missing items
                     while (!dbtitle.equals(ltitle)) {
                         if (!deleted_items.contains(dbtitle) || forceFull) {
-                            Log.i("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(C) '" + dbtitle + "'");
+                            Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(C) '" + dbtitle + "'");
                             newjson.put(dropbox.getJSONObject(dbidx));
                             db_add++;
                         } else {
-                        Log.i("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (C): '" + dbtitle + "'");
+                        Log.d("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (C): '" + dbtitle + "'");
                         db_skip++;
                         }
                         dbidx++;
                         dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
                     }
-                    Log.i("HFCM", "DB idx: " + dbidx + " - Adding local (C): '" + ltitle + "'");
+                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (C): '" + ltitle + "'");
                     newjson.put(lobj);
                     l_add++;
                     dbidx++;
@@ -2192,7 +2110,8 @@ public class MainActivity extends AppCompatActivity
         myList.clear();
         addItems();
         getMissingApodInfos();
-        utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_MB * 1024, -1);
+        //utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_MB * 1024, -1);
+        utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_PERCENT, -1);
         adp.notifyDataSetChanged();
     }
 
@@ -2215,7 +2134,7 @@ public class MainActivity extends AppCompatActivity
                 utils.logAppend(getApplicationContext(), DEBUG_LOG,
                         "getScheduledAPODs() - '" + name + "'");
                 if (!item.getTitle().isEmpty()) {
-                    Log.i("HFCM", "getScheduledAPODs() - '" + item.getTitle() + "'");
+                    //Log.d("HFCM", "getScheduledAPODs() - '" + item.getTitle() + "'");
                     utils.logAppend(getApplicationContext(), DEBUG_LOG,
                             "getScheduledAPODs() - '" + item.getTitle() + "'");
                     utils.insertSpaceItem(myList, item);
@@ -2329,7 +2248,6 @@ public class MainActivity extends AppCompatActivity
                             Toast.LENGTH_LONG).show();
                 myItemsLV.setSelection(0);
 
-
             } else {
                 String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
                 utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
@@ -2342,7 +2260,7 @@ public class MainActivity extends AppCompatActivity
 
         } else if (tag.startsWith("THUMB_")) {
             int idx = Integer.parseInt(tag.replace("THUMB_",""));
-            Log.i("HFCM", "processFinish(), tag = " + tag);
+            Log.d("HFCM", "processFinish(), tag = " + tag);
             if (output instanceof Bitmap) {
                 myList.get(idx).setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
                         String.valueOf(((Bitmap)output).getHeight()));
@@ -2356,7 +2274,7 @@ public class MainActivity extends AppCompatActivity
                 adp.notifyDataSetChanged();
 
                 unfinishedApods--;
-                Log.i("HFCM", "processFinish() - remaining unfinished APODs: " + unfinishedApods);
+                Log.d("HFCM", "processFinish() - remaining unfinished APODs: " + unfinishedApods);
                 if (unfinishedApods == 0) {
                     parent = new JSONArray(); // other way to cleanup the array?
                     for (int i = myList.size()-1; i >= 0; i--) {
@@ -2371,7 +2289,7 @@ public class MainActivity extends AppCompatActivity
                     for (String name : names) {
                         if (name.startsWith(APOD_SCHED_PREFIX)) {
                             File todelete = new File(getFilesDir(), name);
-                            Log.i("HFCM", "Deleting schduled apod: " + name);
+                            Log.d("HFCM", "Deleting schduled apod: " + name);
                             if (!todelete.delete()) {
                                 Log.e("HFCM", "Error deleting file: " + name);
                             }
@@ -2454,8 +2372,21 @@ public class MainActivity extends AppCompatActivity
                 return;
             }
             if (json != null && json instanceof JSONArray) {
-                resyncWithDropbox((JSONArray) json,
-                        sharedPref.getBoolean("force_full_dropbox_sync", false));
+                resyncWithDropbox((JSONArray) json, false);
+                        //sharedPref.getBoolean("force_full_dropbox_sync", false));
+            }
+        } else if (tag.equals("DROPBOX_FORCE_REFRESH")) {
+            // TODO - phone rotation and verify, if network checks are done / needed
+            Object json;
+            try {
+                json = new JSONTokener((String) output).nextValue();
+            } catch (JSONException e) {
+                e.printStackTrace();
+                return;
+            }
+            if (json != null && json instanceof JSONArray) {
+                resyncWithDropbox((JSONArray) json, true);
+                        //sharedPref.getBoolean("force_full_dropbox_sync", true));
             }
         } else {
             new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
@@ -2693,6 +2624,127 @@ public class MainActivity extends AppCompatActivity
         confirmdlg.show(fm, "INITLAUNCH");
     }
 
+    /**
+     * Delete items specified in array list of indices.
+     * TODO: stop shuffle service if number of wallpapers goes below 2 + restart if growing.
+     *       this allows to save resources in addition to not running during night...
+     * TODO: prepare for undo provided by snackbar.
+     * - no immediate image delete, rename to del___ or similar to flag them for later deletion
+     * - keep deleted entries to be able to add them again
+     * - keep a backup of the previous json to add again
+     * - DELETED_ITEMS shared pref must be undone as well
+     * @param selected Arraylist of items indices to be deleted
+     */
+    private void deleteItems(ArrayList<Integer> selected) {
+        Collections.sort(selected, Collections.<Integer>reverseOrder()); // BACK TO FRONT!!!
+        boolean needShuffleListRefresh = false;
+        for (int idx : selected) {
+            // spaceAdapter.remove() has been overwritten, so that it deletes the image in the full
+            // ArrayList plus (if filtered view) in the currently presented view as well.
+            if (parent.length() != myList.size()) {
+                new dialogDisplay(MainActivity.this, "Some problem with json (" +
+                        parent.length() + ") vs. list (" + myList.size() +
+                        ") size", "Info for Herbert");
+            }
+            // Remove images BEFORE indexed item gets deleted from list. If the item
+            // holds the active wallpaper, deletion is skipped
+            Log.i("HFCM", "Attempting to delete: " + myList.get(idx).getThumb() +
+                    " for '" + myList.get(idx).getTitle() + "'");
+            if (myList.get(idx).getWpFlag() == WP_EXISTS) {
+                File wpdel = new File(getApplicationContext().getFilesDir(),
+                        myList.get(idx).getThumb().replace("th_", "wp_"));
+                needShuffleListRefresh = true;
+                if (!wpdel.delete()) {
+                    Log.w("HFCM", "File delete for wallpaper did not return true");
+                }
+            } else if (myList.get(idx).getWpFlag() == WP_ACTIVE) {
+                Log.i("HFCM", "File delete skipped for active wallpaper");
+                new dialogDisplay(MainActivity.this,
+                        getString(R.string.wp_no_delete_active,
+                                myList.get(idx).getTitle()), "Warning");
+                continue;
+            }
+            // Remove the thumbnail image
+            File thdel = new File(getApplicationContext().getFilesDir(),
+                    myList.get(idx).getThumb());
+            if (!thdel.delete()) {
+                Log.e("HFCM", "File delete for thumbnail did not return true");
+            }
+            // Remove existing hires image
+            File hddel = new File(getApplicationContext().getFilesDir(),
+                    myList.get(idx).getThumb().replace("th_", "hd_"));
+            if (hddel.exists()) {
+                if (!hddel.delete()) {
+                    Log.e("HFCM", "File delete for hires cached image did not return true");
+                }
+            }
+
+            // Deleted items - keep track to avoid dropbox sync to get these again
+            Set<String> deleted_items = sharedPref.getStringSet("DELETED_ITEMS",
+                    new HashSet<String>());
+            // IMPORTANT: Need a copy, do NOT edit the gathered object itself!!!
+            Set<String> newset = new HashSet<>(deleted_items);
+            newset.add(myList.get(idx).getTitle());
+            SharedPreferences.Editor editor = sharedPref.edit();
+            editor.putStringSet("DELETED_ITEMS", newset);
+            editor.apply();
+            utils.logAppend(getApplicationContext(),
+                    DEBUG_LOG,
+                    "Delete item: '" + myList.get(idx).getTitle() + "'");
+
+            // delete the json object from json array
+            try {
+                JSONObject obj = (JSONObject) parent.get(parent.length() - 1 - idx);
+                String title = obj.getJSONObject("Content").getString("Title");
+
+                // json array remove: parent.remove(index) requires API level 19
+                // https://gist.github.com/emmgfx/0f018b5acfa3fd72b3f6
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                    Log.i("HFCM", "json remove: " + title);
+                    parent.remove(parent.length() - 1 - idx);
+                } else {
+                    Log.i("HFCM", "Doing PRE KITKAT json remove for " + title);
+                    // no nice code here.... we should improve that, for example
+                    // do only one iteration for ALL elements in "selected"
+                    JSONArray tempjson = new JSONArray();
+                    for (int i = 0; i < parent.length(); i++) {
+                        JSONObject tobj = (JSONObject) parent.get(i);
+                        if (!tobj.getJSONObject("Content").getString("Title").equals(title)) {
+                            tempjson.put(tobj);
+                        }
+                    }
+                    parent = tempjson;
+                }
+                // Make changes permanent by rewriting json file
+                utils.writeJson(getApplicationContext(), localJson, parent);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            adp.remove(myList.get(idx));
+            // adp.setNotifyOnChange(true); // TODO - test this for auto notify ??
+        }
+        adp.notifyDataSetChanged();
+        if (needShuffleListRefresh) {
+            utils.setWPShuffleCandidates(getApplicationContext(), myList);
+        }
+    }
+
+    /**
+     * Undo deletion listener called by SnackBar
+     */
+    final View.OnClickListener undoListener = new View.OnClickListener() {
+
+        @Override
+        public void onClick(View view) {
+            Log.i("HFCM", "Undo clicked...");
+            // TODO: implement - see comments in deleteItems()
+        }
+    };
+
+
+    /**
+     *
+     */
     public void terminateApp() {
         // see also
         // https://developer.android.com/guide/components/activities/tasks-and-back-stack.html
@@ -2767,6 +2819,21 @@ public class MainActivity extends AppCompatActivity
     }
 
 
+    /**
+     * Used for debugging date issues
+     * TODO: investigate 03 + 04.11. clock is 1 hour off... ( https://www.epochconverter.com/ )
+     * This could be put into utils.java...
+     */
+    private void listItemsDateInfo() {
+
+        SimpleDateFormat fmtCHECK = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss", loc);
+        fmtCHECK.setTimeZone(tzNASA);
+        for (spaceItem item : myList) {
+            Log.i("HFCM", String.format(loc, "%s - %s",
+                    fmtCHECK.format(item.getDateTime()),
+                    item.getTitle()));
+        }
+    }
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2863,7 +2930,7 @@ public class MainActivity extends AppCompatActivity
      * Create a new APOD from information returned in daily NASA JSON
      * @params String
      */
-    void createApodFromJsonString(String s) {
+    /*void createApodFromJsonString(String s) {
 
         // Step 1: create the spaceItem object (no hires size, no vimeo thumb url, no thumb)
         // this needs no async processing at all
@@ -2876,7 +2943,7 @@ public class MainActivity extends AppCompatActivity
 
         // Local copy of original apod nasa json file now in utils.createSpaceItemFromJsonString()
 
-        // TODO: check, if the following could be moved into checkMissingThumbs - this would allow
+        // check, if the following could be moved into checkMissingThumbs - this would allow
         // to use checkMissingThumbs to be called after all json/list activities to get details
         if (sMediaType.equals(M_VIMEO)) {
             // Insert query for vimeo thumbnail URL via oembed API which then triggers img_lowres load
@@ -2892,7 +2959,7 @@ public class MainActivity extends AppCompatActivity
             // actually, lowres is just for thumbnail
             new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(imgUrl);
         }
-    }
+    }*/
 
 
     /**
@@ -2900,7 +2967,7 @@ public class MainActivity extends AppCompatActivity
      * contained, we kick of a loader thread, which gets the image file from the given lowres
      * URL and saves a thumbnail file.
      */
-    public void checkMissingThumbs() {
+    /*public void checkMissingThumbs() {
         int count = 0;
         for(int i=0; i<myList.size(); i++) {
             // TODO: handle VIMEO here - just do it as in apod, so vimeo info is extracted
@@ -2923,13 +2990,13 @@ public class MainActivity extends AppCompatActivity
             Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, count),
                     Toast.LENGTH_LONG).show();
         }
-    }
+    }*/
 
 
     /**
      * @param bitmap bitmap object of the lowres image - used for thumbnail creation
      */
-    void finalizeApodWithLowresImage(Bitmap bitmap) {
+    /*void finalizeApodWithLowresImage(Bitmap bitmap) {
         // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
         // item should match anyway, because latest image is on top of the list.
         for (spaceItem item : myList) {
@@ -2976,9 +3043,7 @@ public class MainActivity extends AppCompatActivity
         Toast.makeText(MainActivity.this, R.string.apod_load,
                 Toast.LENGTH_LONG).show();
         myItemsLV.setSelection(0);
-    }
-
-
+    }*/
 
 
 
@@ -3007,7 +3072,7 @@ public class MainActivity extends AppCompatActivity
         if (sHiresUrl.equals("") && sMediaType.equals("image")) {
             new dialogDisplay(this,
                     "APOD does not have a link to hires image, will need to fallback to lowres",
-                    "Herbert TODO");
+                    "Herbert to be done");
         }
 
         // At this point sMediaType contains the NASA delivered string. This gets changed now to

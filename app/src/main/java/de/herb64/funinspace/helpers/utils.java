@@ -8,7 +8,6 @@ import android.graphics.BitmapFactory;
 import android.graphics.BitmapRegionDecoder;
 import android.net.CaptivePortal;
 import android.net.ConnectivityManager;
-import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkInfo;
 import android.net.RouteInfo;
@@ -540,19 +539,22 @@ public final class utils {
      *  Cleanup: - remove any orphaned wallpaper/thumbnail/hires image files
      *           - remove hires images if max space exceeded (size and rating dependent)
      *           - TODO: removing local json copies of nasa data (maybe those older than 100 days)
-     *                   note, that these are lost forever
-     *           - TODO: What if too many wallpaper files eating up memory?
+     *                   note, that these are lost forever after deletion. But on any user device
+     *                   they are not needed at all...
+     *           - TODO: handle too many wallpaper files eating up memory
      * @param ctx context
      * @param items arraylist with spaceitems
-     * @param maxHdMem memory Limit in KiB that triggers cleanup
+     * @param maxPercent memory Limit in percent of free available internal memory
      * @param skip index in item list to skip from deletion (-1: none
      * @return formatted string with results on cleanup
      */
-    public static ArrayList<Integer> cleanupFiles(Context ctx, ArrayList<spaceItem> items, long maxHdMem, int skip) {
+    public static ArrayList<Integer> cleanupFiles(Context ctx, ArrayList<spaceItem> items, int maxPercent, int skip) {
         // filenamefilter does not allow wildcard... could use java.nio.file... but not avail..
+        long maxHdMem = getAvailableInternalMem() * maxPercent / 102400;
+        Log.i("HFCM", "avail bytes: " + getAvailableInternalMem() + ", percent: " + maxPercent + ", resulting max KIB:" + maxHdMem);
 
         //String logString = "";
-        logAppend(ctx, MainActivity.DEBUG_LOG, "Starting file cleanup");
+        logAppend(ctx, MainActivity.DEBUG_LOG, "Starting file cleanup with maxHdMem " + maxHdMem + "KiB");
         // Create array lists of all th/wp/hd files in filesystem - potential orphans list
         ArrayList<String> orphans = new ArrayList<>();
         File dir = new File(ctx.getFilesDir().getPath());
@@ -576,12 +578,11 @@ public final class utils {
         usedHdMem /= 1024;
 
         if (orphans.size() > 0) {
-            logAppend(ctx, MainActivity.DEBUG_LOG, orphans.size() + " orphaned files to remove");
+            logAppend(ctx, MainActivity.DEBUG_LOG, "cleanupFiles(): " + orphans.size() + " orphaned files to remove");
         }
         for (String fn : orphans) {
             File todelete = new File(ctx.getFilesDir(), fn);
             Log.i("HFCM", "Deleting orphaned file: " + fn);
-            //logString += fn + "\n";
             if (!todelete.delete()) {
                 Log.e("HFCM", "Error deleting orphaned file: " + todelete);
             }
@@ -1285,18 +1286,27 @@ public final class utils {
     }
 
     /**
-     * Get internal memory available to application
+     * Get internal memory available to application - API18 introduced changes/deprectations
      * @return internal memory in bytes
      */
     public static long getAvailableInternalMem() {
         File path = Environment.getDataDirectory();
         StatFs stat = new StatFs(path.getPath());
-        /* Just for comparing results
-        long blockSize = stat.getBlockSizeLong();
-        long availBlocks = stat.getAvailableBlocksLong();
-        long a = stat.getAvailableBytes();
-        long b = availBlocks * blockSize;*/
-        return stat.getAvailableBytes();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            return stat.getAvailableBytes();
+        } else {
+            /*Just for comparing results
+            long blockSize = stat.getBlockSizeLong();
+            long availBlocks = stat.getAvailableBlocksLong();
+            long a = stat.getAvailableBytes();
+            long b = availBlocks * blockSize;*/
+            //noinspection deprecation
+            int blockSize = stat.getBlockSize();
+            //noinspection deprecation
+            int availBlocks = stat.getAvailableBlocks();
+            return blockSize * availBlocks;
+        }
+
     }
 
     /**
@@ -1306,12 +1316,20 @@ public final class utils {
     public static long getTotalInternalMem() {
         File path = Environment.getDataDirectory();
         StatFs stat = new StatFs(path.getPath());
-        /* Just for comparing results
-        long blockSize = stat.getBlockSizeLong();
-        long totalBlocks = stat.getBlockCountLong();
-        long a = stat.getTotalBytes();
-        long b = totalBlocks * blockSize;*/
-        return stat.getTotalBytes();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            return stat.getTotalBytes();
+        } else {
+            /* Just for comparing results
+            long blockSize = stat.getBlockSizeLong();
+            long totalBlocks = stat.getBlockCountLong();
+            long a = stat.getTotalBytes();
+            long b = totalBlocks * blockSize;*/
+            //noinspection deprecation
+            int blockSize = stat.getBlockSize();
+            //noinspection deprecation
+            int totalBlocks = stat.getBlockCount();
+            return blockSize * totalBlocks;
+        }
     }
 
 

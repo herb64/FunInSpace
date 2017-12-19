@@ -23,6 +23,16 @@
         android:summary="@string/hires_save_summary"
         android:title="@string/hires_save_title" />
 
+    <!-- Just as a test, works, but not nice in terms of font size, indenting, and warning
+         about not being allowed by inspection...
+    <SeekBarPreference
+        android:key="hires_max_mem"
+        android:title="Hires memory limit"
+        android:summary="The maximum memory to be used in percent of currently free internal memory."
+        android:max="100"
+        android:defaultValue="20" />
+        -->
+
     <SwitchPreference
         android:defaultValue="false"
         android:key="wallpaper_shuffle"

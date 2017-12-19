@@ -211,7 +211,7 @@ public class apodJobService extends JobService {
             Log.i("HFCM", jobInfo.toString());
 
             String logentry = String.format(Locale.getDefault(),
-                    "schedNext: %d, Time to next APOD: %.1f hours + random delay of " + random + "ms",
+                    "schedNext: %d, Time to next APOD: %.1f hours + random delay of " + random/1000 + " seconds",
                     count + 1, (float)data.get(2)/3600000f);
             utils.logAppend(getApplicationContext(),
                     MainActivity.DEBUG_LOG,

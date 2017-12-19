@@ -114,7 +114,9 @@
         gespeicherte Bilder werden hierdurch nicht verändert.</string>
     <string name="df_summary">Wähle ein Datumsformat für die Anzeige in der Liste der Bilder.</string>
     <string name="hires_save_summary">Speichert lokale Kopien der hochaufösenden Bilder auf deinem
-        Gerät.\nHinweis: Videos werden immer online gespielt und nicht lokal gespeichert.</string>
+        Gerät.\nHinweis: Videos werden immer online gespielt und nicht lokal gespeichert.
+    Der maximale Speicher ist auf 20% des aktuell freien Speichers eingestellt, danach erfolgt
+    automatisch ein Aufräumen. (Später einstellbare Schwelle)</string>
     <string name="hires_save_title">Bilder lokal speichern</string>
     <string name="rgb565_thumbs_summary">Benutze Thumbnail Bilder in niedrigerer Farbauflösung um Speicher zu sparen.</string>
     <string name="rgb565_thumbs_title">Thumbnail Farbauflösung</string>
@@ -124,6 +126,12 @@
     <string name="wp_shuffle_enabled">Das Hintergrundbild wird in ein paar Sekunden geändert und
         dann jede volle Stunde mit einem zufälligen Bild aus Deinen FunInSpace Hintergründen
         ersetzt. Zwischen 23:00 und 06:00 findet kein Wechsel statt.</string>
+    <string name="wp_shuffle_less_than_two">Das Hintergrundbild wird jede volle Stunde mit einem
+        zufälligen Bild aus Deinen FunInSpace Hintergründen ersetzt.
+        Du hast momentan nicht das Minimum von 2 FunInSpace Hintergründen erstellt, so daß jetzt
+        kein Shuffle stattfindet. Sobald Du 2 Hintergrundbilder erstellt hast, wird die Shuffle
+        Funktion starten.
+        Zwischen 23:00 und 06:00 findet kein Wechsel statt.</string>
     <string name="no_network_for_apod">Ein neues Bild ist zwar verfügbar, aber Du hast keine aktive Netzwerkverbindung. Möglichweise ist der Flugmodus eingeschaltet?</string>
     <string name="no_network_for_hd">Du hast keine aktive Netzwerkverbindung um Bilder oder Videos anzusehen. Möglichweise ist der Flugmodus eingeschaltet?</string>
     <string name="no_network">Keine Netzwerkverbindung</string>

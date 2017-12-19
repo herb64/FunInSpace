@@ -31,6 +31,7 @@ import de.herb64.funinspace.wallPaperActivator;
  * Created by herbert on 11/26/17.
  * MP3 resources:
  * new_wallpaper_1.mp3 https://notificationsounds.com/standard-ringtones/oringz-w427-371
+ * new_wallpaper_2.mp3 - gentle-alarm
  * https://creativecommons.org/licenses/by/4.0/legalcode
  */
 
@@ -122,7 +123,7 @@ public class shuffleJobService extends JobService {
                     .setSmallIcon(R.mipmap.ic_launcher)
                     .setAutoCancel(true)
                     .setSound(Uri.parse("android.resource://"
-                            + this.getPackageName() + "/" + R.raw.new_wallpaper_1))
+                            + this.getPackageName() + "/" + R.raw.new_wallpaper_2))
                     //.setVibrate()
                     //.setVisibility(Notification.VISIBILITY_PUBLIC)
                     .build();
@@ -206,8 +207,8 @@ public class shuffleJobService extends JobService {
             SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
             ArrayList<Long> data = utils.getNASAEpoch(sharedPref.getLong("LATEST_APOD_EPOCH", 0));
             String logentry = String.format(loc,
-                    "schedNext: %d, Time to next Shuffle: %.1f hour(s)",
-                    count + 1, (float)minDelay/3600000f);
+                    "schedNext: %d, Time to next Shuffle: %d seconds",
+                    count + 1, minDelay/1000);
             utils.logAppend(getApplicationContext(),
                     MainActivity.DEBUG_LOG,
                     logentry);
