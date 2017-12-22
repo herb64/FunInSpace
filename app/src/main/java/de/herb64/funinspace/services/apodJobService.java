@@ -34,8 +34,6 @@ import de.herb64.funinspace.helpers.utils;
  * If schedule is reached, this loads the new json metadata information from NASA into a file, that
  * can later be read on startup of the app. This makes sure, that we do not miss any APODs if the
  * app has not been started for some days.
- * TODO - if this schedule is missed and not executed, we miss an item. But this can be "survived"
- * either by the NASA APOD archive search (to be investigated) or by syncing with dropbox.
  */
 
 public class apodJobService extends JobService {
@@ -94,12 +92,6 @@ public class apodJobService extends JobService {
         // Service is destroyed on app close, but is recreated when job is scheduled
 
         Locale loc = Locale.getDefault();
-        /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
-            loc = getResources().getConfiguration().getLocales().get(0);
-        } else{
-            //noinspection deprecation
-            loc = getResources().getConfiguration().locale;
-        }*/
 
         int count = jobParameters.getExtras().getInt("COUNT");
         String actNetType = utils.getActiveNetworkTypeName(getApplicationContext());
@@ -132,8 +124,9 @@ public class apodJobService extends JobService {
                 String.format(loc,
                         MainActivity.APOD_SCHED_PREFIX + "%d.json", epoch),
                 tls);
-        Thread activator = new Thread(loader);
-        activator.start();
+        Thread loaderthread = new Thread(loader);
+        loaderthread.start();
+        //new Thread(loader).start();
 
         // logfile for debugging
         utils.logAppend(getApplicationContext(),
@@ -165,10 +158,8 @@ public class apodJobService extends JobService {
         intent.setAction(MainActivity.BCAST_APOD);
         sendBroadcast(intent);*/
 
-        // TODO Action - for now, just one toast and no reschedule
         Log.i("HFCM", "Job ID " + jobParameters.getJobId() + " now finished");
         jobFinished(jobParameters, false);  // false: need no reschedule, work is done
-        // Schedule next job in chain
         scheduleNext(count, url, epoch);
         return true;    // no more work to be done with this job
     }

@@ -50,6 +50,80 @@
         <item>100</item>
     </string-array>
 
+    <!-- Shuffle wallpaper times -->
+    <string name="wp_shuffle_times">Wallpaper Shuffle Times</string>
+    <string-array name="wp_shuffle_times_titles">
+        <item>00:00</item>
+        <item>01:00</item>
+        <item>02:00</item>
+        <item>03:00</item>
+        <item>04:00</item>
+        <item>05:00</item>
+        <item>06:00</item>
+        <item>07:00</item>
+        <item>08:00</item>
+        <item>09:00</item>
+        <item>10:00</item>
+        <item>11:00</item>
+        <item>12:00</item>
+        <item>13:00</item>
+        <item>14:00</item>
+        <item>15:00</item>
+        <item>16:00</item>
+        <item>17:00</item>
+        <item>18:00</item>
+        <item>19:00</item>
+        <item>20:00</item>
+        <item>21:00</item>
+        <item>22:00</item>
+        <item>23:00</item>
+    </string-array>
+    <string-array name="wp_shuffle_times_values">
+        <item>00</item>
+        <item>01</item>
+        <item>02</item>
+        <item>03</item>
+        <item>04</item>
+        <item>05</item>
+        <item>06</item>
+        <item>07</item>
+        <item>08</item>
+        <item>09</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+    </string-array>
+    <string-array name="wp_shuffle_times_defaults">
+        <item>07</item>
+        <item>08</item>
+        <item>09</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+    </string-array>
+
     <!-- Date format to be displayed in listview for each item - derived from epoch -->
     <string name="df_dd_mm_yyyy">dd.MM.yyyy</string>
     <string name="df_title">Date Format</string>
@@ -186,7 +260,6 @@
     <string name="full_search_explain">Search in explanation text in addition to title only</string>
     <string name="test_mail_text">Just a test email sent by the FunInSpace App. The attachment contains a debugging logfile. TIP: Add yourself as .cc to see, what has been sent.</string>
     <string name="test_mail_subject">Greetings from FunInSpace</string>
-    <string name="credits_first_testers">First pre alpha testers credits: Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger</string>
     <string name="rating">Rating</string>
     <string name="set_as_wallpaper">Set as wallpaper</string>
     <string name="reselect_wallpaper">Choose new wallpaper range</string>
@@ -218,4 +291,9 @@
     <string name="no_network_for_hd">You do not have an active network connection to load the image or video. Maybe flightmode is enabled?</string>
     <string name="no_network">No network connection</string>
     <string name="show_log">Display logfile (debug)</string>
+    <string name="about_credits">Image for MP4 by Gregor Cresnar, https://www.flaticon.com/authors/gregor-cresnar
+        \nRocket icon from https://openclipart.org under Creative Commons Zero 1.0 Public Domain License
+        \nVector graphics from https://material.io/icons
+        \nSounds by https://notificationsounds.com
+    </string>
 </resources>

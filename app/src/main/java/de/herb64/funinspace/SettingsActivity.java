@@ -73,6 +73,9 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
                 if (listPreference.getKey().equals("date_format")) {
                     returnIntent.putExtra("date_format", listPreference.getValue());
                 }
+                if (listPreference.getKey().equals("wp_shuffle_times")) {
+                    returnIntent.putExtra("wp_shuffle_times", listPreference.getValue());
+                }
 
                 // Set the summary to reflect the new value.
                 preference.setSummary(
@@ -211,6 +214,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             // important to have listener called
             //bindPreferenceSummaryToValue(findPreference("item_order"));
             bindPreferenceSummaryToValue(findPreference("date_format"));
+            //bindPreferenceSummaryToValue(findPreference("wp_shuffle_times"));
         }
 
         @Override

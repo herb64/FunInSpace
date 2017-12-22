@@ -42,6 +42,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.Window;
 import android.widget.AbsListView;
 import android.widget.AdapterView;
 import android.widget.ListView;
@@ -123,6 +124,7 @@ public class MainActivity extends AppCompatActivity
     private boolean thumbQualityChanged;    // indicate preference setting change
     private boolean dateFormatChanged;      // important: need true after installation
     private boolean wpShuffleChanged;
+    private boolean wpShuffleTimesChanged;
     private int currentWallpaperIndex = -1;
     protected TimeZone tzNASA;
     protected Calendar cNASA;
@@ -143,7 +145,8 @@ public class MainActivity extends AppCompatActivity
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
 
-    private static final String ABOUT_VERSION = "0.5.8 (alpha)\nBuild Date 2017-12-19\n";
+    //private static final String ABOUT_VERSION = "0.5.8 (alpha)\nBuild Date 2017-12-19\n";
+    // infos now only in build.gradle - utils.getVersionInfo() grabs data for about dialog
 
     // for logcat wrapper - utils.java
     public static final boolean LOGCAT_INFO = false;
@@ -182,7 +185,7 @@ public class MainActivity extends AppCompatActivity
     public static final String BCAST_SHUFFLE = "SHUFFLE";
     public static final int JOB_ID_APOD = 3124;
     public static final String BCAST_APOD = "APOD";
-    public static final int JOB_ID_THUMB = 739574;
+    //public static final int JOB_ID_THUMB = 739574;
     public static final String BCAST_THUMB = "THUMB";
     public static final String DEBUG_LOG = "funinspace.log";
 
@@ -202,11 +205,13 @@ public class MainActivity extends AppCompatActivity
         setSupportActionBar(toolbar);
         //https://developer.android.com/design/patterns/actionbar.html
         ActionBar actbar = getSupportActionBar();
-        actbar.setIcon(R.mipmap.ic_launcher);
-        actbar.setDisplayShowTitleEnabled(false);
-        // We could set our own custom view here as well - not tested... TODO
-        //actbar.setDisplayShowCustomEnabled(true);
-        //actbar.setCustomView();
+        if (actbar != null) {
+            actbar.setIcon(R.mipmap.ic_launcher);
+            actbar.setDisplayShowTitleEnabled(false);
+            // We could set our own custom view here as well - not tested... TODO
+            //actbar.setDisplayShowCustomEnabled(true);
+            //actbar.setCustomView();
+        }
 
         utils.info("onCreate()...........");
         loc = Locale.getDefault();  // see also lalatex docu
@@ -215,6 +220,10 @@ public class MainActivity extends AppCompatActivity
         utils.logAppend(getApplicationContext(), DEBUG_LOG,
                 "**************  APP START **************");
         Log.d("HFCM", "**************************  APP START **************************");
+
+        // just testing
+        float hourstonext = (float)utils.getMsToNextShuffle(getApplicationContext())/3600000f;
+        Log.i("HFCM", String.format(loc, "Next sched in %.1f hours", hourstonext));
 
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // (shared_prefs/de.herb64.funinspace_preferences.xml)
@@ -225,6 +234,7 @@ public class MainActivity extends AppCompatActivity
         dateFormatChanged = !sharedPref.contains("date_format");
         thumbQualityChanged = !sharedPref.contains("rgb565_thumbs");
         wpShuffleChanged = !sharedPref.contains("wallpaper_shuffle");
+        wpShuffleTimesChanged = !sharedPref.contains("wp_shuffle_times");
         sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
 
         // Timezone and Calendar objects used to base our timestamps on current NASA TimeZone
@@ -445,21 +455,6 @@ public class MainActivity extends AppCompatActivity
             public boolean onActionItemClicked(android.view.ActionMode actionMode, MenuItem menuItem) {
                 switch (menuItem.getItemId()) {
                     case R.id.cab_delete:
-                        /* for a confirmation dialog, need to pass 'selected' to the dialog
-                        Bundle fragArgs = new Bundle();
-                        fragArgs.putInt("IDX", selected.get(0));
-                        fragArgs.putString("TITLE",
-                                "Confirm delete");
-                        fragArgs.putString("MESSAGE",
-                                "Are you sure you want to delete...");
-                        fragArgs.putString("POS",
-                                "DELETE");
-                        fragArgs.putString("NEG",
-                                "CANCEL");
-                        FragmentManager fmgr = getSupportFragmentManager();
-                        confirmDialog confirmdlg2 = new confirmDialog();
-                        confirmdlg2.setArguments(fragArgs);
-                        confirmdlg2.show(fmgr, "DELETE");*/
                         deleteItems(selected);
                         // activity_main.xml has CoordinatorLayout as base!
                         final View coordinatorLayoutView = findViewById(R.id.id_coord);
@@ -561,6 +556,12 @@ public class MainActivity extends AppCompatActivity
                                                     Log.w("HFCM", "File delete for wallpaper did not return true");
                                                 }
                                                 myList.get(selected.get(0)).setWpFlag(WP_NONE);
+                                                int numwp = utils.setWPShuffleCandidates(getApplicationContext(), myList);
+                                                if (numwp < 2) {
+                                                    utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                                                            "Wallpaper remove - cancel shuffle due to <2 remaining wallpapers");
+                                                    utils.cancelJob(getApplicationContext(), JOB_ID_SHUFFLE);
+                                                }
                                                 adp.notifyDataSetChanged();
                                             }
                                             break;
@@ -575,10 +576,9 @@ public class MainActivity extends AppCompatActivity
                             return true;
                         }
 
-                        // This is reached for multiple selections, there's only one option: delete
-                        // all wallpapers, if existing for selected elements. No removal of the
-                        // active one. This just removes wp files and updates wp status
-                        // TODO; confirm dialog
+                        // This is reached for multiple selections. There's only one option: delete
+                        // all wallpapers, if status EXISTS for selected elements. No removal of the
+                        // active one. This just removes wp files, updates wp status and job status
                         for (int idx : selected) {
                             if (myList.get(idx).getWpFlag() == WP_EXISTS) {
                                 File wpdel = new File(getApplicationContext().getFilesDir(),
@@ -588,6 +588,12 @@ public class MainActivity extends AppCompatActivity
                                 }
                                 myList.get(idx).setWpFlag(WP_NONE);
                             }
+                        }
+                        int numwp = utils.setWPShuffleCandidates(getApplicationContext(), myList);
+                        if (numwp < 2) {
+                            utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                                    "Wallpaper remove - cancel shuffle due to <2 remaining wallpapers");
+                            utils.cancelJob(getApplicationContext(), JOB_ID_SHUFFLE);
                         }
                         adp.notifyDataSetChanged();
                         return true;
@@ -708,7 +714,7 @@ public class MainActivity extends AppCompatActivity
                 addItems();
                 getScheduledAPODs();
                 getLatestAPOD();
-                listItemsDateInfo();
+                //listItemsDateInfo();
             } else {
                 // FIRST LAUNCH most likely - TODO: offer restore from sd card...
                 Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
@@ -836,10 +842,9 @@ public class MainActivity extends AppCompatActivity
         registerReceiver(receiver, filter);
 
         // Reschedule jobs, that are expected to be active but not running at app start
-        // TODO rework and investigate
-        // TODO: deal with reboot safety as well.. for now it is not set...
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            if (sharedPref.getBoolean("wallpaper_shuffle", false)) {
+            if (sharedPref.getBoolean("wallpaper_shuffle", false) &&
+                    utils.getNumWP(myList) >= 2) {
                 JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
                 List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
                 boolean needReload = true;
@@ -851,7 +856,7 @@ public class MainActivity extends AppCompatActivity
                 if (needReload) {
                     new dialogDisplay(MainActivity.this,
                             "Wallpaper Shuffle has been terminated, although it should be active. Reactivating now...");
-                    scheduleShuffle();
+                    scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
                     utils.logAppend(getApplicationContext(),
                             DEBUG_LOG,
                             "Shuffle schedule found inactive although enabled in settings, restarting...");
@@ -1058,6 +1063,13 @@ public class MainActivity extends AppCompatActivity
                             myList.get((int)o).setWpFlag(WP_ACTIVE);
                             currentWallpaperIndex = (int)o;
                             changeWallpaper(wpfile);
+                            // Enable shuffle if more than 2 WPs present and settings switch is on
+                            if (sharedPref.getBoolean("wallpaper_shuffle", false) &&
+                                    utils.getNumWP(myList) >=2 ) {
+                                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                                        "processConfirmation(pos) - start WP shuffle due to >=2 wallpapers");
+                                scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
+                            }
                         }
                         break;
                     case "INITLAUNCH":
@@ -1083,6 +1095,13 @@ public class MainActivity extends AppCompatActivity
                         myList.get((int)o).setWpFlag(WP_EXISTS);
                         adp.notifyDataSetChanged();
                         utils.setWPShuffleCandidates(getApplicationContext(), myList);
+                        // Enable shuffle if more than 2 WPs present and settings switch is on
+                        if (sharedPref.getBoolean("wallpaper_shuffle", false) &&
+                                utils.getNumWP(myList) >=2 ) {
+                            utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                                    "processConfirmation(neg) - start WP shuffle due to >=2 wallpapers");
+                            scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
+                        }
                         break;
                     case "INITLAUNCH":
                         // TODO - task close does not yet work, if there comes some return from asyncload
@@ -1444,9 +1463,7 @@ public class MainActivity extends AppCompatActivity
                     wpShuffleChanged = false;
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                         boolean shuffle = sharedPref.getBoolean("wallpaper_shuffle", false);
-                        //Log.d("HFCM", "WP Shuffle has changed to " + shuffle);
                         if (shuffle) {
-                            scheduleShuffle();
                             utils.logAppend(getApplicationContext(),
                                     DEBUG_LOG,
                                     "Enabled wallpaper shuffle in settings");
@@ -1456,6 +1473,7 @@ public class MainActivity extends AppCompatActivity
                             } else {
                                 new dialogDisplay(MainActivity.this,
                                         getString(R.string.wp_shuffle_enabled), "DEBUG ONLY!");
+                                scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
                             }
                         } else {
                             JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
@@ -1469,6 +1487,18 @@ public class MainActivity extends AppCompatActivity
                     } else {
                         new dialogDisplay(MainActivity.this,
                                 "Not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
+                    }
+                }
+                if (wpShuffleTimesChanged) {
+                    wpShuffleTimesChanged = false;
+                    long test = utils.getMsToNextShuffle(getApplicationContext());
+                    Log.i("HFCM", "Shuffle times change..." + test);
+                    if (sharedPref.getBoolean("wallpaper_shuffle", false) &&
+                            utils.getNumWP(myList) >= 2) {
+                        scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
+                        utils.logAppend(getApplicationContext(),
+                                DEBUG_LOG,
+                                "Shuffle reschedule due to times reselect");
                     }
                 }
             }
@@ -1500,6 +1530,9 @@ public class MainActivity extends AppCompatActivity
                     }
                     if (changed.equals("wallpaper_shuffle")) {
                         wpShuffleChanged ^= true;
+                    }
+                    if (changed.equals("wp_shuffle_times")) {
+                        wpShuffleTimesChanged ^= true;
                     }
                     if (changed.equals("full_search")) {
                         // this one: just set on each single toggle
@@ -1730,12 +1763,17 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_about) {
-            new dialogDisplay(MainActivity.this, "Version: " + ABOUT_VERSION +
-                    "\nTODO credits:\nflaticons.com for movie_other_64.png\n\n" +
-                    getString(R.string.credits_first_testers) +
-                    utils.getFileStats(getApplicationContext(), loc) +
-                    "\nLimit: " + utils.getAvailableInternalMem() * MAX_HIRES_PERCENT / (1024*1024*100) + " MiB",
-                    "Infos (in development)");
+            // NEW: create a layout for this and a new class AboutDialog
+            // https://www.youtube.com/watch?v=rsKHeuBKnNc
+            // <div>Icons made by <a href="https://www.flaticon.com/authors/gregor-cresnar" title="Gregor Cresnar">Gregor Cresnar</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a> is licensed by <a href="http://creativecommons.org/licenses/by/3.0/" title="Creative Commons BY 3.0" target="_blank">CC 3.0 BY</a></div>
+            // see https://file000.flaticon.com/downloads/license/license.pdf
+            // MP4 movie icon designed by Gregor Cresnar from www.flaticon.com
+            //AboutDialog ad = new AboutDialog(getApplicationContext());
+            AboutDialog ad = new AboutDialog(MainActivity.this);
+            ad.requestWindowFeature(Window.FEATURE_NO_TITLE);   // TODO: docu avoid space on top of window and check more features!!
+            //ad.setTitle("About Fun In Space");
+            //ad.setCancelable(true);
+            ad.show();
             return true;
         }
         if (id == R.id.action_mail) {
@@ -1794,19 +1832,9 @@ public class MainActivity extends AppCompatActivity
         }
         if (id == R.id.action_schedule_apod_json_load) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-                List<JobInfo> allPendingJobs = scheduler.getAllPendingJobs();
-                for (JobInfo pending : allPendingJobs) {
-                    if (pending.getId() == JOB_ID_APOD) {
-                        // we are in pending state, so this means that this action should cancel
-                        // this job
-                        scheduler.cancel(JOB_ID_APOD);
-                        utils.logAppend(getApplicationContext(),
-                                DEBUG_LOG,
-                                "Cancelled APOD Load scheduler");
-                        item.setTitle("Start Schedule APOD (Debug)");
-                        return true;
-                    }
+                if (utils.cancelJob(getApplicationContext(), JOB_ID_APOD)) {
+                    item.setTitle("Start Schedule APOD (Debug)");
+                    return true;
                 }
                 // Reaching this point, job id was not in the pending job list, so start it
                 scheduleApod();
@@ -2503,15 +2531,16 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * Schedule the initial wallpaper shuffle. This one is run within a short deadline, just to
-     * be able to see if it works.
+     * Schedule the initial wallpaper shuffle.
      */
-    private void scheduleShuffle() {
+    private void scheduleShuffle(long minLatency) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                    "scheduleShuffle() - scheduling SHUFFLE for " + minLatency/1000 + " seconds");
             ComponentName serviceComponent = new ComponentName(this, shuffleJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_SHUFFLE, serviceComponent);
-            builder.setMinimumLatency(5000);
-            builder.setOverrideDeadline(10000);
+            builder.setMinimumLatency(minLatency);
+            builder.setOverrideDeadline(minLatency + 15000);
             PersistableBundle extras = new PersistableBundle();
             extras.putInt("COUNT", 1);
             builder.setExtras(extras);
@@ -2545,7 +2574,7 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    private void scheduleThumbLoader(String[] urls) {
+    /*private void scheduleThumbLoader(String[] urls) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             ComponentName serviceComponent = new ComponentName(this, thumbLoaderJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_THUMB, serviceComponent);
@@ -2559,7 +2588,7 @@ public class MainActivity extends AppCompatActivity
             JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
             sched.schedule(jobInfo);
         }
-    }
+    }*/
 
     /**
      * Called) at end of the "APODchain", if the initial
@@ -2725,7 +2754,12 @@ public class MainActivity extends AppCompatActivity
         }
         adp.notifyDataSetChanged();
         if (needShuffleListRefresh) {
-            utils.setWPShuffleCandidates(getApplicationContext(), myList);
+            int numwp = utils.setWPShuffleCandidates(getApplicationContext(), myList);
+            if (numwp < 2) {
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "deleteItems() - cancel shuffle due to <2 remaining wallpapers");
+                utils.cancelJob(getApplicationContext(), JOB_ID_SHUFFLE);
+            }
         }
     }
 

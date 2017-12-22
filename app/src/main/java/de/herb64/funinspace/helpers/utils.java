@@ -1,8 +1,12 @@
 package de.herb64.funinspace.helpers;
 
+import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapRegionDecoder;
@@ -39,6 +43,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Array;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.Socket;
@@ -49,13 +54,17 @@ import java.text.SimpleDateFormat;
 // import java.time.ZoneId;             API26+ required
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
@@ -502,6 +511,64 @@ public final class utils {
     }
 
     /**
+     * Get the milliseconds to next shuffle full hour based on configured times in preferences
+     * This is rounded to seconds, but this is by far enough
+     * @param ctx context
+     * @return milliseconds to next shuffle
+     */
+    public static long getMsToNextShuffle(Context ctx) {
+        TimeZone tzSYS = TimeZone.getDefault();
+        Calendar cSYS = Calendar.getInstance(tzSYS);
+        String[] hhmmss = String.format(Locale.getDefault(), "%d-%d-%d",
+                cSYS.get(Calendar.HOUR_OF_DAY),
+                cSYS.get(Calendar.MINUTE),
+                cSYS.get(Calendar.SECOND)).split("-");
+        Log.i("HFCM", "Having hour string of '" + hhmmss[0] + "'");
+        int currentHour = Integer.decode(hhmmss[0]);
+        int nextHour = currentHour < 23 ? currentHour + 1 : 0;
+        // this does not take current milliseconds into account, it is rounded to full seconds
+        long msToNextFull = 3600000 -
+                Integer.decode(hhmmss[1]) * 60000 -
+                Integer.decode(hhmmss[2]) * 1000;
+
+        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(ctx);
+
+        Set<String> shtimes = sharedPref.getStringSet("wp_shuffle_times", new HashSet<String>());
+        if (shtimes.size() == 0) {
+            return 0;
+        }
+        ArrayList<Integer> ints = new ArrayList<>();
+        for (String s : shtimes) {
+            ints.add(Integer.parseInt(s));
+        }
+        Collections.sort(ints, new Comparator<Integer>() {
+            @Override
+            public int compare(Integer a, Integer b) {
+                return a.compareTo(b);
+            }
+        });
+
+        for (int start : ints) {
+            if (nextHour == start) {
+                return msToNextFull;
+            } else if (nextHour < start) {
+                return msToNextFull + 3600000 * (start - nextHour);
+            }
+        }
+        return msToNextFull + 3600000 * (ints.get(0) - nextHour + 24);
+
+        /*for (int i = 0; i<act.length; i++) {
+            int start = Integer.parseInt(act[i]);
+            if (nextHour == start) {
+                return msToNextFull;
+            } else if (nextHour < start) {
+                return msToNextFull + 3600000 * (start - nextHour);
+            }
+        }
+        return msToNextFull + 3600000 * (Integer.decode(act[0]) - nextHour + 24);*/
+    }
+
+    /**
      * Get informations on existing files (thumbs, wallpapers, hires) and their memory use. This
      * can be displayed in the about dialog.
      * @return  formatted string containing the infos for display
@@ -527,7 +594,7 @@ public final class utils {
                 sHd +=  file.length();
             }
         }
-        return String.format(loc, "\n\nUsed image memory:\nThumbnails: %d files, %.2f MB" +
+        return String.format(loc, "Thumbnails: %d files, %.2f MB" +
                         "\nWallpapers: %d files, %.2f MB" +
                         "\nHires: %d files, %.2f MB",
                 nTh, (float)sTh/1048576f,
@@ -643,6 +710,30 @@ public final class utils {
     }
 
     /**
+     * Cancel a running job
+     * @param ctx context
+     * @param jobId job id
+     * @return true, if job was cancelled
+     */
+    public static boolean cancelJob(Context ctx, int jobId) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            JobScheduler sched = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            List<JobInfo> allPendingJobs = sched.getAllPendingJobs();
+            for (JobInfo pending : allPendingJobs) {
+                if (pending.getId() == jobId) {
+                    sched.cancel(jobId);
+                    utils.logAppend(ctx,
+                            MainActivity.DEBUG_LOG,
+                            "cancelJob() - jobid: " + jobId);
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
+    }
+
+    /**
      * @param ctx
      */
     public static void cancelAllJobs(Context ctx) {
@@ -660,11 +751,13 @@ public final class utils {
      * TODO: building the string: what about that "unflattenFromString stuff to be used?"
      * @param ctx context
      * @param items arraylist of space items
+     * @return number of existing wallpapers
      */
-    public static void setWPShuffleCandidates(Context ctx, ArrayList<spaceItem> items) {
+    public static int setWPShuffleCandidates(Context ctx, ArrayList<spaceItem> items) {
         //Set<String> wpSet = new HashSet<>(); > HashSet is not randomly selectable!
         String wpString = "";
         //logAppend(ctx, MainActivity.DEBUG_LOG, "WP_SELECT_LIST update ...");
+        int count = 0;
         for (spaceItem item : items) {
             if (item.getWpFlag() >= MainActivity.WP_EXISTS) {
                 // Rating increases chance to be selected - added to each filename as prefix
@@ -672,20 +765,22 @@ public final class utils {
                         "%d:%s*",
                         item.getRating(),
                         item.getThumb().replace("th_", "wp_"));
+                count++;
             }
         }
         SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(ctx);
         SharedPreferences.Editor editor = sharedPref.edit();
         editor.putString("WP_SELECT_LIST", wpString);
         editor.apply();
+        return count;
     }
 
     /**
      * Return a random wallpaper filename from the information contained in default shared prefs
      * in WP_SELECT_LIST key. This is a special formatted string to be parsed, including information
      * on rating.
-     * @param ctx
-     * @return
+     * @param ctx context
+     * @return string with filename of selected random wallpaper
      */
     public static String getRandomWpFileName(Context ctx) {
         SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(ctx);
@@ -1332,6 +1427,24 @@ public final class utils {
         }
     }
 
+    /**
+     * Get Version infos as defined in build.gradle
+     * @param ctx context
+     * @return String with version and build info
+     */
+    public static String getVersionInfo(Context ctx) {
+        String pkgName = ctx.getPackageName();
+        PackageInfo pkgInfo;
+        try {
+            pkgInfo = ctx.getPackageManager().getPackageInfo(pkgName, 0);
+            //ApplicationInfo inf = pkgInfo.applicationInfo;
+            String infos = "Version: " + pkgInfo.versionName + ", Build: " + pkgInfo.versionCode;
+            return infos;
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+            return "Missing version infos";
+        }
+    }
 
     ///////////////// J U S T   S O M E   J U N K  /////////////////////////////////////////////////
     // stuff to check

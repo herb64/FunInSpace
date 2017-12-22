@@ -181,7 +181,8 @@ public class shuffleJobService extends JobService {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             ComponentName serviceComponent = new ComponentName(this, shuffleJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_SHUFFLE, serviceComponent);
-            long minDelay = utils.getMsToNextFullHour(loc);
+
+            /*long minDelay = utils.getMsToNextFullHour(loc);
             // at 23:00, keep night calm and schedule for next day 06:00
             TimeZone tzSYS = TimeZone.getDefault();
             Calendar cSYS = Calendar.getInstance(tzSYS);
@@ -190,7 +191,11 @@ public class shuffleJobService extends JobService {
             Log.i("HFCM", "Having hour string of '" + hh + "'");
             if (hh.equals("23")) {
                 minDelay += 3600000 * 6;
-            }
+            }*/
+
+            // Fixed and improved to use shared prefs "wp_shuffle_times"
+            long minDelay = utils.getMsToNextShuffle(getApplicationContext());
+
             builder.setMinimumLatency(minDelay);
             builder.setOverrideDeadline(minDelay + 15000);  // TODO: why is deadline needed?
             builder.setPersisted(true);                     // See also manifest!!
