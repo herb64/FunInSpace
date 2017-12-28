@@ -13,8 +13,10 @@
     <header
         android:fragment="de.herb64.funinspace.SettingsActivity$DebugPreferenceFragment"
         android:icon="@drawable/ic_bug_report_black_24px"
+        android:summary="@string/pref_debug_summary"
         android:title="@string/pref_debug" />
 
+    <!--
     <header
         android:fragment="de.herb64.funinspace.SettingsActivity$NotificationPreferenceFragment"
         android:icon="@drawable/ic_notifications_black_24dp"
@@ -24,5 +26,6 @@
         android:fragment="de.herb64.funinspace.SettingsActivity$DataSyncPreferenceFragment"
         android:icon="@drawable/ic_sync_black_24dp"
         android:title="@string/pref_header_data_sync" />
+        -->
 
 </preference-headers>

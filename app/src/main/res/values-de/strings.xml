@@ -52,7 +52,8 @@
     <string name="wallpaper_quality">Qualität für Hintergrundbild</string>
     <string name="hires_no_wifi">WLAN ist benötigt, um hochauflösende Bilder und Videos zu laden.
         Im Moment hast Du keine aktive WLAN Verbindung. Du kannst in den Einstellungen wählen, ob
-        Du das Laden auch ohne WLAN erlauben möchtest.</string>
+        Du das Laden auch ohne WLAN erlauben möchtest. Sollen die Einstellungen jetzt angepaßt werden?
+        Du kannst die Einstellung jederzeit wieder ändern.</string>
     <string name="wp_no_delete_active">Das Bild \'%s\' ist Dein aktuelles Hintergrundbild. Es wird nicht gelöscht.</string>
     <string name="wp_confirm_dlg_msg">Möchtest Du \'%s\' als neues Hintergrundbild setzen?</string>
     <string name="wp_confirm_dlg_title">Hintergrund ändern?</string>
@@ -121,7 +122,7 @@
     <string name="rgb565_thumbs_title">Thumbnail Farbauflösung</string>
     <string name="apod_already_loaded">Bild des Tages bereits geladen. Nächstes Bild in %.1f Stunden verfügbar.</string>
     <string name="email_log">Email Log an Herbert</string>
-    <string name="search_nasa_archive">Suche NASA Archiv (inaktiv)</string>
+    <string name="search_nasa_archive">Suche NASA Archiv (zukünftig)</string>
     <string name="wp_shuffle_enabled">Das Hintergrundbild wird in ein paar Sekunden geändert und
         dann jede volle Stunde mit einem zufälligen Bild aus Deinen FunInSpace Hintergründen
         ersetzt. Zwischen 23:00 und 06:00 findet kein Wechsel statt.</string>
@@ -135,4 +136,6 @@
     <string name="no_network_for_hd">Du hast keine aktive Netzwerkverbindung um Bilder oder Videos anzusehen. Möglichweise ist der Flugmodus eingeschaltet?</string>
     <string name="no_network">Keine Netzwerkverbindung</string>
     <string name="show_log">Logdatei anzeigen (debug)</string>
+    <string name="action_slide_show">Bilder Show (zukünftig)</string>
+    <string name="pref_debug_summary">Diese Einstellungen sind nur für Testzwecke (Debugging) vorgesehen.</string>
 </resources>

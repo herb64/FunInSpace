@@ -210,6 +210,42 @@ public class deviceInfo {
                 sdkVersion);
     }
 
+    /**
+     * Get infos to be put into the debug log file
+     * @return
+     */
+    public String getLogInfo() {
+        getMemoryInfo(true, false, false);
+        return String.format(loc, "Brand/Model: %s / %s, " +
+                        "Prod: %s, " +
+                        "Dev: %s, " +
+                        "Rel: %s, " +
+                        "Dev SDK Vers: %s, " +
+                        "Tot/AvailMem: %.2f/%.2f MiB, " +
+                        "Thrshld: %.2f MiB, " +
+                        "LowMem: %b, " +
+                        "MemCls: %d MiB, " +
+                        "LargeMemCls: %d MiB, " +
+                        "IsLowRamDev: %s, " +
+                        "MaxAlloc:  %d, " +
+                        "Max Tex Size: %d",
+                brand,
+                model,
+                product,
+                device,
+                release,
+                sdkVersion,
+                totalMem,
+                availMem,
+                threshold,
+                lowMemory,
+                memClass,
+                largeMemClass,
+                lowRamDev,
+                maxAlloc,
+                maxTexSize);
+    }
+
     public String getActMgrMemoryInfo(boolean bRefresh) {
         if (bRefresh) {
             getMemoryInfo(true, false, false);

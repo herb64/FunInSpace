@@ -226,7 +226,8 @@
     <string name="restore_original_wallpaper">Restore Original Wallpaper</string>
     <string name="hires_no_wifi">A WiFi connection is needed to load video or hires images to save
         bandwidth. You do not have a WiFi connection currently. You can adjust your settings
-    to allow loading video or hires images without WiFi as well.</string>
+    to allow loading video or hires images without WiFi as well. Should the setting be changed now?
+    You can change this setting at any time.</string>
     <string name="wp_no_delete_active">Image \'%s\' is your current wallpaper. This will not be deleted.</string>
     <string name="wp_confirm_dlg_msg">Do you want to set \'%s\' as your new wallpaper?</string>
     <string name="wp_confirm_dlg_title">Change wallpaper?</string>
@@ -279,7 +280,7 @@
     <string name="rgb565_thumbs_title">Thumbnail color quality</string>
     <string name="apod_already_loaded">Image of today already loaded. Next image available in %.1f hours</string>
     <string name="email_log">Email log to Herbert</string>
-    <string name="search_nasa_archive">Search NASA Archive (inactive)</string>
+    <string name="search_nasa_archive">Search NASA Archive (future)</string>
     <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper in a few seconds and then every full hour, also if the app user interface is closed.
     Between 23:00 and 06:00, no shuffle is done.</string>
     <string name="wp_shuffle_less_than_two">Schedule has been set to change the wallpaper every
@@ -296,4 +297,6 @@
         \nVector graphics from https://material.io/icons
         \nSounds by https://notificationsounds.com
     </string>
+    <string name="action_slide_show">Slide Show (future)</string>
+    <string name="pref_debug_summary">These settings are meant for testing and debugging purposes only.</string>
 </resources>

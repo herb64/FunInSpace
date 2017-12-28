@@ -184,6 +184,7 @@ public final class utils {
      * @param content the string to be appended
      */
     public static void logAppend(Context ctx, String filename, String content) {
+        info(content);
         if (ctx == null) {
             return;
         }
@@ -211,6 +212,7 @@ public final class utils {
      * @param start epoch value in ms since 1.1.1970 - base for calculating time difference
      */
     public static void logAppend(Context ctx, String filename, String content, long start) {
+        info(content);
         if (ctx == null) {
             return;
         }

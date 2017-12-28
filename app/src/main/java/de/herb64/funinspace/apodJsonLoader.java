@@ -69,7 +69,6 @@ public class apodJsonLoader implements Runnable {
      */
     @Override
     public void run() {
-        //Locale loc = Locale.getDefault();
         HttpsURLConnection conn = null;
         BufferedReader reader = null;
         try {
@@ -93,7 +92,10 @@ public class apodJsonLoader implements Runnable {
                 mybuilder.append(jsonstring);
             }
             // TODO: verify epoch in filename against datetime contained within json file
-            //       THIS MUST MATCH, ELSE ERROR!!!
+            //       THIS MUST MATCH, ELSE ERROR!!! This should handle the problem of the "old"
+            //       json returned as found on 21.12.2017. In this case: how could we reschedule
+            //       the loader? Otherwise, the day could be lost, if the app is not started that day
+
             utils.writef(ctx, file2save, mybuilder.toString());
             utils.logAppend(ctx,
                     MainActivity.DEBUG_LOG,

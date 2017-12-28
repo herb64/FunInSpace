@@ -134,6 +134,8 @@ public class MainActivity extends AppCompatActivity
     private NetworkBcastReceiver networkReceiver = null;
     private int unfinishedApods = 0;
 
+    private ArrayList<Integer> selected;    // keep track of selected items
+
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {System.loadLibrary("hfcmlib");}
     public native String yT();
@@ -213,17 +215,23 @@ public class MainActivity extends AppCompatActivity
             //actbar.setCustomView();
         }
 
-        utils.info("onCreate()...........");
         loc = Locale.getDefault();  // see also lalatex docu
 
         long starttime = System.currentTimeMillis();
         utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                "**************  APP START **************");
+                "**************  APP START (onCreate) **************");
         Log.d("HFCM", "**************************  APP START **************************");
 
         // just testing
         float hourstonext = (float)utils.getMsToNextShuffle(getApplicationContext())/3600000f;
         Log.i("HFCM", String.format(loc, "Next sched in %.1f hours", hourstonext));
+
+        if (savedInstanceState != null) {
+            selected = savedInstanceState.getIntegerArrayList("selecteditems");
+            Log.i("HFCM", "Restored instance state, selected = " + selected);
+        } else {
+            selected = new ArrayList<>();
+        }
 
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // (shared_prefs/de.herb64.funinspace_preferences.xml)
@@ -280,6 +288,8 @@ public class MainActivity extends AppCompatActivity
         // onCreate() and even the Toast within onActivityResult shows the correct values
 
         devInfo = new deviceInfo(getApplicationContext());
+        utils.logAppend(getApplicationContext(), DEBUG_LOG, devInfo.getLogInfo());
+
         myItemsLV = (ListView) findViewById(R.id.lv_content);
 
         // --------  Option 1 for  contextual action mode (non multi select) ---------
@@ -346,7 +356,7 @@ public class MainActivity extends AppCompatActivity
         // https://www.youtube.com/watch?v=kyErynku-BM  (Prabeesh R K)
         myItemsLV.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE_MODAL);
         myItemsLV.setMultiChoiceModeListener(new AbsListView.MultiChoiceModeListener() {
-            private ArrayList<Integer> selected;    // keep track of selected items
+            //private ArrayList<Integer> selected;    // keep track of selected items
 
             @Override
             public void onItemCheckedStateChanged(android.view.ActionMode actionMode,
@@ -380,7 +390,7 @@ public class MainActivity extends AppCompatActivity
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
-                selected = new ArrayList<>();
+                //selected = new ArrayList<>();
                 /* Just for keeping track of actions
                 // Trying to display the RatingBar within CAB, similar to SearchView in main bar
                 // this fails, see lalatex doc for details: RatingBar within Contextual Action Bar*/
@@ -686,6 +696,7 @@ public class MainActivity extends AppCompatActivity
             addItems();
             maxTextureSize = savedInstanceState.getInt("maxtexsize");
             devInfo.setGlMaxTextureSize(maxTextureSize);
+            //selected = savedInstanceState.getIntegerArrayList("selecteditems");
         } else {
             jsonData = null;
             File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
@@ -876,6 +887,7 @@ public class MainActivity extends AppCompatActivity
     protected void onDestroy() {
         // https://stackoverflow.com/questions/18821481/what-is-the-correct-order-of-calling-superclass-methods-in-onpause-onstop-and-o
         // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
+        utils.info("onDestroy() .....");
         if (receiver != null) {
             unregisterReceiver(receiver);
             receiver = null;
@@ -894,6 +906,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onStart() {
         super.onStart(); // before own code for start
+        utils.info("onStart() .....");
         Log.i("HFCM", "onStart()...........");
     }
 
@@ -903,6 +916,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onStop() {
         // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
+        utils.info("onStop() .....");
         if (tts != null && tts.isSpeaking()) {
             tts.stop();
         }
@@ -917,6 +931,7 @@ public class MainActivity extends AppCompatActivity
     protected void onPause() {
         // actions here TODO: unregisterOnSharedPreferenceChangeListener
         // https://developer.android.com/guide/topics/ui/settings.html
+        utils.info("onPause() .....");
         super.onPause();
     }
 
@@ -926,6 +941,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onResume() {
         super.onResume();
+        utils.info("onResume() .....");
         // actions here TODO: registerOnSharedPreferenceChangeListener
         // https://developer.android.com/guide/topics/ui/settings.html
     }
@@ -948,6 +964,8 @@ public class MainActivity extends AppCompatActivity
         // add the jsonData String, from which we then regenerate the JSONArray parent object
         outState.putString("jsonData",jsonData);
         outState.putInt("maxtexsize", maxTextureSize);
+        outState.putIntegerArrayList("selecteditems", selected);
+        Log.i("HFCM", "Saving instance state, selected = " + selected);
     }
 
     /*@Override
@@ -1083,6 +1101,14 @@ public class MainActivity extends AppCompatActivity
                     //case "DROPBOX_REFRESH":
                     //    new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
                     //    break;
+
+                    case "NOWIFI-ACCEPT":
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        editor.putBoolean("wifi_switch", false);
+                        editor.apply();
+                        processThumbClick((int)o);
+                        break;
+
                     default:
                         break;
                 }
@@ -1173,6 +1199,7 @@ public class MainActivity extends AppCompatActivity
         public void onClick(View view) {
             // if (view.getTag() instanceof View) {}  // TODO DOCU - tag can be a view as well
             int idx = (int) view.getTag();  // for "filtered" view - index into full list!
+
             // If a local copy for hires image exists, "misuse" hiresUrl to pass filename instead
             String hiresFileBase = myList.get(idx).getThumb().replace("th_", "");
             File hiresFile = new File(getApplicationContext().getFilesDir(), "hd_" + hiresFileBase);
@@ -1182,17 +1209,35 @@ public class MainActivity extends AppCompatActivity
             } else {
                 hiresUrl = myList.get(idx).getHires();
             }
-            String media = myList.get(idx).getMedia();
+            //String media = myList.get(idx).getMedia();
+
             // Decide, if we want to proceed if no WiFi is active (local image load no problem)
             // TODO maybe exchange with utils getActiveNetworkType() for wifi check - but is ok!!
-            if (sharedPref.getBoolean("wifi_switch", true)
-                    //&& !devInfo.isWifiActive()
+            if (sharedPref.getBoolean("wifi_switch", false)
                     && !(utils.getActiveNetworkType(getApplicationContext()) == ConnectivityManager.TYPE_WIFI)
                     && hiresUrl.startsWith("http")) {
-                new dialogDisplay(MainActivity.this, getString(R.string.hires_no_wifi), "No Wifi");
+                //new dialogDisplay(MainActivity.this, getString(R.string.hires_no_wifi), "No Wifi");
+
+                Bundle fragArguments = new Bundle();
+                fragArguments.putString("TITLE",
+                        "No Wifi");
+                fragArguments.putString("MESSAGE",
+                        getString(R.string.hires_no_wifi));
+                fragArguments.putString("NEG",
+                        getString(R.string.hfcm_cancel));
+                fragArguments.putString("POS",
+                        getString(R.string.hfcm_yes));
+                fragArguments.putInt("IDX", idx);
+                FragmentManager fm = getSupportFragmentManager();
+                confirmDialog confirmdlg = new confirmDialog();
+                confirmdlg.setArguments(fragArguments);
+                confirmdlg.show(fm, "NOWIFI-ACCEPT");
                 return;
             }
 
+            processThumbClick(idx);
+
+            /*
             if (!utils.isNetworkConnected(getApplicationContext())) {
                 new dialogDisplay(MainActivity.this,
                         getString(R.string.no_network_for_hd),
@@ -1245,7 +1290,7 @@ public class MainActivity extends AppCompatActivity
                 default:
                     new dialogDisplay(MainActivity.this, "Unknown media: " + media, "Warning");
                     break;
-            }
+            }*/
         }
     }
 
@@ -1751,6 +1796,9 @@ public class MainActivity extends AppCompatActivity
                     devInfo.getNetworkInfo(true));
             return true;
         }
+        if (id == R.id.action_slideshow) {
+            return true;
+        }
         if (id == R.id.action_xfer) {
             // File Transfer: do not open socket in main thread :)
             FragmentManager fm = getSupportFragmentManager();
@@ -1965,6 +2013,11 @@ public class MainActivity extends AppCompatActivity
             }
             myList.add(newitem);
             count++;
+        }
+        if (selected != null) {
+            for (int i : selected) {
+                myList.get(i).setSelected(true);
+            }
         }
     }
 
@@ -2308,6 +2361,7 @@ public class MainActivity extends AppCompatActivity
                     for (int i = myList.size()-1; i >= 0; i--) {
                         JSONObject apodObj = utils.createJsonObjectFromSpaceItem(myList.get(i));
                         parent.put(apodObj);
+                        jsonData = parent.toString();   // FIX MISSING NEW APOD AFTER ROTATE
                     }
                     // TODO: write file content
                     utils.writeJson(getApplicationContext(), localJson, parent);
@@ -2849,6 +2903,74 @@ public class MainActivity extends AppCompatActivity
                         Intent.FLAG_GRANT_READ_URI_PERMISSION);
             }
             startActivity(i);
+        }
+    }
+
+
+    private void processThumbClick(int idx) {
+
+        String hiresFileBase = myList.get(idx).getThumb().replace("th_", "");
+        File hiresFile = new File(getApplicationContext().getFilesDir(), "hd_" + hiresFileBase);
+        String hiresUrl;
+        if (hiresFile.exists()) {
+            hiresUrl = hiresFile.getAbsolutePath();
+        } else {
+            hiresUrl = myList.get(idx).getHires();
+        }
+        String media = myList.get(idx).getMedia();
+
+        if (!utils.isNetworkConnected(getApplicationContext())) {
+            new dialogDisplay(MainActivity.this,
+                    getString(R.string.no_network_for_hd),
+                    getString(R.string.no_network));
+            return;
+        }
+
+        // get maximum allocatable heap mem at time of pressing the button
+        int maxAlloc = devInfo.getMaxAllocatable();
+
+        // Check our own media type, which has been set in createApodFromJson()
+        switch (media) {
+            case M_IMAGE:
+                Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
+                hiresIntent.putExtra("hiresurl", hiresUrl);
+                hiresIntent.putExtra("listIdx", idx);
+                hiresIntent.putExtra("maxAlloc", maxAlloc);
+                hiresIntent.putExtra("maxtexturesize", maxTextureSize);
+                hiresIntent.putExtra("wallpaper_quality",
+                        sharedPref.getString("wallpaper_quality", "80"));
+                lastImage = myList.get(idx).getTitle();
+                hiresIntent.putExtra("imagename", hiresFileBase);
+                // forResult now ALWAYS to get logstring returned for debugging
+                startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
+                break;
+            case M_YOUTUBE:
+                String thumb = myList.get(idx).getThumb();
+                if (tts != null && tts.isSpeaking()) {
+                    tts.stop();
+                }
+                // We get the ID from thumb name - hmmm, somewhat dirty ?
+                if (sharedPref.getBoolean("youtube_fullscreen", false)) {
+                    playYouTubeFullScreen(thumb.replace("th_", "").replace(".jpg", ""));
+                } else {
+                    playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
+                }
+                break;
+            case M_VIMEO:
+                if (tts != null && tts.isSpeaking()) {
+                    tts.stop();
+                }
+                playVimeo(hiresUrl);
+                break;
+            case M_MP4:
+                if (tts != null && tts.isSpeaking()) {
+                    tts.stop();
+                }
+                playMP4(hiresUrl);
+                break;
+            default:
+                new dialogDisplay(MainActivity.this, "Unknown media: " + media, "Warning");
+                break;
         }
     }
 
