@@ -6,6 +6,8 @@ import android.os.Parcelable;
 import android.view.View;
 import android.widget.ProgressBar;
 
+import de.herb64.funinspace.MainActivity;
+
 /**
  * Created by herbert on 7/16/17.
  */
@@ -47,7 +49,7 @@ public class spaceItem implements Parcelable {
     private String HiSize = "";
     private String LowSize = "";
     private Integer ThumbLoadingState = View.INVISIBLE;
-    private int maxLines = 3;
+    private int maxLines = MainActivity.MAX_ELLIPSED_LINES;
     private boolean isSelected = false;
     private int wpFlag = 0;
     private boolean isCached = false;
@@ -191,7 +193,7 @@ public class spaceItem implements Parcelable {
     // -------------------------------------------------------
     // Functions needed to implement for Parcelable interface
     // BUT: nice to have learnt this, but this leads to transaction too large errors on Android 8.0
-    // so we do not store any more thie arraylist on the saved instance state.. 03.10.2017
+    // so we do not store any more the arraylist on the saved instance state.. 03.10.2017
     @Override
     public int describeContents() {
         return 0;

@@ -10,6 +10,7 @@
 
     <string name="lowres">Lowres: %s</string>
     <string name="hires">Hires: %s</string>
+    <string name="vimeo_duration">Duration: %s seconds</string>
     <string name="already_loaded">Latest available image of the day has already been loaded</string>
     <string name="apod_load">New Image of the day has been loaded</string>
     <string name="no_video_yet" formatted="false">Sorry, but %s cannot be displayed yet\nURL = %s</string>
@@ -281,13 +282,15 @@
     <string name="apod_already_loaded">Image of today already loaded. Next image available in %.1f hours</string>
     <string name="email_log">Email log to Herbert</string>
     <string name="search_nasa_archive">Search NASA Archive (future)</string>
-    <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper in a few seconds and then every full hour, also if the app user interface is closed.
+    <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper at full hours
+        selected by you in setting "Shuffle Times" randomly from those wallpapers, that you have
+        currently selected.
     Between 23:00 and 06:00, no shuffle is done.</string>
-    <string name="wp_shuffle_less_than_two">Schedule has been set to change the wallpaper every
-        full hour, also if the app user interface is closed. You currently do not have the minimum
-        of 2 FunInSpace wallpapers selected, so that no shuffle will take place now.
-        After selecting the minimum of 2 wallpapers, the shuffle function will start.
-        Between 23:00 and 06:00, no shuffle is done.</string>
+    <string name="wp_shuffle_less_than_two">Schedule has been set to change the wallpaper at selected
+        full hours. \nIMPORTANT: You currently do not have the minimum
+        of 2 FunInSpace wallpapers selected, so that no shuffle will take place for now.
+        As soon as you select the minimum of 2 wallpapers, the shuffle function will start.
+        In "Shuffle Times" setting you can determine, at which hours a shuffle should be done.</string>
     <string name="no_network_for_apod">A new image is available, but you do not have an active network connection. Maybe flightmode is enabled?</string>
     <string name="no_network_for_hd">You do not have an active network connection to load the image or video. Maybe flightmode is enabled?</string>
     <string name="no_network">No network connection</string>
@@ -299,4 +302,12 @@
     </string>
     <string name="action_slide_show">Slide Show (future)</string>
     <string name="pref_debug_summary">These settings are meant for testing and debugging purposes only.</string>
+    <string name="wp_shuffle_title">Wallpaper shuffle</string>
+    <string name="wp_shuffle_summary">Currently only available with Android 5 or higher - shuffle is done at selected full hours, if switched on.</string>
+    <string name="wp_shuffle_times_title">Shuffle times</string>
+    <string name="wp_shuffle_times_summary">Select the hours at which a wallpaper shuffle should be done.</string>
+    <string name="apod_bg_load_title">Daily image scheduler</string>
+    <string name="apod_bg_load_summary">Load the information about the daily image, even if the App is
+        not started on that day. This helps to avoid missing images, because these get loaded at next
+        start of the app.</string>
 </resources>

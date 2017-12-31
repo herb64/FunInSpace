@@ -7,6 +7,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.SparseIntArray;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -206,7 +207,7 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         holder.tvCopyright.setText(iList.get(position).getCopyright());
 
         holder.tvExplanation.setText(iList.get(position).getExplanation());
-        iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
+        //iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
         if (idxMap.size() > 0) {
             //static member being accessed by instance reference
             //holder.tvExplanation.setTag(act.MAX_ITEMS + position);
@@ -214,24 +215,33 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         } else {
             holder.tvExplanation.setTag(MainActivity.MAX_ITEMS + id);
         }
-        holder.tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
-        holder.tvExplanation.setMaxLines(MainActivity.MAX_ELLIPSED_LINES);
-        // and here, we have a friendly listener, which temporarily overwrites that stuff, when
-        // we click on the text view content - We reuse the existing listener for the thumbs
-        // and distinguish views by ID ranges
+
+        // Changed code for ellipsize of explanation text. Now keeps expansion of text on scrolling
+        // depending on item state (is NOT stored persistently)
+        if (iList.get(position).getMaxLines() == MainActivity.MAX_ELLIPSED_LINES) {
+            holder.tvExplanation.setEllipsize(TextUtils.TruncateAt.END);
+            holder.tvExplanation.setMaxLines(MainActivity.MAX_ELLIPSED_LINES);
+            holder.tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, act.expl_points);
+        } else {
+            holder.tvExplanation.setEllipsize(null);
+            holder.tvExplanation.setMaxLines(MainActivity.MAX_LINES);
+            holder.tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, null);
+        }
+
         //holder.tvExplanation.setOnClickListener(act.myThumbClickListener);
-        holder.tvExplanation.setCompoundDrawablesWithIntrinsicBounds(null, null, null, act.expl_points);
 
         // Note: setText and concat is bad, use resources and format string instead!
         // BAD: tvLowSize.setText("Lowres: " + iList.get(position).getLowSize());
         holder.tvLowSize.setText(ctx.getString(R.string.lowres, iList.get(position).getLowSize()));
         String media = iList.get(position).getMedia();
         if (media.equals(MainActivity.M_VIMEO)) {
-            holder.tvHiSize.setText("Duration: " + iList.get(position).getHiSize() + " seconds");
+            holder.tvHiSize.setText(ctx.getString(R.string.vimeo_duration,
+                    iList.get(position).getHiSize()));
         } else if (media.equals(MainActivity.M_MP4)) {
             holder.tvHiSize.setText(iList.get(position).getHiSize());
         } else if (media.equals(MainActivity.M_IMAGE)){
-            holder.tvHiSize.setText(ctx.getString(R.string.hires, iList.get(position).getHiSize()));
+            holder.tvHiSize.setText(ctx.getString(R.string.hires,
+                    iList.get(position).getHiSize()));
         } else {
             holder.tvHiSize.setText("");
         }

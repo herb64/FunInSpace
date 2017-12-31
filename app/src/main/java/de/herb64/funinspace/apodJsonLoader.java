@@ -35,7 +35,7 @@ public class apodJsonLoader implements Runnable {
     private Context ctx;
     private String url2load;
     private String file2save;
-    private TextToSpeech tts2;
+    //private TextToSpeech tts2;
 
     /**
      * @param ctx
@@ -60,6 +60,9 @@ public class apodJsonLoader implements Runnable {
                 Log.i("HFCM", "Running with TLS on pre Lollipop");
             } catch (NoSuchAlgorithmException | KeyManagementException e) {
                 e.printStackTrace();
+                utils.logAppend(ctx,
+                        MainActivity.DEBUG_LOG,
+                        "apodJsonLoader() - " + e.getMessage());
             }
         }
     }
@@ -81,7 +84,7 @@ public class apodJsonLoader implements Runnable {
                 Log.e("HFCM", e.getMessage());
                 utils.logAppend(ctx,
                         MainActivity.DEBUG_LOG,
-                        "apodJsonLoader: " + e.getMessage());
+                        "apodJsonLoader() - " + e.getMessage());
             }
             InputStream istream = conn.getInputStream();
             //InputStream istream = (InputStream) url.getContent();
@@ -99,7 +102,7 @@ public class apodJsonLoader implements Runnable {
             utils.writef(ctx, file2save, mybuilder.toString());
             utils.logAppend(ctx,
                     MainActivity.DEBUG_LOG,
-                    "apodJsonLoader: " + mybuilder.toString());
+                    "apodJsonLoader() - " + mybuilder.toString());
 
             // TEST with tts - TODO: only works, if debugging, if running through, no sound
             /*tts2 = new TextToSpeech(ctx, new TextToSpeech.OnInitListener() {
@@ -122,12 +125,21 @@ public class apodJsonLoader implements Runnable {
             }*/
         } catch (MalformedURLException e) {
             e.printStackTrace();
+            utils.logAppend(ctx,
+                    MainActivity.DEBUG_LOG,
+                    "apodJsonLoader() - " + e.getMessage());
         } catch (FileNotFoundException e) {
             e.printStackTrace();
+            utils.logAppend(ctx,
+                    MainActivity.DEBUG_LOG,
+                    "apodJsonLoader() - " + e.getMessage());
         } catch (IOException e) {
             // Running into this because of DNS problems in AVD device. Seems to be because
             // of LAN card and Wifi present in host - only on Win10 Android Studio installation
             e.printStackTrace();
+            utils.logAppend(ctx,
+                    MainActivity.DEBUG_LOG,
+                    "apodJsonLoader() - " + e.getMessage());
         } finally {
             // return within finally - should not use it!
             if(conn != null) {
@@ -135,6 +147,9 @@ public class apodJsonLoader implements Runnable {
                     conn.disconnect();
                 } catch (Exception e) {
                     e.printStackTrace();
+                    utils.logAppend(ctx,
+                            MainActivity.DEBUG_LOG,
+                            "apodJsonLoader() - " + e.getMessage());
                 }
             }
             try {
@@ -143,6 +158,9 @@ public class apodJsonLoader implements Runnable {
                 }
             } catch (IOException e) {
                 e.printStackTrace();
+                utils.logAppend(ctx,
+                        MainActivity.DEBUG_LOG,
+                        "apodJsonLoader() - " + e.getMessage());
             }
         }
     }

@@ -3,12 +3,15 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="de.herb64.funinspace.MainActivity">
 
+    <!-- deactivated - this is now a settings option to start/stop the scheduler
     <item
         android:id="@+id/action_schedule_apod_json_load"
+        android:enabled="false"
         android:icon="@android:drawable/ic_menu_recent_history"
         android:orderInCategory="96"
-        android:title="Start Schedule APOD (Debug)"
+        android:title="Start Schedule APOD (inact)"
         app:showAsAction="ifRoom" />
+    -->
 
     <item
         android:id="@+id/action_xfer"

@@ -39,8 +39,8 @@ import de.herb64.funinspace.helpers.utils;
 public class apodJobService extends JobService {
 
     // Randomize NASA Server access with scheduled operations to avoid "DDOS behaviour"
-    private static final int MIN_DELAY = 300000;
-    private static final int MAX_DELAY = 1200000;
+    private static final int MIN_DELAY = 900000;
+    private static final int MAX_DELAY = 1800000;
 
     /**
      *
@@ -91,13 +91,23 @@ public class apodJobService extends JobService {
         // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
         // Service is destroyed on app close, but is recreated when job is scheduled
 
+        // TODO: new logic to verify, if correct apod is loaded + retries in case of failure
+        // 1. check for existing valid scheduled apod file (s___<epoch>.json) for today. Valid
+        //    means, that the apod contains a date field (yyyy-mm-dd) matching the correct epoch.
+        // a) If it does not exist or is invalid: trigger a the apodJsonLoader and reschedule a new
+        //    run in 2 minutes to verify existence after running apodJsonLoader.
+        // b) If a valid one with current epoch in content exists: done. Schedule for next day
+        //    This can be repeated with increasing intervals.
+        // By this logic, the app does not give up after one single try. E.g. APOD might be delayed
+        // or server errors might happen.
+
         Locale loc = Locale.getDefault();
 
         int count = jobParameters.getExtras().getInt("COUNT");
         String actNetType = utils.getActiveNetworkTypeName(getApplicationContext());
         utils.logAppend(getApplicationContext(),
                 MainActivity.DEBUG_LOG,
-                "Job" + count + " - APOD - currently active network type: " + actNetType);
+                "onStartJob(): Job" + count + " - APOD - currently active network type: " + actNetType);
 
         String url = jobParameters.getExtras().getString("URL");
         //boolean tls = jobParameters.getExtras().getBoolean("PRE_LOLLOPOP_TLS");
@@ -119,6 +129,15 @@ public class apodJobService extends JobService {
             e.printStackTrace();
         }
 
+        long conntime = utils.testSocketConnect(3000);
+        if (conntime == 3000) {
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "onStartJob() - testSocketConnect TIMEOUT (" + conntime + "ms)");
+        } else {
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "onStartJob() - testSocketConnect OK (" + conntime + "ms)");
+        }
+
         apodJsonLoader loader = new apodJsonLoader(getApplicationContext(),
                 url,
                 String.format(loc,
@@ -131,7 +150,7 @@ public class apodJobService extends JobService {
         // logfile for debugging
         utils.logAppend(getApplicationContext(),
                 MainActivity.DEBUG_LOG,
-                "Job" + count + " - APOD - " +
+                "onStartJob(): Job" + count + " - APOD - " +
                         String.format(loc,
                                 MainActivity.APOD_SCHED_PREFIX + "%d.json", epoch));
 
@@ -150,7 +169,12 @@ public class apodJobService extends JobService {
                 .build();
         NotificationManager notificationManager =
                 (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        notificationManager.notify(998, notification);
+        if (notificationManager != null) {
+            notificationManager.notify(998, notification);
+        } else {
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "onStartJob() - APOD - notificationManager is null");
+        }
 
         // send a broadcast - not needed here ???
         /*Intent intent = new Intent();
@@ -188,8 +212,9 @@ public class apodJobService extends JobService {
             JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_APOD, serviceComponent);
             int random = MIN_DELAY + new Random().nextInt((MAX_DELAY - MIN_DELAY));
             ArrayList<Long> data = utils.getNASAEpoch(lastEpoch);
+            builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY);
             builder.setMinimumLatency(data.get(2) + random);
-            builder.setOverrideDeadline(data.get(2) + random + 60000);  // 1 minute addition deadline
+            builder.setOverrideDeadline(data.get(2) + random + 300000); // 5 min deadline
             builder.setPersisted(true);      // survive reboots
 
             // Extras to pass to the job - well, passing filename not good...
@@ -209,7 +234,12 @@ public class apodJobService extends JobService {
                     logentry);
 
             JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            scheduler.schedule(builder.build());
+            if (scheduler != null) {
+                scheduler.schedule(builder.build());
+            } else {
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "scheduleNext() - APOD - null scheduler object - scheduler not built");
+            }
         }
     }
 }

@@ -9,6 +9,7 @@
 
     <string name="lowres">Lowres: %s</string>
     <string name="hires">Hires: %s</string>
+    <string name="vimeo_duration">Dauer: %s Sekunden</string>
     <string name="already_loaded">Das letzte verfügbare Bild des Tages ist bereits geladen</string>
     <string name="apod_load">Ein neues Bild des Tages wurde soeben geladen</string>
     <string name="no_video_yet">Leider kann %1$s zur Zeit noch nicht angezeigt werden\nURL = %2$s</string>
@@ -123,19 +124,26 @@
     <string name="apod_already_loaded">Bild des Tages bereits geladen. Nächstes Bild in %.1f Stunden verfügbar.</string>
     <string name="email_log">Email Log an Herbert</string>
     <string name="search_nasa_archive">Suche NASA Archiv (zukünftig)</string>
-    <string name="wp_shuffle_enabled">Das Hintergrundbild wird in ein paar Sekunden geändert und
-        dann jede volle Stunde mit einem zufälligen Bild aus Deinen FunInSpace Hintergründen
-        ersetzt. Zwischen 23:00 und 06:00 findet kein Wechsel statt.</string>
-    <string name="wp_shuffle_less_than_two">Das Hintergrundbild wird jede volle Stunde mit einem
-        zufälligen Bild aus Deinen FunInSpace Hintergründen ersetzt.
-        Du hast momentan nicht das Minimum von 2 FunInSpace Hintergründen erstellt, so daß jetzt
-        kein Shuffle stattfindet. Sobald Du 2 Hintergrundbilder erstellt hast, wird die Shuffle
-        Funktion starten.
-        Zwischen 23:00 und 06:00 findet kein Wechsel statt.</string>
+    <string name="wp_shuffle_enabled">Das Hintergrundbild wird zu den vollen Stunden die Du in der
+        Einstellung "Shuffle Zeiten" gewählt hast, mit einem zufälligen Bild aus Deinen FunInSpace
+        Hintergründen gesetzt.</string>
+    <string name="wp_shuffle_less_than_two">Das Hintergrundbild wird zu den von Dir gewählten vollen
+        Stunden mit einem zufälligen Bild aus Deinen FunInSpace Hintergründen ersetzt.
+        \nWICHTIG: Du hast momentan nicht das Minimum von 2 FunInSpace Hintergründen erstellt, so
+        daß momentan kein Shuffle stattfindet. Sobald Du 2 Hintergrundbilder erstellt hast, wird die
+        Shuffle Funktion starten.</string>
     <string name="no_network_for_apod">Ein neues Bild ist zwar verfügbar, aber Du hast keine aktive Netzwerkverbindung. Möglichweise ist der Flugmodus eingeschaltet?</string>
     <string name="no_network_for_hd">Du hast keine aktive Netzwerkverbindung um Bilder oder Videos anzusehen. Möglichweise ist der Flugmodus eingeschaltet?</string>
     <string name="no_network">Keine Netzwerkverbindung</string>
     <string name="show_log">Logdatei anzeigen (debug)</string>
     <string name="action_slide_show">Bilder Show (zukünftig)</string>
     <string name="pref_debug_summary">Diese Einstellungen sind nur für Testzwecke (Debugging) vorgesehen.</string>
+    <string name="wp_shuffle_title">Hintergrund Shuffle</string>
+    <string name="wp_shuffle_summary">Momentan nur für Android 5 und höher - Shuffle erfolgt zu wählbaren Zeiten, jeweils zur vollen Stunde.</string>
+    <string name="wp_shuffle_times_title">Shuffle Zeiten</string>
+    <string name="wp_shuffle_times_summary">Wähle die Stunden, zu denen ein Shuffle des Hintergrundbildes erfolgen soll.</string>
+    <string name="apod_bg_load_title">Tägliches Bild automatisch laden</string>
+    <string name="apod_bg_load_summary">Lade Informationen zum täglichen Bild auch ohne daß die App
+        gestartet wird. Dies ist nützlich, um Bilder nicht zu verpassen, da diese dann beim nächsten
+        Start der App nachgeladen werden.</string>
 </resources>

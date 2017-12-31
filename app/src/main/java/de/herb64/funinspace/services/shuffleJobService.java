@@ -129,7 +129,12 @@ public class shuffleJobService extends JobService {
                     .build();
             NotificationManager notificationManager =
                     (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            notificationManager.notify(999, notification);
+            if (notificationManager != null) {
+                notificationManager.notify(999, notification);
+            }  else {
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "onStartJob() - SHUFFLE - notificationManager is null");
+            }
 
             /* for docu only... do we need an icon mandatory?
             E/NotificationService: Not posting notification with icon==0: Notification(pri=0 contentView=null vibrate=null sound=null defaults=0x0 flags=0x10 color=0x00000000 category=msg vis=PUBLIC)
@@ -219,7 +224,12 @@ public class shuffleJobService extends JobService {
                     logentry);
 
             JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            scheduler.schedule(builder.build());
+            if (scheduler != null) {
+                scheduler.schedule(builder.build());
+            } else {
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "scheduleNext() - SHUFFLE - null scheduler object - scheduler not built");
+            }
         }
     }
 }

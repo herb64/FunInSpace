@@ -125,6 +125,7 @@ public class MainActivity extends AppCompatActivity
     private boolean dateFormatChanged;      // important: need true after installation
     private boolean wpShuffleChanged;
     private boolean wpShuffleTimesChanged;
+    private boolean bgApodLoadChanged;
     private int currentWallpaperIndex = -1;
     protected TimeZone tzNASA;
     protected Calendar cNASA;
@@ -170,8 +171,8 @@ public class MainActivity extends AppCompatActivity
     public static final String M_VIDEO_UNKNOWN = "unknown-video";
 
     // dealing with the number of displayed lines in the Explanation text view
-    protected static final int MAX_ELLIPSED_LINES = 2;
-    private static final int MAX_LINES = 1000;      // ridiculous, but safe
+    public static final int MAX_ELLIPSED_LINES = 2;
+    protected static final int MAX_LINES = 1000;      // ridiculous, but safe
     protected static final int MAX_ITEMS = 10000;   // theoretic limit of items - for id handling
 
     // wallpaper related stuff
@@ -226,12 +227,25 @@ public class MainActivity extends AppCompatActivity
         float hourstonext = (float)utils.getMsToNextShuffle(getApplicationContext())/3600000f;
         Log.i("HFCM", String.format(loc, "Next sched in %.1f hours", hourstonext));
 
+        // Prepare a device information class to be used during testing and debugging.
+        // Query GL_MAX_TEXTURE_SIZE by creating an OpenGL context within a separate Activity.
+        // Important: returned value maxTextureSize not yet available at onCreate(), although
+        // onActivityResult is called and values are correct at later times after finishing
+        // onCreate() and even the Toast within onActivityResult shows the correct values
+
+        devInfo = new deviceInfo(getApplicationContext());
         if (savedInstanceState != null) {
             selected = savedInstanceState.getIntegerArrayList("selecteditems");
+            maxTextureSize = savedInstanceState.getInt("maxtexsize");
+            devInfo.setGlMaxTextureSize(maxTextureSize);
             Log.i("HFCM", "Restored instance state, selected = " + selected);
         } else {
+            SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
+            maxTextureSize = shPref.getInt("maxtexsize", 0);
+            devInfo.setGlMaxTextureSize(maxTextureSize);
             selected = new ArrayList<>();
         }
+        utils.logAppend(getApplicationContext(), DEBUG_LOG, devInfo.getLogInfo());
 
         // READ PREFERENCE SETTINGS FROM DEFAULT SHARED PREFERENCES
         // (shared_prefs/de.herb64.funinspace_preferences.xml)
@@ -243,6 +257,7 @@ public class MainActivity extends AppCompatActivity
         thumbQualityChanged = !sharedPref.contains("rgb565_thumbs");
         wpShuffleChanged = !sharedPref.contains("wallpaper_shuffle");
         wpShuffleTimesChanged = !sharedPref.contains("wp_shuffle_times");
+        bgApodLoadChanged = !sharedPref.contains("apod_bg_load");
         sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
 
         // Timezone and Calendar objects used to base our timestamps on current NASA TimeZone
@@ -281,14 +296,7 @@ public class MainActivity extends AppCompatActivity
             }
         });*/
 
-        // Prepare a device information class to be used during testing and debugging.
-        // Query GL_MAX_TEXTURE_SIZE by creating an OpenGL context within a separate Activity.
-        // Important: returned value maxTextureSize not yet available at onCreate(), although
-        // onActivityResult is called and values are correct at later times after finishing
-        // onCreate() and even the Toast within onActivityResult shows the correct values
 
-        devInfo = new deviceInfo(getApplicationContext());
-        utils.logAppend(getApplicationContext(), DEBUG_LOG, devInfo.getLogInfo());
 
         myItemsLV = (ListView) findViewById(R.id.lv_content);
 
@@ -322,17 +330,16 @@ public class MainActivity extends AppCompatActivity
         myItemsLV.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
-                // Just reset the maxlines to a larger limit and remove the ellipse stuff. This
-                // is only temporarily and automatically disappears when scrolling or when clicking
-                // again.
-                // TODO - at background load of thumbs, the full text always disappears on refreshs              XXXXXX first time user annoyance XXXXX
-                // TODO - do not ellipsize if explanation matches into minimum lines
+                // Changed to not collapse when scrolling out. Also fixed collapsing when doing
+                // refresh of adapter when loading images at first time install
+                // TODO - do not ellipsize at all if explanation matches into minimum lines
                 TextView v = myItemsLV.findViewWithTag(position + MAX_ITEMS);
                 boolean read = sharedPref.getBoolean("read_out", false);
                 if (v.getMaxLines() == MAX_ELLIPSED_LINES) {
                     v.setMaxLines(MAX_LINES);
                     v.setEllipsize(null);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);
+                    myList.get((int)id).setMaxLines(MAX_LINES);
                     if (read && tts != null) {
                         tts.speak(myList.get((int)id).getExplanation(),
                                 TextToSpeech.QUEUE_FLUSH,
@@ -341,7 +348,8 @@ public class MainActivity extends AppCompatActivity
                 } else {
                     v.setEllipsize(TextUtils.TruncateAt.END);
                     v.setMaxLines(MAX_ELLIPSED_LINES);
-                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,expl_points);
+                    v.setCompoundDrawablesWithIntrinsicBounds(null,null,null, expl_points);
+                    myList.get((int)id).setMaxLines(MAX_ELLIPSED_LINES);
                     if (read && tts != null) {
                         tts.stop();
                     }
@@ -653,6 +661,7 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onDestroyActionMode(android.view.ActionMode actionMode) {
                 // reset selection status for all items
+                selected.clear();
                 for (spaceItem item : myList) {
                     item.setSelected(false);
                 }
@@ -694,8 +703,8 @@ public class MainActivity extends AppCompatActivity
                 }
             }
             addItems();
-            maxTextureSize = savedInstanceState.getInt("maxtexsize");
-            devInfo.setGlMaxTextureSize(maxTextureSize);
+            //maxTextureSize = savedInstanceState.getInt("maxtexsize");
+            //devInfo.setGlMaxTextureSize(maxTextureSize);
             //selected = savedInstanceState.getIntegerArrayList("selecteditems");
         } else {
             jsonData = null;
@@ -710,9 +719,9 @@ public class MainActivity extends AppCompatActivity
             // jsonData == null: no file, first launch most likely
             // -------------------------------------------------------------------
             if (jsonData != null) {
-                SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
-                maxTextureSize = shPref.getInt("maxtexsize", 0);
-                devInfo.setGlMaxTextureSize(maxTextureSize);
+                //SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
+                //maxTextureSize = shPref.getInt("maxtexsize", 0);
+                //devInfo.setGlMaxTextureSize(maxTextureSize);
                 // TODO: if shared preferences are lost for some reason, run texsize check again
                 parent = null;
                 try {
@@ -1209,15 +1218,12 @@ public class MainActivity extends AppCompatActivity
             } else {
                 hiresUrl = myList.get(idx).getHires();
             }
-            //String media = myList.get(idx).getMedia();
 
-            // Decide, if we want to proceed if no WiFi is active (local image load no problem)
-            // TODO maybe exchange with utils getActiveNetworkType() for wifi check - but is ok!!
+            // Decide, if we want to proceed if WiFi required bot not not active - user now can
+            // select to change the setting
             if (sharedPref.getBoolean("wifi_switch", false)
                     && !(utils.getActiveNetworkType(getApplicationContext()) == ConnectivityManager.TYPE_WIFI)
                     && hiresUrl.startsWith("http")) {
-                //new dialogDisplay(MainActivity.this, getString(R.string.hires_no_wifi), "No Wifi");
-
                 Bundle fragArguments = new Bundle();
                 fragArguments.putString("TITLE",
                         "No Wifi");
@@ -1227,6 +1233,7 @@ public class MainActivity extends AppCompatActivity
                         getString(R.string.hfcm_cancel));
                 fragArguments.putString("POS",
                         getString(R.string.hfcm_yes));
+                // We might use neutral for one-time loading as well
                 fragArguments.putInt("IDX", idx);
                 FragmentManager fm = getSupportFragmentManager();
                 confirmDialog confirmdlg = new confirmDialog();
@@ -1234,63 +1241,7 @@ public class MainActivity extends AppCompatActivity
                 confirmdlg.show(fm, "NOWIFI-ACCEPT");
                 return;
             }
-
             processThumbClick(idx);
-
-            /*
-            if (!utils.isNetworkConnected(getApplicationContext())) {
-                new dialogDisplay(MainActivity.this,
-                        getString(R.string.no_network_for_hd),
-                        getString(R.string.no_network));
-                return;
-            }
-
-            // get maximum allocatable heap mem at time of pressing the button
-            int maxAlloc = devInfo.getMaxAllocatable();
-
-            // Check our own media type, which has been set in createApodFromJson()
-            switch (media) {
-                case M_IMAGE:
-                    Intent hiresIntent = new Intent(getApplication(), ImageActivity.class);
-                    hiresIntent.putExtra("hiresurl", hiresUrl);
-                    hiresIntent.putExtra("listIdx", idx);
-                    hiresIntent.putExtra("maxAlloc", maxAlloc);
-                    hiresIntent.putExtra("maxtexturesize", maxTextureSize);
-                    hiresIntent.putExtra("wallpaper_quality",
-                            sharedPref.getString("wallpaper_quality", "80"));
-                    lastImage = myList.get(idx).getTitle();
-                    hiresIntent.putExtra("imagename", hiresFileBase);
-                    // forResult now ALWAYS to get logstring returned for debugging
-                    startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
-                    break;
-                case M_YOUTUBE:
-                    String thumb = myList.get(idx).getThumb();
-                    if (tts != null && tts.isSpeaking()) {
-                        tts.stop();
-                    }
-                    // We get the ID from thumb name - hmmm, somewhat dirty ?
-                    if (sharedPref.getBoolean("youtube_fullscreen", false)) {
-                        playYouTubeFullScreen(thumb.replace("th_", "").replace(".jpg", ""));
-                    } else {
-                        playYouTube(thumb.replace("th_", "").replace(".jpg", ""));
-                    }
-                    break;
-                case M_VIMEO:
-                    if (tts != null && tts.isSpeaking()) {
-                        tts.stop();
-                    }
-                    playVimeo(hiresUrl);
-                    break;
-                case M_MP4:
-                    if (tts != null && tts.isSpeaking()) {
-                        tts.stop();
-                    }
-                    playMP4(hiresUrl);
-                    break;
-                default:
-                    new dialogDisplay(MainActivity.this, "Unknown media: " + media, "Warning");
-                    break;
-            }*/
         }
     }
 
@@ -1400,7 +1351,7 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * Get results from Activities started with startActivityForResult()
-     * 1. image Activity for hires size
+     * 1. image Activity for hires size (no longer valid, size is determined in advance)
      * 2. GL max texture size query at very first run
      * 3. Settings dialog
      * Returned resultCode = 0 (RESULT_CANCELED) after having rotated the phone while
@@ -1431,7 +1382,6 @@ public class MainActivity extends AppCompatActivity
                 if (data.getBooleanExtra("new_hd_cached_file", false)) {
                     ArrayList<Integer> del = utils.cleanupFiles(getApplicationContext(),
                             myList,
-                            //MAX_HIRES_MB * 1024,
                             MAX_HIRES_PERCENT,
                             listidx);
                     for (int i : del) {
@@ -1546,6 +1496,40 @@ public class MainActivity extends AppCompatActivity
                                 "Shuffle reschedule due to times reselect");
                     }
                 }
+                if (bgApodLoadChanged) {
+                    bgApodLoadChanged = false;
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                        boolean bgload = sharedPref.getBoolean("apod_bg_load", false);
+                        if (bgload) {
+                            utils.logAppend(getApplicationContext(),
+                                    DEBUG_LOG,
+                                    "Enabled APOD background load in settings");
+                            // TODO: add time
+                            scheduleApod();
+                            utils.logAppend(getApplicationContext(),
+                                    DEBUG_LOG,
+                                    "Started APOD Load scheduler");
+
+                        } else {
+                            JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+                            if (utils.cancelJob(getApplicationContext(), JOB_ID_APOD)) {
+                                utils.logAppend(getApplicationContext(),
+                                        DEBUG_LOG,
+                                        "Disabled APOD background load in settings");
+                                Toast.makeText(MainActivity.this, "APOD Background loader switched off",
+                                        Toast.LENGTH_LONG).show();
+                            } else {
+                                utils.logAppend(getApplicationContext(),
+                                        DEBUG_LOG,
+                                        "Error disabling APOD background loader schedule");
+                            }
+                            //scheduler.cancel(JOB_ID_APOD);
+                        }
+                    } else {
+                        new dialogDisplay(MainActivity.this,
+                                "Not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
+                    }
+                }
             }
         }
     }
@@ -1579,6 +1563,9 @@ public class MainActivity extends AppCompatActivity
                     if (changed.equals("wp_shuffle_times")) {
                         wpShuffleTimesChanged ^= true;
                     }
+                    if (changed.equals("apod_bg_load")) {
+                        bgApodLoadChanged ^= true;
+                    }
                     if (changed.equals("full_search")) {
                         // this one: just set on each single toggle
                         adp.setFullSearch(sharedPref.getBoolean("full_search", false));
@@ -1599,7 +1586,7 @@ public class MainActivity extends AppCompatActivity
      * Note the code to make icons visible in overflow menu.
      * TODO: document how to make icons for search AND filter disappear, if any of these actions
      * is actually expanded. Otherwise, for example, filter could be clicked, while search action
-     * was expaned, getting bad overlay of graphics... -> SupportMenuItem!!!
+     * was expaned, getting ugly overlap of graphics... -> SupportMenuItem!!!
      * @param menu the menu item
      * @return boolean return value
      */
@@ -1618,8 +1605,8 @@ public class MainActivity extends AppCompatActivity
             m.setOptionalIconsVisible(true);
         }
 
-        // Test menu for apod scheduler debugging
-        JobScheduler jobScheduler = null;
+        // Test menu for apod scheduler debugging - now option in settings dialog
+        /*JobScheduler jobScheduler = null;
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
             List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
@@ -1631,7 +1618,7 @@ public class MainActivity extends AppCompatActivity
                     continue;
                 }
             }
-        }
+        }*/
 
         // 20.11.2017 Switch MenuItem to SupportMenuItem and use noinspection RestrictedApi  TODO DOCU
         // to allow for registering expand listeners for action view
@@ -1767,6 +1754,25 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
+     * Prepare main menu depending on current state
+     * 1. no dropbox sync, while still reloading unfinished apods
+     * @param menu menu
+     * @return return value
+     */
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        // TODO - it is not enabled after load is done. Needs restart of app currently
+        MenuItem dbResync = menu.findItem(R.id.dropbox_sync);
+        if (unfinishedApods > 0) {
+            dbResync.setEnabled(false);
+        } else {
+            dbResync.setEnabled(true);
+        }
+        // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    /**
      * This code handles selections from the menu bar. Contents are defined in menu_main.xml.
      * Note, that action_search is defined in menu_main.xml as well, with following parameters:
      * app:showAsAction="ifRoom|collapseActionView"
@@ -1878,6 +1884,7 @@ public class MainActivity extends AppCompatActivity
             new dialogDisplay(MainActivity.this,
                     "Searching the NASA APOD Archive is not yet available.", "TODO");
         }
+        /* now moved this into settings....
         if (id == R.id.action_schedule_apod_json_load) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                 if (utils.cancelJob(getApplicationContext(), JOB_ID_APOD)) {
@@ -1894,7 +1901,8 @@ public class MainActivity extends AppCompatActivity
                 new dialogDisplay(MainActivity.this,
                         "Scheduling not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
             }
-        }
+        }*/
+
         // if (id == R.id.action_filter)  //no longer needed
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -1991,16 +1999,14 @@ public class MainActivity extends AppCompatActivity
                 } else {
                     newitem.setBmpThumb(null);
                 }
-                // Wallpaper filename is just derived from thumb filename, no extra storage space used
+                // Wallpaper filename is just derived from thumb filename
                 String wpName = strThumb.replace("th_", "wp_");
                 File wpFile = new File(getApplicationContext().getFilesDir(), wpName);
                 if (wpFile.exists()) {
                     if (wpName.equals(wpFileCurrent)) {
-                        //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found AS ACTIVE");
                         newitem.setWpFlag(WP_ACTIVE);
                         currentWallpaperIndex = count;
                     } else {
-                        //Log.w("HFCM", "Wallpaper file " + strThumb.replace("th_", "wp_") + " found");
                         newitem.setWpFlag(WP_EXISTS);
                     }
                 } else {
@@ -2030,13 +2036,13 @@ public class MainActivity extends AppCompatActivity
      * The function triggers a chain of async operations, depending on type of item.
      * MediaMetadataRetriever might also be able to retrieve an image from a stream, but it is
      * better and faster to retrieve the "offical" thumb...
-     * TODO: check parallel execution option... (executeOnExectuor...)
+     * TODO: check parallel execution option... (executeOnExecutor...)
      */
     public void getMissingApodInfos() {
-        int count = 0;
+        //int count = 0;
         for(int i=0; i<myList.size(); i++) {
-            if (myList.get(i).getBmpThumb() == null) {      // TODO change with glide implementation
-                count++;
+            if (myList.get(i).getBmpThumb() == null) {      // TODO change with later possible glide implementation
+                //count++;
                 unfinishedApods++;
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
                 String sMediaType = myList.get(i).getMedia();
@@ -2068,8 +2074,9 @@ public class MainActivity extends AppCompatActivity
                 }
             }
         }
-        if (count > 0) {
-            Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, count),
+        if (unfinishedApods > 0) {
+            Toast.makeText(MainActivity.this,
+                    getString(R.string.load_miss_thumbs, unfinishedApods),
                     Toast.LENGTH_LONG).show();
         }
     }
@@ -2100,6 +2107,8 @@ public class MainActivity extends AppCompatActivity
                 dropbox_items.add(title);
             } catch (JSONException e) {
                 e.printStackTrace();
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "resyncWithDropbox() - " + e.getMessage());
             }
         }
 
@@ -2175,12 +2184,26 @@ public class MainActivity extends AppCompatActivity
             } catch (JSONException e) {
                 e.printStackTrace();
                 Log.e("HFCM", "resyncWithDropbox() - " + e.getMessage());
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "resyncWithDropbox() - " + e.getMessage());
+            }
+        }
+        // Add remaining items not in local json from dropbox
+        for (int didx = dbidx; didx < dropbox.length(); didx ++) {
+            String title;
+            try {
+                title = dropbox.getJSONObject(didx).getJSONObject("Content").getString("Title");
+                Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox (D): '" + title + "'");
+                newjson.put(dropbox.getJSONObject(didx));
+                db_add++;
+            } catch (JSONException e) {
+                e.printStackTrace();
             }
         }
 
         utils.logAppend(getApplicationContext(),
-                MainActivity.DEBUG_LOG,
-                String.format(loc, "Dropbox resync: LOCAL ADD=%d, DB ADD=%d, DB SKIP=%d",
+                DEBUG_LOG,
+                String.format(loc, "resyncWithDropbox(): LOCAL ADD=%d, DB ADD=%d, DB SKIP=%d",
                         l_add, db_add, db_skip));
 
         // TODO how to handle the shared prefs DELETED_ITEMS info?
@@ -2457,6 +2480,7 @@ public class MainActivity extends AppCompatActivity
                 resyncWithDropbox((JSONArray) json, false);
                         //sharedPref.getBoolean("force_full_dropbox_sync", false));
             }
+            getLatestAPOD();
         } else if (tag.equals("DROPBOX_FORCE_REFRESH")) {
             // TODO - phone rotation and verify, if network checks are done / needed
             Object json;
@@ -2470,6 +2494,7 @@ public class MainActivity extends AppCompatActivity
                 resyncWithDropbox((JSONArray) json, true);
                         //sharedPref.getBoolean("force_full_dropbox_sync", true));
             }
+            getLatestAPOD();
         } else {
             new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
         }
@@ -2907,8 +2932,12 @@ public class MainActivity extends AppCompatActivity
     }
 
 
+    /**
+     * Called by thumbClickListener. This has been put into a separate function to be called by
+     * Comfirm Dialog in case no wifi is available but required for loading hires/video data.
+     * @param idx index into space item list
+     */
     private void processThumbClick(int idx) {
-
         String hiresFileBase = myList.get(idx).getThumb().replace("th_", "");
         File hiresFile = new File(getApplicationContext().getFilesDir(), "hd_" + hiresFileBase);
         String hiresUrl;
@@ -2990,7 +3019,6 @@ public class MainActivity extends AppCompatActivity
                     item.getTitle()));
         }
     }
-
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////

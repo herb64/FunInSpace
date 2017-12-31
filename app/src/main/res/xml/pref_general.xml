@@ -36,16 +36,22 @@
     <SwitchPreference
         android:defaultValue="false"
         android:key="wallpaper_shuffle"
-        android:summary="Now available for debug testing with Android 5 and higher - shuffle is done at each full hour, if switched on. Still needs some fixing - test it!"
-        android:title="Wallpaper shuffle (DEBUG)" />
+        android:summary="@string/wp_shuffle_summary"
+        android:title="@string/wp_shuffle_title" />
 
     <MultiSelectListPreference
         android:key="wp_shuffle_times"
         android:defaultValue="@array/wp_shuffle_times_defaults"
         android:entries="@array/wp_shuffle_times_titles"
         android:entryValues="@array/wp_shuffle_times_values"
-        android:summary="Select hours at which wallpaper should be shuffled"
-        android:title="Shuffle times" />
+        android:summary="@string/wp_shuffle_times_summary"
+        android:title="@string/wp_shuffle_times_title" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="apod_bg_load"
+        android:summary="@string/apod_bg_load_summary"
+        android:title="@string/apod_bg_load_title" />
 
     <SwitchPreference
         android:defaultValue="false"
