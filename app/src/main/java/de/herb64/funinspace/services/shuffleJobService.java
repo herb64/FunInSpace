@@ -141,7 +141,7 @@ public class shuffleJobService extends JobService {
             E/NotificationService: WARNING: In a future release this will crash the app: de.herb64.funinspace
              */
 
-            // send a broadcast
+            // send a broadcast to trigger UI update for thumbnail wallpaper icon
             Intent intent = new Intent();
             intent.putExtra("NEWWP", wpfile);
             intent.setAction(MainActivity.BCAST_SHUFFLE);

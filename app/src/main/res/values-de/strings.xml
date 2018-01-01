@@ -143,7 +143,7 @@
     <string name="wp_shuffle_times_title">Shuffle Zeiten</string>
     <string name="wp_shuffle_times_summary">Wähle die Stunden, zu denen ein Shuffle des Hintergrundbildes erfolgen soll.</string>
     <string name="apod_bg_load_title">Tägliches Bild automatisch laden</string>
-    <string name="apod_bg_load_summary">Lade Informationen zum täglichen Bild auch ohne daß die App
-        gestartet wird. Dies ist nützlich, um Bilder nicht zu verpassen, da diese dann beim nächsten
-        Start der App nachgeladen werden.</string>
+    <string name="apod_bg_load_summary">omentan nur für Android 5 und höher - lade Informationen zum
+        täglichen Bild auch ohne daß die App gestartet wird. Dies ist nützlich, um Bilder nicht zu
+        verpassen, da diese dann beim nächsten Start der App nachgeladen werden.</string>
 </resources>

@@ -87,6 +87,10 @@ public final class utils {
     private static final long MAX_HDSIZE = 25000;
     private static final String LOG_TS_FORMAT = "yyyy.MM.dd-HH:mm:ss:SSS";
 
+    // random delay to avoid DDOS kind of flooding NASA server with many app instances
+    private static final int MIN_DELAY = 900000;
+    private static final int MAX_DELAY = 1800000;
+
     public static final int NO_JSON = 0;
     public static final int JSON_OBJ = 1;
     public static final int JSON_ARRAY = 2;
@@ -299,6 +303,29 @@ public final class utils {
             e.printStackTrace();
             Log.e("HFCM", e.getMessage());
         }
+    }
+
+    /**
+     * Get simple value of NASA epoch for current day at 00:00:00
+     * @return
+     */
+    public static long getNASAEpoch() {
+        Locale loc = Locale.getDefault();
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        Calendar cNASA = Calendar.getInstance(tzNASA);
+        String yyyymmddNASA = String.format(loc, "%04d-%02d-%02d",
+                cNASA.get(Calendar.YEAR),
+                cNASA.get(Calendar.MONTH) + 1,
+                cNASA.get(Calendar.DAY_OF_MONTH));
+        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
+        long epoch = 0;
+        try {
+            dF.setCalendar((Calendar) cNASA.clone()); // clone to avoid timezone overwrite
+            epoch = dF.parse(yyyymmddNASA).getTime();
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        return epoch;
     }
 
     /**
@@ -568,6 +595,22 @@ public final class utils {
             }
         }
         return msToNextFull + 3600000 * (Integer.decode(act[0]) - nextHour + 24);*/
+    }
+
+    /**
+     * Get the milliseconds to the next APOD including a random delay to avoid flooding NASA server
+     * with many installed apps at same time
+     * @return milliseconds to next APOD
+     */
+    public static long getMsToNextApod(Context ctx) {
+        long epoch = getNASAEpoch();
+        ArrayList<Long> data = utils.getNASAEpoch(epoch);
+        int random = MIN_DELAY + new Random().nextInt((MAX_DELAY - MIN_DELAY));
+        String logentry = String.format(Locale.getDefault(),
+                "getMsToNextApod() -  %.1f hours + random delay of %d seconds",
+                (float)data.get(2)/3600000f, random/1000);
+        logAppend(ctx, MainActivity.DEBUG_LOG, logentry);
+        return data.get(2) + random;
     }
 
     /**

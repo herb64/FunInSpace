@@ -187,7 +187,7 @@ public class MainActivity extends AppCompatActivity
     public static final int JOB_ID_SHUFFLE = 85407;
     public static final String BCAST_SHUFFLE = "SHUFFLE";
     public static final int JOB_ID_APOD = 3124;
-    public static final String BCAST_APOD = "APOD";
+    //public static final String BCAST_APOD = "APOD";
     //public static final int JOB_ID_THUMB = 739574;
     public static final String BCAST_THUMB = "THUMB";
     public static final String DEBUG_LOG = "funinspace.log";
@@ -543,7 +543,6 @@ public class MainActivity extends AppCompatActivity
                                     hiresIntent.putExtra("imagename", basefn);
                                     // call image activity with wallpaper selection mode at startup
                                     hiresIntent.putExtra("wpselect", true);
-                                    //Log.i("HFCM", "Changing wallpaper 'wp_" + basefn + "'");
                                     startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
                                     break;
                                 case WP_EXISTS:
@@ -812,7 +811,6 @@ public class MainActivity extends AppCompatActivity
                 switch (intent.getAction()) {
                     case BCAST_SHUFFLE:
                         String newwp = intent.getStringExtra("NEWWP");
-                        //Log.i("HFCM", "Broadcast received, new WP: " + newwp);
                         // TODO - better way than just iterating? at least some cut if met condition
                         // or change order of check - to avoid string comparison
                         for (spaceItem item : myList) {
@@ -825,34 +823,7 @@ public class MainActivity extends AppCompatActivity
                         adp.notifyDataSetChanged();
                         break;
                     case BCAST_THUMB:
-                        //String thname = intent.getStringExtra("THUMBNAIL");
-                        //Log.i("HFCM", "Broadcast received, THUMBFILE: " + thname);
-                        // ugly code here...
-                        /*int i = 0;
-                        boolean match = false;
-                        for (spaceItem item : myList) {
-                            if (item.getThumb().equals(thname)) {
-                                File thumbFile = new File(getApplicationContext().getFilesDir(), thname);
-                                if (thumbFile.exists()) {
-                                    Bitmap thumb = null;
-                                    // we use this option to save some memory - experimental
-                                    if (sharedPref.getBoolean("rgb565_thumbs", false)) {
-                                        BitmapFactory.Options options = new BitmapFactory.Options();
-                                        options.inPreferredConfig = Bitmap.Config.RGB_565;
-                                        thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath(), options);
-                                    } else {
-                                        thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
-                                    }
-                                    myList.get(i).setBmpThumb(thumb);
-                                } else {
-                                    myList.get(i).setBmpThumb(null);
-                                }
-                                myList.get(i).setThumbLoadingState(View.INVISIBLE);
-                                adp.notifyDataSetChanged();
-                                break;
-                            }
-                            i++;
-                        }*/
+                        // This one is not used...
                         break;
                     default:
                         break;
@@ -1106,10 +1077,6 @@ public class MainActivity extends AppCompatActivity
                         //new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
                         new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
                         break;
-
-                    //case "DROPBOX_REFRESH":
-                    //    new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
-                    //    break;
 
                     case "NOWIFI-ACCEPT":
                         SharedPreferences.Editor editor = sharedPref.edit();
@@ -1501,17 +1468,16 @@ public class MainActivity extends AppCompatActivity
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                         boolean bgload = sharedPref.getBoolean("apod_bg_load", false);
                         if (bgload) {
+                            long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
+                            scheduleApod(ms2NextApod);
                             utils.logAppend(getApplicationContext(),
                                     DEBUG_LOG,
-                                    "Enabled APOD background load in settings");
-                            // TODO: add time
-                            scheduleApod();
-                            utils.logAppend(getApplicationContext(),
-                                    DEBUG_LOG,
-                                    "Started APOD Load scheduler");
+                                    "Enabled APOD Loader in settings, next apod in " +
+                                            ms2NextApod/1000 + " seconds"
+                            );
 
                         } else {
-                            JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+                            //JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
                             if (utils.cancelJob(getApplicationContext(), JOB_ID_APOD)) {
                                 utils.logAppend(getApplicationContext(),
                                         DEBUG_LOG,
@@ -1744,7 +1710,6 @@ public class MainActivity extends AppCompatActivity
             @Override
             public boolean onMenuItemActionCollapse(MenuItem menuItem) {
                 filterItem.setVisible(true);
-                //adp.cleanMap();
                 return true;
             }
         });
@@ -1884,26 +1849,6 @@ public class MainActivity extends AppCompatActivity
             new dialogDisplay(MainActivity.this,
                     "Searching the NASA APOD Archive is not yet available.", "TODO");
         }
-        /* now moved this into settings....
-        if (id == R.id.action_schedule_apod_json_load) {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                if (utils.cancelJob(getApplicationContext(), JOB_ID_APOD)) {
-                    item.setTitle("Start Schedule APOD (Debug)");
-                    return true;
-                }
-                // Reaching this point, job id was not in the pending job list, so start it
-                scheduleApod();
-                utils.logAppend(getApplicationContext(),
-                        DEBUG_LOG,
-                        "Started APOD Load scheduler");
-                item.setTitle("Stop Schedule APOD (Debug)");
-            } else {
-                new dialogDisplay(MainActivity.this,
-                        "Scheduling not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
-            }
-        }*/
-
-        // if (id == R.id.action_filter)  //no longer needed
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
         return false;
@@ -2082,7 +2027,6 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * TODO: must not be used while thumbs are still loaded in bg... check!!
      * Resync local json data with dropbox json data. A merge is done so that
      * - Existing local items on the device are not deleted or changed
      * - Items found on dropbox which do not exist in local array are copied only if
@@ -2478,7 +2422,6 @@ public class MainActivity extends AppCompatActivity
             }
             if (json != null && json instanceof JSONArray) {
                 resyncWithDropbox((JSONArray) json, false);
-                        //sharedPref.getBoolean("force_full_dropbox_sync", false));
             }
             getLatestAPOD();
         } else if (tag.equals("DROPBOX_FORCE_REFRESH")) {
@@ -2492,7 +2435,6 @@ public class MainActivity extends AppCompatActivity
             }
             if (json != null && json instanceof JSONArray) {
                 resyncWithDropbox((JSONArray) json, true);
-                        //sharedPref.getBoolean("force_full_dropbox_sync", true));
             }
             getLatestAPOD();
         } else {
@@ -2626,19 +2568,21 @@ public class MainActivity extends AppCompatActivity
             JobInfo jobInfo = builder.build();
             Log.i("HFCM", "SHUFFLE jobinfo: " + jobInfo.toString());
             JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            sched.schedule(jobInfo);
+            if (sched != null) {
+                sched.schedule(jobInfo);
+            }
         }
     }
 
     /**
      * Schedule the background loading of daily APOD json metadata.
      */
-    private void scheduleApod() {
+    private void scheduleApod(long minLatency) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             ComponentName serviceComponent = new ComponentName(this, apodJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_APOD, serviceComponent);
-            builder.setMinimumLatency(5000);
-            builder.setOverrideDeadline(10000);
+            builder.setMinimumLatency(minLatency);
+            builder.setOverrideDeadline(minLatency + 300000);
             PersistableBundle extras = new PersistableBundle();
             extras.putInt("COUNT", 1);
             //extras.putString("URL", nS());
@@ -2649,25 +2593,11 @@ public class MainActivity extends AppCompatActivity
             JobInfo jobInfo = builder.build();
             Log.i("HFCM", "APOD jobinfo: " + jobInfo.toString());
             JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            sched.schedule(jobInfo);
+            if (sched != null) {
+                sched.schedule(jobInfo);
+            }
         }
     }
-
-    /*private void scheduleThumbLoader(String[] urls) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            ComponentName serviceComponent = new ComponentName(this, thumbLoaderJobService.class);
-            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_THUMB, serviceComponent);
-            builder.setMinimumLatency(2000);
-            builder.setOverrideDeadline(4000);
-            PersistableBundle extras = new PersistableBundle();
-            extras.putStringArray("URLS", urls);
-            builder.setExtras(extras);
-            JobInfo jobInfo = builder.build();
-            Log.i("HFCM", "THUMBLOADER jobinfo: " + jobInfo.toString());
-            JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            sched.schedule(jobInfo);
-        }
-    }*/
 
     /**
      * Called) at end of the "APODchain", if the initial
@@ -2714,15 +2644,7 @@ public class MainActivity extends AppCompatActivity
                         getString(R.string.hfcm_ok));
                 break;
         }
-        /*} else {
-            // should not be reached...
-            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                    "NO network access at initialLaunch()");
-            fragArguments.putString("MESSAGE",
-                    getString(R.string.dropbox_init_no_network));
-            fragArguments.putString("NEG",
-                    getString(R.string.hfcm_ok));
-        }*/
+
         SharedPreferences.Editor editor = sharedPref.edit();
         editor.putBoolean("INITIAL_LAUNCH", false);
         editor.apply();

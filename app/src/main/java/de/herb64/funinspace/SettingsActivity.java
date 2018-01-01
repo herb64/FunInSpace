@@ -19,6 +19,7 @@ import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
 import android.preference.RingtonePreference;
 import android.text.TextUtils;
+import android.view.Menu;
 import android.view.MenuItem;
 
 import java.util.List;
@@ -33,6 +34,10 @@ import java.util.List;
  * Android Design: Settings</a> for design guidelines and the <a
  * href="http://developer.android.com/guide/topics/ui/settings.html">Settings
  * API Guide</a> for more information on developing a Settings UI.
+ *
+ * TODO: how to enable/disable settings in dialog
+ * TODO: how to start settings dialog programatically?
+ *       https://ourcodeworld.com/articles/read/318/how-to-open-android-settings-programmatically-with-java
  */
 public class SettingsActivity extends AppCompatPreferenceActivity {
 
@@ -204,6 +209,14 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             super.onCreate(savedInstanceState);
             addPreferencesFromResource(R.xml.pref_general);
             setHasOptionsMenu(true);
+
+            // disable options not available for versions below lollipop
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+                // https://stackoverflow.com/questions/22444773/how-to-enable-disable-a-preference
+                getPreferenceScreen().findPreference("apod_bg_load").setEnabled(false);
+                getPreferenceScreen().findPreference("wallpaper_shuffle").setEnabled(false);
+                getPreferenceScreen().findPreference("wp_shuffle_times").setEnabled(false);
+            }
 
             // Bind the summaries of EditText/List/Dialog/Ringtone preferences
             // to their values. When their values change, their summaries are

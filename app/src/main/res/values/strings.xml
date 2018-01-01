@@ -307,7 +307,7 @@
     <string name="wp_shuffle_times_title">Shuffle times</string>
     <string name="wp_shuffle_times_summary">Select the hours at which a wallpaper shuffle should be done.</string>
     <string name="apod_bg_load_title">Daily image scheduler</string>
-    <string name="apod_bg_load_summary">Load the information about the daily image, even if the App is
-        not started on that day. This helps to avoid missing images, because these get loaded at next
-        start of the app.</string>
+    <string name="apod_bg_load_summary">Currently only available with Android 5 or higher. Load the
+        information about the daily image, even if the App is not started on that day. This helps
+        to avoid missing images, because these get loaded at next start of the app.</string>
 </resources>

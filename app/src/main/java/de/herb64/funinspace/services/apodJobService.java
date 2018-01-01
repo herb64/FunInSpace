@@ -39,8 +39,8 @@ import de.herb64.funinspace.helpers.utils;
 public class apodJobService extends JobService {
 
     // Randomize NASA Server access with scheduled operations to avoid "DDOS behaviour"
-    private static final int MIN_DELAY = 900000;
-    private static final int MAX_DELAY = 1800000;
+    //private static final int MIN_DELAY = 900000;
+    //private static final int MAX_DELAY = 1800000;
 
     /**
      *
@@ -110,25 +110,10 @@ public class apodJobService extends JobService {
                 "onStartJob(): Job" + count + " - APOD - currently active network type: " + actNetType);
 
         String url = jobParameters.getExtras().getString("URL");
-        //boolean tls = jobParameters.getExtras().getBoolean("PRE_LOLLOPOP_TLS");
+        //boolean tls = jobParameters.getExtras().getBoolean("PRE_LOLLIPOP_TLS");
         // java.lang.IllegalAccessError: Method 'void android.os.BaseBundle.putBoolean(java.lang.String, boolean)' is inaccessible to class 'de.herb64.funinspace.MainActivity'
         boolean tls = true;
-
-        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
-        Calendar cNASA = Calendar.getInstance(tzNASA);
-        String yyyymmddNASA = String.format(loc, "%04d-%02d-%02d",
-                cNASA.get(Calendar.YEAR),
-                cNASA.get(Calendar.MONTH) + 1,
-                cNASA.get(Calendar.DAY_OF_MONTH));
-        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", loc);
-        long epoch = 0;
-        try {
-            dF.setCalendar((Calendar) cNASA.clone()); // clone to avoid timezone overwrite
-            epoch = dF.parse(yyyymmddNASA).getTime();
-        } catch (ParseException e) {
-            e.printStackTrace();
-        }
-
+        long epoch = utils.getNASAEpoch();
         long conntime = utils.testSocketConnect(3000);
         if (conntime == 3000) {
             utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
@@ -147,7 +132,6 @@ public class apodJobService extends JobService {
         loaderthread.start();
         //new Thread(loader).start();
 
-        // logfile for debugging
         utils.logAppend(getApplicationContext(),
                 MainActivity.DEBUG_LOG,
                 "onStartJob(): Job" + count + " - APOD - " +
@@ -176,23 +160,20 @@ public class apodJobService extends JobService {
                     "onStartJob() - APOD - notificationManager is null");
         }
 
-        // send a broadcast - not needed here ???
-        /*Intent intent = new Intent();
-        intent.putExtra("??", ??);
-        intent.setAction(MainActivity.BCAST_APOD);
-        sendBroadcast(intent);*/
+        // send a broadcast - not needed here - see shuffleJobService.java for code
 
         Log.i("HFCM", "Job ID " + jobParameters.getJobId() + " now finished");
         jobFinished(jobParameters, false);  // false: need no reschedule, work is done
-        scheduleNext(count, url, epoch);
+        //scheduleNext(count, url, epoch);
+        scheduleNext(count, url);
         return true;    // no more work to be done with this job
     }
 
     /**
      * This method is called if the system has determined that you must stop execution of your
      * job even before you've had a chance to call
-     * @param jobParameters
-     * @return
+     * @param jobParameters job parameters
+     * @return false to drop the job
      */
     @Override
     public boolean onStopJob(JobParameters jobParameters) {
@@ -204,18 +185,21 @@ public class apodJobService extends JobService {
      * Reschedule again as onetime job
      * @param count count
      * @param url url
-     * @param lastEpoch The last epoch of NASA, for which a new json has been loaded
      */
-    private void scheduleNext(int count, String url, long lastEpoch) {
+    private void scheduleNext(int count, String url) {
+    //private void scheduleNext(int count, String url, long lastEpoch) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             ComponentName serviceComponent = new ComponentName(this, apodJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_APOD, serviceComponent);
-            int random = MIN_DELAY + new Random().nextInt((MAX_DELAY - MIN_DELAY));
-            ArrayList<Long> data = utils.getNASAEpoch(lastEpoch);
+            //int random = MIN_DELAY + new Random().nextInt((MAX_DELAY - MIN_DELAY));
+            //ArrayList<Long> data = utils.getNASAEpoch(lastEpoch);
+            long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
             builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY);
-            builder.setMinimumLatency(data.get(2) + random);
-            builder.setOverrideDeadline(data.get(2) + random + 300000); // 5 min deadline
-            builder.setPersisted(true);      // survive reboots
+            builder.setMinimumLatency(ms2NextApod);            // random delay added
+            builder.setOverrideDeadline(ms2NextApod + 300000); // + add 5 min deadline
+            //builder.setMinimumLatency(data.get(2) + random);            // random delay added
+            //builder.setOverrideDeadline(data.get(2) + random + 300000); // + add 5 min deadline
+            builder.setPersisted(true);                                 // survive reboots
 
             // Extras to pass to the job - well, passing filename not good...
             PersistableBundle extras = new PersistableBundle();
@@ -226,9 +210,12 @@ public class apodJobService extends JobService {
             JobInfo jobInfo = builder.build();
             Log.i("HFCM", jobInfo.toString());
 
+            //String logentry = String.format(Locale.getDefault(),
+            //        "schedNext: %d, Time to next APOD: %.1f hours + random delay of " + random/1000 + " seconds",
+            //        count + 1, (float)data.get(2)/3600000f);
             String logentry = String.format(Locale.getDefault(),
-                    "schedNext: %d, Time to next APOD: %.1f hours + random delay of " + random/1000 + " seconds",
-                    count + 1, (float)data.get(2)/3600000f);
+                    "schedNext: %d, Time to next APOD: %.1f hours (incl. random delay)",
+                    count + 1, (float)ms2NextApod/3600000f);
             utils.logAppend(getApplicationContext(),
                     MainActivity.DEBUG_LOG,
                     logentry);

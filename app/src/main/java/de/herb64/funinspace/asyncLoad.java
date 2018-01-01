@@ -219,6 +219,9 @@ public class asyncLoad extends AsyncTask {
             status = conn.getResponseCode();
 
             if (status != HttpsURLConnection.HTTP_OK) {
+                if (url2load.startsWith("https://api.nasa.gov/planetary/apod?api_key=")) {
+                    url2load = "https://api.nasa.gov/planetary/apod?api_key=xxxxxxxxxxxxxxxxxxxxxx";
+                }
                 return "[" + conn.getResponseCode() + "] " + conn.getResponseMessage() + ", URL: " + url2load;
             }
 
