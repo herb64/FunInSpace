@@ -60,7 +60,7 @@
         android:title="@string/rgb565_thumbs_title" />
 
     <SwitchPreference
-        android:defaultValue="false"
+        android:defaultValue="true"
         android:key="read_out"
         android:summary="@string/pref_summary_read_text"
         android:title="@string/pref_title_read_text" />

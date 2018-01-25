@@ -110,9 +110,9 @@ public class shuffleJobService extends JobService {
             editor.putString("CURRENT_WALLPAPER_FILE", wpfile);
             editor.apply();
 
-            utils.logAppend(getApplicationContext(),
-                    MainActivity.DEBUG_LOG,
-                    "Job" + count + " - SHUFFLE - " + wpfile);
+            //utils.logAppend(getApplicationContext(),
+            //        MainActivity.DEBUG_LOG,
+            //        "Job" + count + " - SHUFFLE - " + wpfile);
 
             // TODO seems we need custom big view to make it appear expanded - for later...
             // TODO notification on Android O - some problem
@@ -150,7 +150,7 @@ public class shuffleJobService extends JobService {
         }
         Log.i("HFCM", "Job ID " + jobParameters.getJobId() + " now finished");
         jobFinished(jobParameters, false);  // false: need no reschedule, work is done
-        scheduleNext(loc, count);
+        scheduleNext(loc, count, wpfile);
         return true;    // no more work to be done with this job
     }
 
@@ -182,7 +182,7 @@ public class shuffleJobService extends JobService {
      * @param loc locale
      * @param count count
      */
-    private void scheduleNext(Locale loc, int count) {
+    private void scheduleNext(Locale loc, int count, String wpfile) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             ComponentName serviceComponent = new ComponentName(this, shuffleJobService.class);
             JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_SHUFFLE, serviceComponent);
@@ -217,8 +217,8 @@ public class shuffleJobService extends JobService {
             SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
             ArrayList<Long> data = utils.getNASAEpoch(sharedPref.getLong("LATEST_APOD_EPOCH", 0));
             String logentry = String.format(loc,
-                    "schedNext: %d, Time to next Shuffle: %d seconds",
-                    count + 1, minDelay/1000);
+                    "Job %d - SHUFFLE - new file: '%s', time to next: %d seconds",
+                    count , wpfile, minDelay/1000);
             utils.logAppend(getApplicationContext(),
                     MainActivity.DEBUG_LOG,
                     logentry);

@@ -41,6 +41,10 @@ public class apodJobService extends JobService {
     // Randomize NASA Server access with scheduled operations to avoid "DDOS behaviour"
     //private static final int MIN_DELAY = 900000;
     //private static final int MAX_DELAY = 1800000;
+    public static final int JOB_ID_APOD = 3124;
+    public static final long DEADLINE_DELAY = 300000;
+    public static final String APOD_SCHED_PREFIX = "s___";
+    private static final int SOCK_TIMEOUT = 3000;
 
     /**
      *
@@ -102,45 +106,88 @@ public class apodJobService extends JobService {
         // or server errors might happen.
 
         Locale loc = Locale.getDefault();
-
-        int count = jobParameters.getExtras().getInt("COUNT");
-        String actNetType = utils.getActiveNetworkTypeName(getApplicationContext());
-        utils.logAppend(getApplicationContext(),
-                MainActivity.DEBUG_LOG,
-                "onStartJob(): Job" + count + " - APOD - currently active network type: " + actNetType);
-
+        int count = jobParameters.getExtras().getInt("COUNT");  // now used to count retries
         String url = jobParameters.getExtras().getString("URL");
         //boolean tls = jobParameters.getExtras().getBoolean("PRE_LOLLIPOP_TLS");
         // java.lang.IllegalAccessError: Method 'void android.os.BaseBundle.putBoolean(java.lang.String, boolean)' is inaccessible to class 'de.herb64.funinspace.MainActivity'
         boolean tls = true;
+
+        // First step in new logic: check for valid json - this is just the verification, after
+        // which we reschedule for the next day.
         long epoch = utils.getNASAEpoch();
-        long conntime = utils.testSocketConnect(3000);
-        if (conntime == 3000) {
-            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                    "onStartJob() - testSocketConnect TIMEOUT (" + conntime + "ms)");
-        } else {
-            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                    "onStartJob() - testSocketConnect OK (" + conntime + "ms)");
+        if (utils.haveValidScheduledJson(getApplicationContext(), epoch)) {
+            // in this case, just schedule for the next day and keep the json file for processing
+            // in getScheduledAPODs(), when user opens the app GUI
+            utils.logAppend(getApplicationContext(),
+                    MainActivity.DEBUG_LOG,
+                    "onStartJob(" + count + ") - APOD - valid file " +
+                            String.format(loc,
+                                    APOD_SCHED_PREFIX + "%d.json", epoch));
+
+            // TODO - seems we need custom big view to make it appear expanded...
+            // TODO - notification ids... (998...)
+            // TODO - launch app if clicking...
+            Notification notification  = new NotificationCompat.Builder(this)
+                    //.setCategory(Notification.CATEGORY_MESSAGE)
+                    .setContentTitle("New APOD")
+                    .setContentText("New apod loaded")
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setAutoCancel(true)
+                    .setSound(Uri.parse("android.resource://"
+                            + this.getPackageName() + "/" + R.raw.newapod))
+                    //.setVibrate()
+                    //.setVisibility(Notification.VISIBILITY_PUBLIC)
+                    .build();
+            NotificationManager notificationManager =
+                    (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                notificationManager.notify(998, notification);
+            } else {
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "onStartJob(" + count + ") - APOD - notificationManager is null");
+            }
+            // here, we can close this now
+            jobFinished(jobParameters, false);  // false: no reschedule, work is done
+            scheduleNext(utils.getMsToNextApod(getApplicationContext()), DEADLINE_DELAY, 0, url);
+            return true;
         }
 
+        String actNetType = utils.getActiveNetworkTypeName(getApplicationContext());
+        utils.logAppend(getApplicationContext(),
+                MainActivity.DEBUG_LOG,
+                "onStartJob(" + count + ") - APOD - currently active network type: " + actNetType);
+
+        long conntime = utils.testSocketConnect(SOCK_TIMEOUT);
+        if (conntime == SOCK_TIMEOUT) {
+            // reschedule by increasing timeout - TODO: handle too large increases
+            long nxt = 30000 + count * 30000;
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "onStartJob(" + count + ") - testSocketConnect TIMEOUT (" + conntime + "ms), reschedule by " + nxt/1000 + " seconds...");
+            // finish and schedule retry
+            jobFinished(jobParameters, false);  // false: no reschedule, work is done
+            scheduleNext(nxt, 10000, count, url);
+            return true;
+        } else {
+            count = 0;
+        }
+        utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                "onStartJob(" + count + ") - testSocketConnect OK (" + conntime + "ms), kickoff loader thread...");
+
+        // Kick off the loader thread
         apodJsonLoader loader = new apodJsonLoader(getApplicationContext(),
                 url,
                 String.format(loc,
-                        MainActivity.APOD_SCHED_PREFIX + "%d.json", epoch),
+                        APOD_SCHED_PREFIX + "%d.json", epoch),
                 tls);
-        Thread loaderthread = new Thread(loader);
-        loaderthread.start();
-        //new Thread(loader).start();
+        new Thread(loader).start();
 
-        utils.logAppend(getApplicationContext(),
+        /*utils.logAppend(getApplicationContext(),
                 MainActivity.DEBUG_LOG,
                 "onStartJob(): Job" + count + " - APOD - " +
                         String.format(loc,
-                                MainActivity.APOD_SCHED_PREFIX + "%d.json", epoch));
+                                APOD_SCHED_PREFIX + "%d.json", epoch));*/
 
-        // TODO - seems we need custom big view to make it appear expanded...
-        // TODO - notification ids... (998...)
-        Notification notification  = new NotificationCompat.Builder(this)
+        /*Notification notification  = new NotificationCompat.Builder(this)
                 //.setCategory(Notification.CATEGORY_MESSAGE)
                 .setContentTitle("New APOD")
                 .setContentText("New apod loaded")
@@ -158,14 +205,14 @@ public class apodJobService extends JobService {
         } else {
             utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                     "onStartJob() - APOD - notificationManager is null");
-        }
+        }*/
 
         // send a broadcast - not needed here - see shuffleJobService.java for code
 
-        Log.i("HFCM", "Job ID " + jobParameters.getJobId() + " now finished");
+        //Log.i("HFCM", "Job ID " + jobParameters.getJobId() + " now finished");
         jobFinished(jobParameters, false);  // false: need no reschedule, work is done
-        //scheduleNext(count, url, epoch);
-        scheduleNext(count, url);
+        long nxt = 30000 + count * 300000;
+        scheduleNext(nxt, 10000, count, url);
         return true;    // no more work to be done with this job
     }
 
@@ -182,24 +229,22 @@ public class apodJobService extends JobService {
     }
 
     /**
-     * Reschedule again as onetime job
+     * Reschedule again as onetime job. Important: in case of a bad url for example, the same bad
+     * URL will be rescheduled over and over again, if it is taken from current job parameters.
+     * TODO: document this, and in case of bad url, job needs to be recreated from scratch!!!
+     * @param interval interval (including any random offset) in milliseconds
+     * @param deadline deadline (in milliseconds)
      * @param count count
      * @param url url
      */
-    private void scheduleNext(int count, String url) {
-    //private void scheduleNext(int count, String url, long lastEpoch) {
+    private void scheduleNext(long interval, long deadline, int count, String url) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             ComponentName serviceComponent = new ComponentName(this, apodJobService.class);
-            JobInfo.Builder builder = new JobInfo.Builder(MainActivity.JOB_ID_APOD, serviceComponent);
-            //int random = MIN_DELAY + new Random().nextInt((MAX_DELAY - MIN_DELAY));
-            //ArrayList<Long> data = utils.getNASAEpoch(lastEpoch);
-            long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
+            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_APOD, serviceComponent);
             builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY);
-            builder.setMinimumLatency(ms2NextApod);            // random delay added
-            builder.setOverrideDeadline(ms2NextApod + 300000); // + add 5 min deadline
-            //builder.setMinimumLatency(data.get(2) + random);            // random delay added
-            //builder.setOverrideDeadline(data.get(2) + random + 300000); // + add 5 min deadline
-            builder.setPersisted(true);                                 // survive reboots
+            builder.setMinimumLatency(interval);
+            builder.setOverrideDeadline(interval + deadline);
+            builder.setPersisted(true);                             // survive reboots
 
             // Extras to pass to the job - well, passing filename not good...
             PersistableBundle extras = new PersistableBundle();
@@ -210,12 +255,9 @@ public class apodJobService extends JobService {
             JobInfo jobInfo = builder.build();
             Log.i("HFCM", jobInfo.toString());
 
-            //String logentry = String.format(Locale.getDefault(),
-            //        "schedNext: %d, Time to next APOD: %.1f hours + random delay of " + random/1000 + " seconds",
-            //        count + 1, (float)data.get(2)/3600000f);
             String logentry = String.format(Locale.getDefault(),
-                    "schedNext: %d, Time to next APOD: %.1f hours (incl. random delay)",
-                    count + 1, (float)ms2NextApod/3600000f);
+                    "schedNext (%d), Time to next: %d(+%d) seconds (incl. random delay)",
+                    count + 1, interval/1000, deadline/1000);
             utils.logAppend(getApplicationContext(),
                     MainActivity.DEBUG_LOG,
                     logentry);

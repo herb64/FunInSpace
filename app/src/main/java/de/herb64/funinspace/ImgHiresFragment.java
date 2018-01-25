@@ -71,6 +71,9 @@ public class ImgHiresFragment extends Fragment {
     private String imgFullSize = "";
     private String logString = "";
 
+    // BBBBBBBBBBBBBBBBBBBBB
+    private Bitmap bmp = null;
+
     /**
      * Passed intent information:
      * urltoparse       the url to be loaded, or filepath if local copy exists
@@ -139,6 +142,17 @@ public class ImgHiresFragment extends Fragment {
         super.onLowMemory();
     }*/
 
+
+    /**
+     * Storing the bitmap object within retained fragment as member variable. Instead of using
+     * saved instance state in ImageActivity (bitmap leads to TransactionTooLargeException for
+     * the parcel), just use this function, if instance state is restored.
+     * @return bitmap object
+     */
+    public Bitmap getBitmap() {
+        return bmp;
+    }
+
     // ======================================================================================
     // This inner class contains the AsyncTask based class to load the hires image from NASA.
     // ======================================================================================
@@ -169,7 +183,7 @@ public class ImgHiresFragment extends Fragment {
          */
         @Override
         protected Bitmap doInBackground(String... params) {
-            Bitmap bmp = null;
+            //Bitmap bmp = null;    // BBBBBBBBBBBBBBBBBBBBB
             Log.i("HFCM", "doInBackground() imghiresfragment");
             Locale loc = Locale.getDefault();
 
@@ -333,9 +347,6 @@ public class ImgHiresFragment extends Fragment {
                     } else {
                         logString = logString + "\n\n+++NO RESCALE REQUIRED +++";
                     }
-
-                    // jusr for Markus Hilger test:
-                    //return null;
 
                     /* some old code snippet to calculate inSampleSize
                     int factor = (int) Math.ceil(Math.sqrt((double)requiredMemo / (double)maxMem));

@@ -38,33 +38,47 @@
         android:id="@+id/action_search_apod"
         android:enabled="false"
         android:icon="@android:drawable/ic_menu_search"
-        android:orderInCategory="94"
+        android:orderInCategory="93"
         android:title="@string/search_nasa_archive"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_mail"
         android:icon="@android:drawable/ic_dialog_email"
-        android:orderInCategory="95"
+        android:orderInCategory="94"
         android:title="@string/email_log" />
 
     <item
         android:id="@+id/action_showlog"
         android:icon="@android:drawable/ic_menu_set_as"
-        android:orderInCategory="95"
+        android:orderInCategory="94"
         android:title="@string/show_log" />
 
     <item
         android:id="@+id/action_about"
         android:icon="@android:drawable/ic_menu_info_details"
-        android:orderInCategory="99"
+        android:orderInCategory="97"
         android:title="About"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_privacy"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:orderInCategory="98"
+        android:title="@string/privacy_policy"
         app:showAsAction="ifRoom" />
     <item
         android:id="@+id/action_help"
         android:icon="@android:drawable/ic_menu_help"
+        android:orderInCategory="99"
+        android:title="@string/action_help"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_crash"
+        android:enabled="false"
+        android:icon="@android:drawable/stat_sys_warning"
         android:orderInCategory="100"
-        android:title="Help"
+        android:title="Create TEST CRASH"
         app:showAsAction="ifRoom" />
 
     <!-- Some code to make searchview appear as menu item

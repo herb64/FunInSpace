@@ -36,6 +36,9 @@ public class VideoActivity extends AppCompatActivity {
             }
         });
 
+        // see https://developer.android.com/studio/publish/preparing.html - security
+        WebView.setWebContentsDebuggingEnabled(false);
+
         // just some test - but did not allow to change that...
         //vimeoView.getSettings().setUserAgentString("Mozilla/5.0 (X11; Linux x86_64; rv:10.0) Gecko/20100101 Firefox/10.0");
         //String ddd = vimeoView.getSettings().getUserAgentString();

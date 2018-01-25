@@ -1,6 +1,8 @@
 package de.herb64.funinspace;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.support.annotation.LayoutRes;
 import android.support.annotation.NonNull;
@@ -17,6 +19,7 @@ import android.widget.Filter;
 import android.widget.Filterable;
 import android.widget.MultiAutoCompleteTextView;
 
+import java.io.File;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -135,6 +138,26 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         holder.ivThumb.setOnClickListener(act.myThumbClickListener);        // BETTER
         holder.ivThumb.setTag(id);                                          // important!
         holder.ivThumb.setImageBitmap(iList.get(position).getBmpThumb());
+
+        // BBBBBBBBBBBBBBBBBBBBBB
+        // First attempt not to store bitmap within list to save memory
+        /*File thumbFile = new File(ctx.getFilesDir(), iList.get(position).getThumb());
+        if (thumbFile.exists()) {
+            Bitmap thumb = null;
+            // we use this option to save some memory - experimental
+            //if (sharedPref.getBoolean("rgb565_thumbs", false)) {
+            //    BitmapFactory.Options options = new BitmapFactory.Options();
+            //    options.inPreferredConfig = Bitmap.Config.RGB_565;
+            //    thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath(), options);
+            //} else {
+                thumb = BitmapFactory.decodeFile(thumbFile.getAbsolutePath());
+            //}
+            holder.ivThumb.setImageBitmap(thumb);
+        } else {
+            holder.ivThumb.setImageBitmap(null);
+        }*/
+        // BBBBBBBBBBBBBBBBBBBBBB
+
         holder.ivThumb.setVisibility(View.VISIBLE);
 
         // Update the small wallpaper indicator within the thumbnail to current status

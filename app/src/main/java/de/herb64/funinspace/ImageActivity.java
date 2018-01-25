@@ -13,6 +13,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -64,6 +65,23 @@ import de.herb64.funinspace.helpers.utils;
 //       taken when closing the window...
 // TODO: resizing of the selection rect to
 
+// TODO: CHECK THIS ARTICLE - DOCU
+// Android 8 problems with parcels / transaction size too large:
+// other versions allow bitmap in parcelable for saved instance state
+// https://github.com/codepath/android_guides/wiki/Using-Parcelable
+// and
+// https://stackoverflow.com/questions/11346275/android-why-is-using-onsaveinsancestate-to-save-a-bitmap-object-not-being-ca
+// onRetainNonConfigurationInstance() + getLastNonConfigurationInstance() > deprecated ?
+//
+// THIS SEEMS TO BE THE SOLUTION: the retained fragment is kept
+// https://developer.android.com/guide/topics/resources/runtime-changes.html
+
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// TODO: why does latest crash with home button only happen in wp select mode? Also: if rotating
+//       the phone, the saved instance state does also not make this crash...
+//       of course, keeping the bitmap in this bundle is bad, anyway...
+//
+
 public class ImageActivity extends AppCompatActivity implements ImgHiresFragment.myCallbacks {
     private drawableImageView ivHires = null;
     private Bitmap myBitmap;
@@ -100,6 +118,10 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     private int wpMaxY = 0;
     private int wpMaxX = 0;
     private boolean isLandScape = false;
+
+    private TextReader reader;
+    private String explanation;
+    private String title;
 
     private static final String TAG_TASK_FRAGMENT = "img_hires_task_fragment";
     private static final String TAG = "HFCM";
@@ -185,7 +207,15 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         if (savedInstanceState != null) {
             // TODO: Docu note: using noinspection for ResourceType to avoid complaint in setVisibility()
             //       about non correct value, because we restore this from Bundle...
-            myBitmap = savedInstanceState.getParcelable("apodimg");
+
+            // FIX for transaction size exception - keep image in fragment.
+            //myBitmap = savedInstanceState.getParcelable("apodimg");  // BBBBBBBBBBBBBBBBB don't do it
+            // why does it not crash on lower android version and why only in wp select mode home button?
+            FragmentManager fm = getFragmentManager();
+            ImgHiresFragment mHiresFragment = (ImgHiresFragment) fm.findFragmentByTag(TAG_TASK_FRAGMENT);
+            // this one should actually only be a reference, so no double memory needed!
+            myBitmap = mHiresFragment.getBitmap();
+
             ivHires.setImageBitmap(myBitmap);
             strSz = savedInstanceState.getString("size");
             strHires = savedInstanceState.getString("strhires");
@@ -205,6 +235,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             maxTextureSize = savedInstanceState.getInt("maxtexturesize");
             imageName = savedInstanceState.getString("imagename");
             wallPaperQuality = savedInstanceState.getInt("wallpaper_quality");
+            explanation = savedInstanceState.getString("explanation");
+            title = savedInstanceState.getString("title");
             wallPaperSelectMode = false;
             if (myBitmap != null) {
                 initializeMatrix();
@@ -222,6 +254,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             wallPaperQuality = Integer.parseInt(intent.getStringExtra("wallpaper_quality"));
             // We now can start the activity in select mode without need to first long press
             wallPaperSelectMode = intent.getBooleanExtra("wpselect", false);
+            explanation = intent.getStringExtra("explanation");
+            title = intent.getStringExtra("title");
             returnIntent = new Intent();
 
             // null pointer on data in returnintent - was never set
@@ -261,11 +295,19 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             }
         }
 
+        // Create text to speech reader
+        android.support.v4.app.FragmentManager fm = getSupportFragmentManager();
+        reader = (TextReader) fm.findFragmentByTag(TextReader.TAG_READ_FRAGMENT);
+        if (reader == null) {
+            reader = new TextReader();
+            fm.beginTransaction().add(reader, TextReader.TAG_READ_FRAGMENT).commit();
+        }
+
         //wallPaperSelectMode = false;
         //wallPaperQuality = DEFAULT_WP_QUALITY;
         ivHires.setSelectRect(null);
 
-        Log.i("HFCM", "Finished oncreate in imageactivity with quality " + wallPaperQuality);
+        //Log.i("HFCM", "Finished oncreate in imageactivity with quality " + wallPaperQuality);
     }
 
     /*@Override
@@ -286,7 +328,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putParcelable("apodimg", myBitmap);
+        //outState.putParcelable("apodimg", myBitmap);        // BBBBBBBBBBB don't do this!
         outState.putString("strhires", strHires);
         outState.putString("size", strSz);
         outState.putInt("loading", loadingBar.getVisibility());
@@ -298,6 +340,8 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
         outState.putInt("maxtexturesize", maxTextureSize);
         outState.putString("imagename", imageName);
         outState.putInt("wallpaper_quality", wallPaperQuality);
+        outState.putString("explanation", explanation);
+        outState.putString("title", title);
     }
 
     // Code to calculate stuff for rotation. Note, that imageview size is stored in instance state
@@ -376,7 +420,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             // rectangle according to the user drag operations
             if (wallPaperSelectMode) {
                 // for now, only moving left to right for images with larger aspect than screen!
-                Log.i("HFCM", "Having distance in select mode: " + distanceX + " / " + distanceY);
+                //Log.i("HFCM", "Having distance in select mode: " + distanceX + " / " + distanceY);
                 if (wallPaperSelectRect.top - (int)distanceY >= wpMinY &&       // 0
                         wallPaperSelectRect.bottom - (int)distanceY <= wpMaxY) { // viewHeight
                     wallPaperSelectRect.set(
@@ -564,13 +608,9 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
                 }
 
                 // Save wallpaper bitmap as JPEG (now with quality) and return filename via intent.
-                //Log.i("HFCM", "Saving wallpaper image into 'wp_" + imageName + "', Quality: " + wallPaperQuality);
-                //utils.writeJPG(getApplicationContext(),
-                //        "wp_" + imageName,
-                //        wallBitmap);
                 if (wallBitmap != null) {
-                    Log.i("HFCM", "Saving wallpaper image into 'wp_" + imageName +
-                            "', Quality: " + wallPaperQuality);
+                    //Log.i("HFCM", "Saving wallpaper image into 'wp_" + imageName +
+                    //        "', Quality: " + wallPaperQuality);
                     utils.writeJPG(getApplicationContext(),
                             "wp_" + imageName,
                             wallBitmap,
@@ -730,7 +770,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     // ======================================================================================
     @Override
     public void onPreExecute() {
-        Log.d(TAG, "Reached onPreExecute() in ImageActivity");
+        //Log.d(TAG, "Reached onPreExecute() in ImageActivity");
     }
 
     /*@Override
@@ -740,7 +780,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
 
     @Override
     public void onCancelled() {
-        Log.d(TAG, "Reached onCancelled() in ImageActivity");
+        //Log.d(TAG, "Reached onCancelled() in ImageActivity");
     }
 
     /**
@@ -782,7 +822,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             ivHires.setImageBitmap(myBitmap);
             //String toaster = "onPostExecute: Returned Bitmap, size = " + originalSize;
             //Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
-            Log.i(TAG, "ImageActivity - onPostExecute: Returned Bitmap, size = " + originalSize);
+            //Log.i(TAG, "ImageActivity - onPostExecute: Returned Bitmap, size = " + originalSize);
             // new code for "matrix" scaleType - need call after loading the bmp
             // to solve problem with upper left image when using matrix
             // this now centers the image after loading.
@@ -792,6 +832,16 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             viewWidth = ivHires.getWidth();
             viewHeight = ivHires.getHeight();
             initializeMatrix();     // Init to default to fit into screen
+
+            // Begin reading
+            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+            if (sharedPref.getBoolean("read_out", false) && !wallPaperSelectMode) {
+                android.support.v4.app.FragmentManager fm = getSupportFragmentManager();
+                reader = (TextReader) fm.findFragmentByTag(TextReader.TAG_READ_FRAGMENT);
+                if (reader != null) {
+                    reader.read(title, explanation);
+                }
+            }
         } else {
             // Instead of displaying nothing, display an error bitmap. Using internal one:
             // builtin drawables: http://androiddrawables.com/
@@ -803,7 +853,6 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             ivHires.setImageBitmap(bmp);
             String toaster = "onPostExecute: No bitmap has been returned (null)";
             Toast.makeText(ImageActivity.this, toaster, Toast.LENGTH_LONG).show();
-            Log.e(TAG, "ImageActivity - onPostExecute: No bitmap has been returned (null)");
         }
         loadingBar.setVisibility(View.GONE);
         // Prepare data to be returned after closing the activity
@@ -831,9 +880,9 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
     @Override
     public void onBackPressed() {
         super.onBackPressed();
-        //loadingBar.setVisibility(View.VISIBLE);
-        //SystemClock.sleep(10000);
-
+        if (reader != null) {
+            reader.stop();
+        }
 
         // TODO: shouldn't we remove the fragment? verify !!!
         /*FragmentManager fm = getFragmentManager();
@@ -845,6 +894,7 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             Log.d(TAG, "Fragment is null, no remove");
         }*/
     }
+
 
     /**
      * Initialize the wallpaper selection rectangle without having the need to long click on the

@@ -7,8 +7,8 @@ android {
         applicationId "de.herb64.funinspace"
         minSdkVersion 16
         targetSdkVersion 26
-        versionCode 20171231
-        versionName "0.6.4"
+        versionCode 201801242
+        versionName "0.6.9 alpha (Build 2018/01/24 - 2)"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

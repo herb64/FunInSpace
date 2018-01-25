@@ -12,7 +12,10 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.LabeledIntent;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
@@ -23,7 +26,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PersistableBundle;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
 // import android.support.multidex.MultiDexApplication;
 import android.support.design.widget.CoordinatorLayout;
@@ -39,6 +44,7 @@ import android.support.v7.view.menu.MenuBuilder;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.ActionMode;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -57,9 +63,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -130,12 +133,19 @@ public class MainActivity extends AppCompatActivity
     protected TimeZone tzNASA;
     protected Calendar cNASA;
     protected SimpleDateFormat formatter;
-    private TextToSpeech tts;
+    // static is bad for tts variable (possible leaks)
+    // https://www.androiddesignpatterns.com/2013/04/retaining-objects-across-config-changes.html
+    // http://www.vogella.com/tutorials/AndroidFragments/article.html#headlessfragments
+    //private TextToSpeech tts = null;
+    private TextReader reader;
     private BroadcastReceiver receiver = null;
     private NetworkBcastReceiver networkReceiver = null;
     private int unfinishedApods = 0;
-
+    private int versionCodeCurrent = 0;
+    //private int versionCodeInPrefs = 0;
     private ArrayList<Integer> selected;    // keep track of selected items
+
+    private ActionMode mActionMode;
 
     // Using JNI for testing with NDK and C code in a shared lib .so file
     static {System.loadLibrary("hfcmlib");}
@@ -144,6 +154,7 @@ public class MainActivity extends AppCompatActivity
     public native String vE();
     public native String dPJ();
     public native String dAS();
+    public native String dPR();
 
     // ========= CONSTANTS =========
     //public static String TAG = MainActivity.class.getSimpleName();
@@ -181,16 +192,12 @@ public class MainActivity extends AppCompatActivity
     public static final int WP_EXISTS = 1;
     protected static final int WP_ACTIVE = 3;   // just in case of bitmap interpretation
     //private static final int DEFAULT_MAX_STORED_WP = 20;      // TODO - how to limit?
-
-    public static final String APOD_SCHED_PREFIX = "s___";
     protected static final int MAX_HIRES_PERCENT = 20;          // TODO - make config option
     public static final int JOB_ID_SHUFFLE = 85407;
     public static final String BCAST_SHUFFLE = "SHUFFLE";
-    public static final int JOB_ID_APOD = 3124;
-    //public static final String BCAST_APOD = "APOD";
-    //public static final int JOB_ID_THUMB = 739574;
     public static final String BCAST_THUMB = "THUMB";
     public static final String DEBUG_LOG = "funinspace.log";
+    private static final String FILE_PROVIDER = "de.herb64.funinspace.fileprovider";
 
     /**
      * @param savedInstanceState saved instance data
@@ -199,6 +206,7 @@ public class MainActivity extends AppCompatActivity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState); // before own code for create
 
+        // TODO - fix problems with this, for now it is not used!  -  see terminateApp()
         if (getIntent().getExtras() != null && getIntent().getExtras().getBoolean("EXIT", false)) {
             finishAndRemoveTask();
         }
@@ -217,15 +225,27 @@ public class MainActivity extends AppCompatActivity
         }
 
         loc = Locale.getDefault();  // see also lalatex docu
+        versionCodeCurrent = utils.getVersionCode(getApplicationContext());
 
         long starttime = System.currentTimeMillis();
         utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                "**************  APP START (onCreate) **************");
-        Log.d("HFCM", "**************************  APP START **************************");
+                "**************  APP START (" + versionCodeCurrent + ") **************");
 
-        // just testing
-        float hourstonext = (float)utils.getMsToNextShuffle(getApplicationContext())/3600000f;
-        Log.i("HFCM", String.format(loc, "Next sched in %.1f hours", hourstonext));
+        // Create text to speech reader
+        FragmentManager fm = getSupportFragmentManager();
+        reader = (TextReader) fm.findFragmentByTag(TextReader.TAG_READ_FRAGMENT);
+        if (reader == null) {
+            Log.i("HFCM", "Creating new reader object");
+            reader = new TextReader();
+            fm.beginTransaction().add(reader, TextReader.TAG_READ_FRAGMENT).commit();
+        }
+
+        // just testing - to be removed
+        //float hourstonext = (float)utils.getMsToNextShuffle(getApplicationContext())/3600000f;
+        //Log.i("HFCM", String.format(loc, "Next sched in %.1f hours", hourstonext));
+
+        // TODO - improve algorithm for new shuffle wp - low #images vs. high rating
+        //String hugo = utils.getRandomWpFileName(getApplicationContext());
 
         // Prepare a device information class to be used during testing and debugging.
         // Query GL_MAX_TEXTURE_SIZE by creating an OpenGL context within a separate Activity.
@@ -238,7 +258,6 @@ public class MainActivity extends AppCompatActivity
             selected = savedInstanceState.getIntegerArrayList("selecteditems");
             maxTextureSize = savedInstanceState.getInt("maxtexsize");
             devInfo.setGlMaxTextureSize(maxTextureSize);
-            Log.i("HFCM", "Restored instance state, selected = " + selected);
         } else {
             SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
             maxTextureSize = shPref.getInt("maxtexsize", 0);
@@ -296,8 +315,6 @@ public class MainActivity extends AppCompatActivity
             }
         });*/
 
-
-
         myItemsLV = (ListView) findViewById(R.id.lv_content);
 
         // --------  Option 1 for  contextual action mode (non multi select) ---------
@@ -334,25 +351,16 @@ public class MainActivity extends AppCompatActivity
                 // refresh of adapter when loading images at first time install
                 // TODO - do not ellipsize at all if explanation matches into minimum lines
                 TextView v = myItemsLV.findViewWithTag(position + MAX_ITEMS);
-                boolean read = sharedPref.getBoolean("read_out", false);
                 if (v.getMaxLines() == MAX_ELLIPSED_LINES) {
                     v.setMaxLines(MAX_LINES);
                     v.setEllipsize(null);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);
                     myList.get((int)id).setMaxLines(MAX_LINES);
-                    if (read && tts != null) {
-                        tts.speak(myList.get((int)id).getExplanation(),
-                                TextToSpeech.QUEUE_FLUSH,
-                                null);
-                    }
                 } else {
                     v.setEllipsize(TextUtils.TruncateAt.END);
                     v.setMaxLines(MAX_ELLIPSED_LINES);
                     v.setCompoundDrawablesWithIntrinsicBounds(null,null,null, expl_points);
                     myList.get((int)id).setMaxLines(MAX_ELLIPSED_LINES);
-                    if (read && tts != null) {
-                        tts.stop();
-                    }
                 }
                 myItemsLV.setSelection(position);
             }
@@ -391,13 +399,15 @@ public class MainActivity extends AppCompatActivity
             }
 
             /**
-             * @param actionMode
-             * @param menu
-             * @return
+             * Create Action Mode
+             * @param actionMode actionmode
+             * @param menu menu
+             * @return true
              */
             @Override
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
+                mActionMode = actionMode;
                 //selected = new ArrayList<>();
                 /* Just for keeping track of actions
                 // Trying to display the RatingBar within CAB, similar to SearchView in main bar
@@ -463,6 +473,21 @@ public class MainActivity extends AppCompatActivity
                         item_reselect.setVisible(false);
                     }
                 }
+
+                // Change Read Icon depending on current state
+                MenuItem item_read = menu.findItem(R.id.cab_read);
+                FragmentManager fm = getSupportFragmentManager();
+                reader = (TextReader) fm.findFragmentByTag(TextReader.TAG_READ_FRAGMENT);
+                if (reader != null && reader.isReading()) {
+                    Log.i("HFCM", "CAB init: tts is reading");
+                    item_read.setIcon(android.R.drawable.ic_lock_silent_mode);
+                } else {
+                    if (reader == null) {
+                        Log.i("HFCM", "CAB init: reader is null");
+                    }
+                    item_read.setIcon(android.R.drawable.ic_lock_silent_mode_off);
+                }
+
                 return true;        // ???
                 //return false;
             }
@@ -476,13 +501,14 @@ public class MainActivity extends AppCompatActivity
                         deleteItems(selected);
                         // activity_main.xml has CoordinatorLayout as base!
                         final View coordinatorLayoutView = findViewById(R.id.id_coord);
-                        Snackbar.make(coordinatorLayoutView, "undo to be done...", Snackbar.LENGTH_LONG)
+                        Snackbar.make(coordinatorLayoutView, "does not work yet!!!", Snackbar.LENGTH_LONG)
                                 .setAction("UNDO", undoListener)
                                 .show();
                         new dialogDisplay(MainActivity.this, "Undo snackbar not yet active...", "Herbert TODO");
                         actionMode.finish();
                         return true;
                     case R.id.cab_share:
+                        // https://faq.whatsapp.com/en/android/28000012
                         new dialogDisplay(MainActivity.this, "Sharing not yet possible", "Herbert TODO");
                         actionMode.finish();
                         return true;
@@ -498,7 +524,9 @@ public class MainActivity extends AppCompatActivity
                         // and potential problems with phone rotation
                         // AGAIN: do NOT use non default constructor with fragments - use arguments
                         Bundle fragArguments = new Bundle();
-                        fragArguments.putIntegerArrayList("indices", selected);
+                        // FIX: just passing selected as arraylist will result in zero-length list
+                        //      in ratingDialog.java - need to use new()
+                        fragArguments.putIntegerArrayList("indices", new ArrayList<>(selected));
                         int current = 0;
                         for (int i : selected) {
                             if (myList.get(i).getRating() > current) {
@@ -615,38 +643,15 @@ public class MainActivity extends AppCompatActivity
                         adp.notifyDataSetChanged();
                         return true;
                     case R.id.cab_read:
-                        // deprecations
-                        // https://stackoverflow.com/questions/27968146/texttospeech-with-api-21
-                        if (tts != null && !tts.isSpeaking()) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                                tts.speak("Title",
-                                        TextToSpeech.QUEUE_ADD,
-                                        null, null);
+                        fm = getSupportFragmentManager();
+                        reader = (TextReader) fm.findFragmentByTag(TextReader.TAG_READ_FRAGMENT);
+                        if (reader != null) {
+                            if (reader.read(myList.get(selected.get(0)).getTitle(),
+                                    myList.get(selected.get(0)).getExplanation())) {
+                                menuItem.setIcon(android.R.drawable.ic_lock_silent_mode);
                             } else {
-                                tts.speak("Title",
-                                        TextToSpeech.QUEUE_ADD,
-                                        null);
+                                menuItem.setIcon(android.R.drawable.ic_lock_silent_mode_off);
                             }
-                            tts.playSilence(500L,
-                                    TextToSpeech.QUEUE_ADD,
-                                    null);
-                            tts.speak(myList.get(selected.get(0)).getTitle(),
-                                    TextToSpeech.QUEUE_ADD,
-                                    null);
-                            tts.playSilence(500L,
-                                    TextToSpeech.QUEUE_ADD,
-                                    null);
-                            tts.speak("Explanation",
-                                    TextToSpeech.QUEUE_ADD,
-                                    null);
-                            tts.playSilence(500L,
-                                    TextToSpeech.QUEUE_ADD,
-                                    null);
-                            tts.speak(myList.get(selected.get(0)).getExplanation(),
-                                    TextToSpeech.QUEUE_ADD,
-                                    null);
-                        } else if (tts != null) {
-                            tts.stop();
                         }
                         return true;
                     default:
@@ -664,8 +669,8 @@ public class MainActivity extends AppCompatActivity
                 for (spaceItem item : myList) {
                     item.setSelected(false);
                 }
-                if (tts != null) {
-                    tts.stop();
+                if (reader != null) {
+                    reader.stop();
                 }
             }
         });
@@ -688,12 +693,23 @@ public class MainActivity extends AppCompatActivity
         // https://www.youtube.com/watch?v=YnNpwk_Q9d0
         // https://www.youtube.com/watch?v=9OWmnYPX1uc
 
+        // Detect, if an updated version of the app has been started. This allows to have special
+        // code to be run, e.g. handle stuff like json format changes etc...
+        processAppUpdates();
+
+        // BBBBBBBBBBBBBBBBBB
+        jsonData = null;
+        File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
+        if (jsonFile.exists()) {
+            jsonData = utils.readf(getApplicationContext(), localJson);
+        }
+
         if (savedInstanceState != null) {
-            // The spaceItem internal structure and the json data s tring are restored.
-            // On Android 8.0 this fails with Transaction Too Large error, so we do not put this
+            // The spaceItem internal structure and the json data string are restored.
+            // On Android 8.0 this failed with "Transaction Too Large error", so we do not put this
             // structure onto the saved instance state and instead recreate it using addItems()
             //myList = savedInstanceState.getParcelableArrayList("myList");
-            jsonData = savedInstanceState.getString("jsonData");
+            //jsonData = savedInstanceState.getString("jsonData");
             if (jsonData != null) {
                 try {
                     parent = new JSONArray(jsonData);
@@ -702,15 +718,13 @@ public class MainActivity extends AppCompatActivity
                 }
             }
             addItems();
-            //maxTextureSize = savedInstanceState.getInt("maxtexsize");
-            //devInfo.setGlMaxTextureSize(maxTextureSize);
-            //selected = savedInstanceState.getIntegerArrayList("selecteditems");
         } else {
-            jsonData = null;
+            // BBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+            /*jsonData = null;
             File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
             if (jsonFile.exists()) {
                 jsonData = utils.readf(getApplicationContext(), localJson);
-            }
+            }*/
 
             // -------------------------------------------------------------------
             // DECIDE, IF WE ARE IN "FIRST LAUNCH" BY PRESENCE OF jsonData CONTENT
@@ -755,7 +769,7 @@ public class MainActivity extends AppCompatActivity
                             getString(R.string.dropbox_init_no_network));
                     fragArguments.putString("NEG",
                             getString(R.string.hfcm_ok));
-                    FragmentManager fm = getSupportFragmentManager();
+                    fm = getSupportFragmentManager();
                     confirmDialog confirmdlg = new confirmDialog();
                     confirmdlg.setArguments(fragArguments);
                     confirmdlg.show(fm, "INITLAUNCH");
@@ -764,18 +778,9 @@ public class MainActivity extends AppCompatActivity
                 }
             }
             // JUST A CONVERSION UTILITY USED DURING DEVELOPMENT - CONVERTED EPOCH VALUES INTO A NEW
-            // JSON FILE FOR UPLOAD TO DROPBOX - NEW TIMEZONE HANDLING NEEDS THIS CHANGE
+            // JSON FILE FOR UPLOAD TO DROPBOX - NEW TIMEZONE HANDLING NEEDED THIS CHANGE
             //updateEpochsInJsonDEVEL();
         }
-
-        tts = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
-            @Override
-            public void onInit(int status) {
-                if(status != TextToSpeech.ERROR) {
-                    tts.setLanguage(Locale.UK);
-                }
-            }
-        });
 
         utils.setWPShuffleCandidates(getApplicationContext(), myList);
 
@@ -845,8 +850,8 @@ public class MainActivity extends AppCompatActivity
                     }
                 }
                 if (needReload) {
-                    new dialogDisplay(MainActivity.this,
-                            "Wallpaper Shuffle has been terminated, although it should be active. Reactivating now...");
+                    //new dialogDisplay(MainActivity.this,
+                    //        "Wallpaper Shuffle has been terminated, although it should be active. Reactivating now...");
                     scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
                     utils.logAppend(getApplicationContext(),
                             DEBUG_LOG,
@@ -854,8 +859,7 @@ public class MainActivity extends AppCompatActivity
                 }
             }
         }
-        //utils.logAppend(getApplicationContext(), DEBUG_LOG, "Current active network type: " +
-        //        utils.getActiveNetworkTypeName(getApplicationContext()));
+
         utils.getAllNetworksInfo(getApplicationContext());
         utils.logAppend(getApplicationContext(),
                 DEBUG_LOG,
@@ -863,20 +867,53 @@ public class MainActivity extends AppCompatActivity
                 starttime);
     }
 
+    /**
+     * Todo - checkout this
+     */
+    /*@Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+    }*/
+
     @Override
     protected void onDestroy() {
         // https://stackoverflow.com/questions/18821481/what-is-the-correct-order-of-calling-superclass-methods-in-onpause-onstop-and-o
         // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
+
+        // interesting: why is this not working, if reader stop at end of onDestroy()? Seems that
+        // calls to tts.stop/shutdown and unregister calls are async, so onDestroy continues, so
+        // that last statements are not run any more...
+
+        // from https://stackoverflow.com/questions/21136464/when-to-unregister-broadcastreceiver-in-onpause-ondestroy-or-onstop
+        // The last lifecycle event handler that is guaranteed to be called before an app is
+        // terminated (if you’re supporting pre-HoneyComb devices) is onPause. If you're only
+        // supporting Post-HoneyComb devices, then onStop is the last guaranteed handler.
+
+        // so this code is not yet perfect!! Will need to move some of the code to onstart/resume
+        // from oncreate
+
+        if (reader != null) {
+            //reader.stop();
+            if (isFinishing()) {
+                Log.i("HFCM", "is finishing, shutdown tts...");
+                reader.stop();
+                reader.shutdown();
+            }
+        }
         utils.info("onDestroy() .....");
         if (receiver != null) {
+            Log.i("HFCM", "unregister receiver");
             unregisterReceiver(receiver);
             receiver = null;
         }
         if (networkReceiver != null) {
+            Log.i("HFCM", "unregister networkreceiver");
             unregisterReceiver(networkReceiver);
             networkReceiver = null;
         }
-        Log.i("HFCM", "onDestroy()...........");
+        Log.i("HFCM", "end of onDestroy, now calling super...");
+        //if (isFinishing()) {
+        //}
         super.onDestroy(); // after own code for destroy
     }
 
@@ -887,7 +924,6 @@ public class MainActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart(); // before own code for start
         utils.info("onStart() .....");
-        Log.i("HFCM", "onStart()...........");
     }
 
     /**
@@ -897,10 +933,13 @@ public class MainActivity extends AppCompatActivity
     protected void onStop() {
         // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
         utils.info("onStop() .....");
-        if (tts != null && tts.isSpeaking()) {
+        /*if (tts != null && tts.isSpeaking()) {
             tts.stop();
-        }
-        Log.i("HFCM", "onStop()...........");
+        }*/
+        //utils.stopRead(getSupportFragmentManager());
+        // java.lang.IllegalStateException: Can not perform this action after onSaveInstanceState
+        // see https://www.androiddesignpatterns.com/2013/08/fragment-transaction-commit-state-loss.html
+
         super.onStop(); // after own code for stop
     }
 
@@ -912,6 +951,9 @@ public class MainActivity extends AppCompatActivity
         // actions here TODO: unregisterOnSharedPreferenceChangeListener
         // https://developer.android.com/guide/topics/ui/settings.html
         utils.info("onPause() .....");
+        if (isFinishing()) {
+            Log.i("HFCM", "onPause() - is finishing");
+        }
         super.onPause();
     }
 
@@ -927,7 +969,8 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * @param outState
+     * Save the instance state
+     * @param outState Bundle to be saved
      */
     @Override
     protected void onSaveInstanceState(Bundle outState) {
@@ -942,7 +985,7 @@ public class MainActivity extends AppCompatActivity
         // https://stackoverflow.com/questions/33182309/passing-bitmap-to-another-activity-ends-in-runtimeexception
         // unfortunately, JSONarray does not implement Parcelable, so we cannot put this. But we
         // add the jsonData String, from which we then regenerate the JSONArray parent object
-        outState.putString("jsonData",jsonData);
+        //outState.putString("jsonData",jsonData);
         outState.putInt("maxtexsize", maxTextureSize);
         outState.putIntegerArrayList("selecteditems", selected);
         Log.i("HFCM", "Saving instance state, selected = " + selected);
@@ -1223,8 +1266,8 @@ public class MainActivity extends AppCompatActivity
                 yT(),
                 id,
                 0,
-                true,
-                true);
+                true,   // autoplay
+                true); // lightbox mode
 
         // try to use autoplay and lightbox mode (boolean parms to true)
         try {
@@ -1454,7 +1497,7 @@ public class MainActivity extends AppCompatActivity
                 if (wpShuffleTimesChanged) {
                     wpShuffleTimesChanged = false;
                     long test = utils.getMsToNextShuffle(getApplicationContext());
-                    Log.i("HFCM", "Shuffle times change..." + test);
+                    //Log.i("HFCM", "Shuffle times change..." + test);
                     if (sharedPref.getBoolean("wallpaper_shuffle", false) &&
                             utils.getNumWP(myList) >= 2) {
                         scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
@@ -1469,7 +1512,7 @@ public class MainActivity extends AppCompatActivity
                         boolean bgload = sharedPref.getBoolean("apod_bg_load", false);
                         if (bgload) {
                             long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
-                            scheduleApod(ms2NextApod);
+                            scheduleApod(ms2NextApod, apodJobService.DEADLINE_DELAY);
                             utils.logAppend(getApplicationContext(),
                                     DEBUG_LOG,
                                     "Enabled APOD Loader in settings, next apod in " +
@@ -1478,7 +1521,8 @@ public class MainActivity extends AppCompatActivity
 
                         } else {
                             //JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-                            if (utils.cancelJob(getApplicationContext(), JOB_ID_APOD)) {
+                            if (utils.cancelJob(getApplicationContext(),
+                                    apodJobService.JOB_ID_APOD)) {
                                 utils.logAppend(getApplicationContext(),
                                         DEBUG_LOG,
                                         "Disabled APOD background load in settings");
@@ -1726,7 +1770,6 @@ public class MainActivity extends AppCompatActivity
      */
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        // TODO - it is not enabled after load is done. Needs restart of app currently
         MenuItem dbResync = menu.findItem(R.id.dropbox_sync);
         if (unfinishedApods > 0) {
             dbResync.setEnabled(false);
@@ -1778,7 +1821,20 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_help) {
-            new dialogDisplay(MainActivity.this, "Help page not yet available, to be done soon...", "TODO");
+            Intent helpIntent = new Intent(this, HelpActivity.class);
+            startActivity(helpIntent);
+            return true;
+        }
+        /*if (id == R.id.action_crash) {
+            Toast.makeText(getApplicationContext(),"will crash soon :)", Toast.LENGTH_LONG).show();
+            SystemClock.sleep(2000);
+            ArrayList<Integer> crash_me = new ArrayList<>();
+            int t = crash_me.get(10);
+        }*/
+        if (id == R.id.action_privacy) {
+            Intent privacyIntent = new Intent(this, PrivacyActivity.class);
+            privacyIntent.putExtra("privacyurl", dPR());
+            startActivity(privacyIntent);
             return true;
         }
         if (id == R.id.action_about) {
@@ -1831,7 +1887,7 @@ public class MainActivity extends AppCompatActivity
                     getString(R.string.refresh_dropbox_message));
             fragArguments.putString("POS", getString(R.string.hfcm_yes));
             fragArguments.putString("NEG", getString(R.string.hfcm_no));
-            fragArguments.putString("NEU", "Force full sync");
+            fragArguments.putString("NEU", getString(R.string.dropbox_reload_fullsync));
             FragmentManager fm = getSupportFragmentManager();
             confirmDialog dlg = new confirmDialog();
             dlg.setArguments(fragArguments);
@@ -2088,6 +2144,12 @@ public class MainActivity extends AppCompatActivity
                     while (dbepoch <= lepoch) {
                         if (!deleted_items.contains(dbtitle) || forceFull) {
                             Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(B) '" + dbtitle + "'");
+
+                            // BBBBBBBBBBBBBBBB
+                            //if (forceFull) {
+                            //    deleted_items.remove(dbtitle);
+                            //}
+
                             newjson.put(dropbox.getJSONObject(dbidx));
                             db_add++;
                         } else {
@@ -2110,6 +2172,12 @@ public class MainActivity extends AppCompatActivity
                     while (!dbtitle.equals(ltitle)) {
                         if (!deleted_items.contains(dbtitle) || forceFull) {
                             Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(C) '" + dbtitle + "'");
+
+                            // BBBBBBBBBBBBBBBB
+                            //if (forceFull) {
+                            //    deleted_items.remove(dbtitle);
+                            //}
+
                             newjson.put(dropbox.getJSONObject(dbidx));
                             db_add++;
                         } else {
@@ -2151,6 +2219,9 @@ public class MainActivity extends AppCompatActivity
                         l_add, db_add, db_skip));
 
         // TODO how to handle the shared prefs DELETED_ITEMS info?
+        //SharedPreferences.Editor editor = sharedPref.edit();
+        //editor.putStringSet("DELETED_ITEMS", deleted_items);
+        //editor.apply();
 
         // Activate the contents of the new json array
         parent = newjson;
@@ -2158,7 +2229,6 @@ public class MainActivity extends AppCompatActivity
         myList.clear();
         addItems();
         getMissingApodInfos();
-        //utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_MB * 1024, -1);
         utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_PERCENT, -1);
         adp.notifyDataSetChanged();
     }
@@ -2177,18 +2247,15 @@ public class MainActivity extends AppCompatActivity
         File dir = new File(getApplicationContext().getFilesDir().getPath());
         String[] names = dir.list();
         for (String name : names) {
-            if (name.startsWith(APOD_SCHED_PREFIX)) {
+            if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
                 spaceItem item = utils.createSpaceItemFromJsonFile(getApplicationContext(), name);
-                utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                        "getScheduledAPODs() - '" + name + "'");
                 if (!item.getTitle().isEmpty()) {
-                    //Log.d("HFCM", "getScheduledAPODs() - '" + item.getTitle() + "'");
                     utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                            "getScheduledAPODs() - '" + item.getTitle() + "'");
+                            "getScheduledAPODs(): file = '" + name + "', title ='" + item.getTitle() + "'");
                     utils.insertSpaceItem(myList, item);
                 } else {
                     utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                            "getScheduledAPODs() - missing item title: " + name);
+                            "getScheduledAPODs(): '" + name + "' - missing item title");
                 }
             }
         }
@@ -2250,9 +2317,9 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * This is the interface implementation of processFinish() for asyncLoad class. This is called
-     * when the asyncLoad task has finished retrieving the requested data. The asyncLoad class is
-     * currently used for different tasks.
+     * Interface implementation of processFinish() for asyncLoad class. This is called when the
+     * asyncLoad task has finished retrieving the requested data. The asyncLoad class is used for
+     * different tasks.
      * Note: for parallel asynctask execution (executeonexecutor), see also my lalatex document...
      * @param status   Return status. This can either be
      *                 - HttpURLConnection.HTTP_x - http connection status, 200, 404 etc..
@@ -2330,13 +2397,11 @@ public class MainActivity extends AppCompatActivity
                         parent.put(apodObj);
                         jsonData = parent.toString();   // FIX MISSING NEW APOD AFTER ROTATE
                     }
-                    // TODO: write file content
                     utils.writeJson(getApplicationContext(), localJson, parent);
-
                     File dir = new File(getFilesDir().getPath());
                     String[] names = dir.list();
                     for (String name : names) {
-                        if (name.startsWith(APOD_SCHED_PREFIX)) {
+                        if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
                             File todelete = new File(getFilesDir(), name);
                             Log.d("HFCM", "Deleting schduled apod: " + name);
                             if (!todelete.delete()) {
@@ -2408,7 +2473,7 @@ public class MainActivity extends AppCompatActivity
             myList.get(idx).setLowres(thumbUrl);
             Log.i("HFCM", "processFinish() - launching asyncLoad for TAG THUMB_" + idx + ": " + thumbUrl);
             new asyncLoad(MainActivity.this, "THUMB_" + idx).execute(thumbUrl);
-            // TODO - good idea to refresh after size reload?
+            // TODO - good idea to refresh after VIM reload?
             adp.notifyDataSetChanged();
 
         } else if (tag.equals("DROPBOX_REFRESH")) {
@@ -2552,10 +2617,18 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * Schedule the initial wallpaper shuffle.
+     * Schedule the next wallpaper shuffle event. If 0 is passed, this means, that shuffle option is
+     * enabled, but no hour is selected. In this case, the shuffle job is cancelled.
+     * @param minLatency time to next in milliseconds (0 for no times selected)
      */
     private void scheduleShuffle(long minLatency) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            if (minLatency == 0) {
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "scheduleShuffle() - no shuffle times set, disabling shuffle");
+                utils.cancelJob(getApplicationContext(), JOB_ID_SHUFFLE);
+                return;
+            }
             utils.logAppend(getApplicationContext(), DEBUG_LOG,
                     "scheduleShuffle() - scheduling SHUFFLE for " + minLatency/1000 + " seconds");
             ComponentName serviceComponent = new ComponentName(this, shuffleJobService.class);
@@ -2566,7 +2639,7 @@ public class MainActivity extends AppCompatActivity
             extras.putInt("COUNT", 1);
             builder.setExtras(extras);
             JobInfo jobInfo = builder.build();
-            Log.i("HFCM", "SHUFFLE jobinfo: " + jobInfo.toString());
+            //Log.i("HFCM", "SHUFFLE jobinfo: " + jobInfo.toString());
             JobScheduler sched = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
             if (sched != null) {
                 sched.schedule(jobInfo);
@@ -2577,14 +2650,15 @@ public class MainActivity extends AppCompatActivity
     /**
      * Schedule the background loading of daily APOD json metadata.
      */
-    private void scheduleApod(long minLatency) {
+    private void scheduleApod(long minLatency, long add_deadline) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             ComponentName serviceComponent = new ComponentName(this, apodJobService.class);
-            JobInfo.Builder builder = new JobInfo.Builder(JOB_ID_APOD, serviceComponent);
+            JobInfo.Builder builder = new JobInfo.Builder(apodJobService.JOB_ID_APOD,
+                    serviceComponent);
             builder.setMinimumLatency(minLatency);
-            builder.setOverrideDeadline(minLatency + 300000);
+            builder.setOverrideDeadline(minLatency + add_deadline);
             PersistableBundle extras = new PersistableBundle();
-            extras.putInt("COUNT", 1);
+            extras.putInt("COUNT", 0);
             //extras.putString("URL", nS());
             extras.putString("URL", sharedPref.getBoolean("get_apod_simulate", false) ? dAS() : nS());
             // java.lang.IllegalAccessError: Method 'void android.os.BaseBundle.putBoolean(java.lang.String, boolean)' is inaccessible to class 'de.herb64.funinspace.MainActivity'
@@ -2656,8 +2730,6 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * Delete items specified in array list of indices.
-     * TODO: stop shuffle service if number of wallpapers goes below 2 + restart if growing.
-     *       this allows to save resources in addition to not running during night...
      * TODO: prepare for undo provided by snackbar.
      * - no immediate image delete, rename to del___ or similar to flag them for later deletion
      * - keep deleted entries to be able to add them again
@@ -2796,11 +2868,17 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * Send logfile via email to funinspace mail account
+     * TODO: multiple attachments
+     * TODO: attachment does not work with some apps, e.g. inbox (markus)
+     *       https://stackoverflow.com/questions/15946297/sending-email-with-attachment-using-sendto-on-some-devices-doesnt-work
+     *       might be because ACTION_SENDTO is bad and we should use ACTION_SEND
      */
     private void emailLogFileToHerbert() {
         // TODO AVD failures - seems to be known
         // https://stackoverflow.com/questions/27528236/mailto-android-unsupported-action-error
         //Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto",vE(), null));
+//        Intent u = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto", vE(), null));
+//        u.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.test_mail_subject));
         Intent i = new Intent(Intent.ACTION_SENDTO);  // ACTION_SEND - also shows whatsapp etc..
         // just info
         // i.setPackage("com.pkgname"); // see https://faq.whatsapp.com/en/android/28000012
@@ -2813,19 +2891,41 @@ public class MainActivity extends AppCompatActivity
         i.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.test_mail_subject));
         i.putExtra(Intent.EXTRA_TEXT, getString(R.string.test_mail_text));
 
-        // == ADDING A SINGLE FILE ATTACHMENT TO THE MAIL ==  // TODO multiple
+        // ADD A SINGLE FILE ATTACHMENT TO THE MAIL
         // E-mail apps do not have access to my storage - prohibited by Android security
         // - use external storage
         // - create a provider - this is what we do here - see lalatex docu
-        // we just send out the
-        //File attachment_file = new File(getApplicationContext().getFilesDir(), localJson);
-        File attachment_file = new File(getApplicationContext().getFilesDir(), DEBUG_LOG);
-        Uri contentUri = FileProvider.getUriForFile(MainActivity.this,
-                "de.herb64.funinspace.fileprovider",
-                attachment_file);
-        if (attachment_file.exists()) {
-            i.putExtra(Intent.EXTRA_STREAM, contentUri);
+        ArrayList<Uri> attachmentUris = new ArrayList<>();
+        File log_file = new File(getApplicationContext().getFilesDir(), DEBUG_LOG);
+        File nasa_file = new File(getApplicationContext().getFilesDir(), localJson);
+
+        //Uri contentUri = FileProvider.getUriForFile(MainActivity.this,
+        //        FILE_PROVIDER,
+        //        log_file);
+
+        if (log_file.exists()) {
+            attachmentUris.add(FileProvider.getUriForFile(MainActivity.this,
+                    FILE_PROVIDER,
+                    log_file));
         }
+        if (nasa_file.exists()) {
+            attachmentUris.add(FileProvider.getUriForFile(MainActivity.this,
+                    FILE_PROVIDER,
+                    nasa_file));
+        }
+        StringBuilder logbuilder = new StringBuilder("emailLogFileToHerbert(): Attachments:");
+        for (Uri uri : attachmentUris) {
+            logbuilder.append(String.format(" %s", uri.toString()));
+        }
+        utils.logAppend(getApplicationContext(), DEBUG_LOG, logbuilder.toString());
+
+        /*if (log_file.exists()) {
+            i.putExtra(Intent.EXTRA_STREAM, FileProvider.getUriForFile(MainActivity.this,
+                            FILE_PROVIDER,
+                            log_file));
+            //utils.logAppend(getApplicationContext(), DEBUG_LOG,
+            //        "emailLogFileToHerbert(): Attachment URI: '" + contentUri.toString() + "'");
+        }*/
 
         //i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);    // TODO check
 
@@ -2835,21 +2935,57 @@ public class MainActivity extends AppCompatActivity
         //    catch (android.content.ActivityNotFoundException ex) {}
         // c) List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);
 
-        List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);   // flags ?
+        List<ResolveInfo> pkgs = getPackageManager().queryIntentActivities(i, 0);   // flags?
+        List<LabeledIntent> intents = new ArrayList<>();
         if(pkgs.size() == 0) {
             new dialogDisplay(MainActivity.this,
                     getString(R.string.no_email_client));
         } else {
             for (ResolveInfo pkg : pkgs) {
+
+                // send multiple should also allow for multiple files
+                Intent intent = new Intent(Intent.ACTION_SEND_MULTIPLE);
+                intent.setComponent(new ComponentName(pkg.activityInfo.packageName,
+                        pkg.activityInfo.name));
+                intent.putExtra(Intent.EXTRA_EMAIL,
+                        new String[]{vE()});
+                intent.putExtra(Intent.EXTRA_SUBJECT,
+                        getString(R.string.test_mail_subject));
+                intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM,
+                        attachmentUris);
+                intents.add(new LabeledIntent(intent,
+                        pkg.activityInfo.packageName,
+                        pkg.loadLabel(getPackageManager()),
+                        pkg.icon));
+
                 // see more infos in lalatex -
                 // TODO: how to restrict grant to one selected app? / default app
-                Log.i("HFCM", "Granting shared rights for package: " +
-                        pkg.activityInfo.packageName);
-                grantUriPermission(pkg.activityInfo.packageName,
-                        contentUri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                // interesting: getting fallback on my 5.1 avd:
+                // 2018.01.24-12:08:00:008 > emailLogFileToHerbert(): Granting shared rights for package: com.android.fallback
+                // this seems to be caused by the AVD, so test, if happens on real device
+                // com.google.email was not found - which is on my elephone as well and worked
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "emailLogFileToHerbert(): Granting shared rights for package: " +
+                                pkg.activityInfo.packageName);
+                for (Uri uri : attachmentUris) {
+                    grantUriPermission(pkg.activityInfo.packageName,
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
             }
-            startActivity(i);
+
+            Intent chosenIntent = Intent.createChooser(intents.remove(intents.size() - 1),
+                    "Choose email client:");
+            chosenIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS,
+                    intents.toArray(new LabeledIntent[intents.size()]));
+            startActivity(chosenIntent);
+
+            // While the intent has been created using SENDTO (to filter out whatsapp etc..), the
+            // actual action used to send the e-mail is set to ACTION_SEND. This should allow for
+            // attachments also with other mail clients, e.g. "inbox"
+            //i.setAction(Intent.ACTION_SEND_MULTIPLE);
+            //startActivity(Intent.createChooser(i, "Send mail by"));
+            //startActivity(i);
         }
     }
 
@@ -2877,6 +3013,10 @@ public class MainActivity extends AppCompatActivity
             return;
         }
 
+        if (mActionMode != null) {
+            mActionMode.finish();
+        }
+
         // get maximum allocatable heap mem at time of pressing the button
         int maxAlloc = devInfo.getMaxAllocatable();
 
@@ -2892,13 +3032,15 @@ public class MainActivity extends AppCompatActivity
                         sharedPref.getString("wallpaper_quality", "80"));
                 lastImage = myList.get(idx).getTitle();
                 hiresIntent.putExtra("imagename", hiresFileBase);
+                hiresIntent.putExtra("explanation", myList.get(idx).getExplanation());
+                hiresIntent.putExtra("title", myList.get(idx).getTitle());
                 // forResult now ALWAYS to get logstring returned for debugging
                 startActivityForResult(hiresIntent, HIRES_LOAD_REQUEST);
                 break;
             case M_YOUTUBE:
                 String thumb = myList.get(idx).getThumb();
-                if (tts != null && tts.isSpeaking()) {
-                    tts.stop();
+                if (reader != null) {
+                    reader.stop();
                 }
                 // We get the ID from thumb name - hmmm, somewhat dirty ?
                 if (sharedPref.getBoolean("youtube_fullscreen", false)) {
@@ -2908,14 +3050,14 @@ public class MainActivity extends AppCompatActivity
                 }
                 break;
             case M_VIMEO:
-                if (tts != null && tts.isSpeaking()) {
-                    tts.stop();
+                if (reader != null) {
+                    reader.stop();
                 }
                 playVimeo(hiresUrl);
                 break;
             case M_MP4:
-                if (tts != null && tts.isSpeaking()) {
-                    tts.stop();
+                if (reader != null) {
+                    reader.stop();
                 }
                 playMP4(hiresUrl);
                 break;
@@ -2941,6 +3083,49 @@ public class MainActivity extends AppCompatActivity
                     item.getTitle()));
         }
     }
+
+    /**
+     * Handle any updates found at app startup. This allows to do any reformatting etc.. Currently,
+     * no activities are needed, but at later times, this might be useful
+     */
+    private void processAppUpdates() {
+        // prefs contain the version that has been present at last run of the app
+        int versionCodeInPrefs = sharedPref.getInt("versioncode", -1);
+
+        // set these for testing only
+        //versionCodeInPrefs = 1;
+        //versionCodeCurrent = 201801212;
+
+        if (versionCodeInPrefs < versionCodeCurrent) {
+            utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                    "Version Update: " + versionCodeInPrefs + " to " + versionCodeCurrent);
+            SharedPreferences.Editor editor = sharedPref.edit();
+            editor.putInt("versioncode", versionCodeCurrent);
+            editor.apply();
+            // -1: this is initial inst, just return
+            if (versionCodeInPrefs == -1) {
+                return;
+            }
+            // CHANGES DONE FOR VERSION UPDATES
+            // 21.01.2018
+            // Changes from 201801192 > 201801241: read_out now for image viewing, default "true"
+            if (versionCodeInPrefs <= 201801192 && versionCodeCurrent >= 201801242) {
+                //editor = sharedPref.edit();
+                //editor.putBoolean("read_out", true);
+                //editor.apply();
+                new dialogDisplay(this,
+                        getString(R.string.version_update_201801242),
+                        getString(R.string.version_update_title));
+            }
+            // Revert change from 201801192 > 201801241 in default option
+            if (versionCodeInPrefs == 201801241 && versionCodeCurrent >= 201801242) {
+                editor = sharedPref.edit();
+                editor.putBoolean("read_out", false);   // revert change from 201801241
+                editor.apply();
+            }
+        }
+    }
+
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////

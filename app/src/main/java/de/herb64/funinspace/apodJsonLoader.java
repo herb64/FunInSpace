@@ -24,10 +24,10 @@ import de.herb64.funinspace.helpers.utils;
 
 /**
  * Created by herbert on 11/29/17.
- * This class is used to just load the daily json file in a separate thread to a local file. This
- * is used by the scheduler service so that the daily file is loaded even if the user does not
- * start the app. The app needs to check on startup, if it can find any missed files locally set
- * by the scheduler job.
+ * This class just loads the daily json file in a separate thread into a local file. The class is
+ * used by the apod scheduler service so that the daily file is loaded even if the user does not
+ * start the app. The app needs to check on startup, if it can find any files written by the
+ * apod scheduler job.
  */
 
 public class apodJsonLoader implements Runnable {
@@ -37,11 +37,14 @@ public class apodJsonLoader implements Runnable {
     private String file2save;
     //private TextToSpeech tts2;
 
+    //static {System.loadLibrary("hfcmlib");}
+    //public native String nS();
+
     /**
-     * @param ctx
-     * @param url
-     * @param filename
-     * @param preLollipopTLS
+     * @param ctx context
+     * @param url url to NASA API
+     * @param filename filename to save
+     * @param preLollipopTLS tls setting
      */
     public apodJsonLoader(Context ctx, String url, String filename, boolean preLollipopTLS) {
         this.ctx = ctx;
@@ -57,12 +60,12 @@ public class apodJsonLoader implements Runnable {
                 sslcontext.init(null, null, null);
                 SSLSocketFactory noSSLv3Factory = new TLSSocketFactory();
                 HttpsURLConnection.setDefaultSSLSocketFactory(noSSLv3Factory);
-                Log.i("HFCM", "Running with TLS on pre Lollipop");
+                //Log.i("HFCM", "Running with TLS on pre Lollipop");
             } catch (NoSuchAlgorithmException | KeyManagementException e) {
                 e.printStackTrace();
                 utils.logAppend(ctx,
                         MainActivity.DEBUG_LOG,
-                        "apodJsonLoader() - " + e.getMessage());
+                        "apodJsonLoader(ssl) - " + e.getMessage());
             }
         }
     }
@@ -80,11 +83,16 @@ public class apodJsonLoader implements Runnable {
             try {
                 conn.connect();
             } catch (Exception e) {
+                // apodJsonLoader(connect) - https://URL_TO_API - hide this!!, see 02.01.2018
+                // other getMessage() infos on exceptions:
+                // - port=77777
+                // - Unable to resolve host "fhdsgjhdhs.com": No address associated with hostname
                 e.printStackTrace();
                 Log.e("HFCM", e.getMessage());
                 utils.logAppend(ctx,
                         MainActivity.DEBUG_LOG,
-                        "apodJsonLoader() - " + e.getMessage());
+                        "apodJsonLoader(connect) - NASA API URL Connection exception");
+                return;
             }
             InputStream istream = conn.getInputStream();
             //InputStream istream = (InputStream) url.getContent();
@@ -102,7 +110,7 @@ public class apodJsonLoader implements Runnable {
             utils.writef(ctx, file2save, mybuilder.toString());
             utils.logAppend(ctx,
                     MainActivity.DEBUG_LOG,
-                    "apodJsonLoader() - " + mybuilder.toString());
+                    "apodJsonLoader(builder) - " + mybuilder.toString());
 
             // TEST with tts - TODO: only works, if debugging, if running through, no sound
             /*tts2 = new TextToSpeech(ctx, new TextToSpeech.OnInitListener() {
@@ -124,22 +132,23 @@ public class apodJsonLoader implements Runnable {
                         null);
             }*/
         } catch (MalformedURLException e) {
+            // apodJsonLoader(malformed) - Unknown protocol: htpp
             e.printStackTrace();
             utils.logAppend(ctx,
                     MainActivity.DEBUG_LOG,
-                    "apodJsonLoader() - " + e.getMessage());
+                    "apodJsonLoader(malformed) - " + e.getMessage());
         } catch (FileNotFoundException e) {
             e.printStackTrace();
             utils.logAppend(ctx,
                     MainActivity.DEBUG_LOG,
-                    "apodJsonLoader() - " + e.getMessage());
+                    "apodJsonLoader(notfound) - " + e.getMessage());
         } catch (IOException e) {
             // Running into this because of DNS problems in AVD device. Seems to be because
             // of LAN card and Wifi present in host - only on Win10 Android Studio installation
             e.printStackTrace();
             utils.logAppend(ctx,
                     MainActivity.DEBUG_LOG,
-                    "apodJsonLoader() - " + e.getMessage());
+                    "apodJsonLoader(io2) - " + e.getMessage());
         } finally {
             // return within finally - should not use it!
             if(conn != null) {
@@ -149,7 +158,7 @@ public class apodJsonLoader implements Runnable {
                     e.printStackTrace();
                     utils.logAppend(ctx,
                             MainActivity.DEBUG_LOG,
-                            "apodJsonLoader() - " + e.getMessage());
+                            "apodJsonLoader(disconnect) - " + e.getMessage());
                 }
             }
             try {
@@ -160,7 +169,7 @@ public class apodJsonLoader implements Runnable {
                 e.printStackTrace();
                 utils.logAppend(ctx,
                         MainActivity.DEBUG_LOG,
-                        "apodJsonLoader() - " + e.getMessage());
+                        "apodJsonLoader(close) - " + e.getMessage());
             }
         }
     }

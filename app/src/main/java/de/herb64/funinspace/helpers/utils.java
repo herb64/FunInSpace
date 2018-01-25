@@ -1,5 +1,6 @@
 package de.herb64.funinspace.helpers;
 
+import android.support.v4.app.FragmentManager;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
 import android.content.Context;
@@ -19,6 +20,7 @@ import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.StatFs;
 import android.preference.PreferenceManager;
@@ -72,8 +74,11 @@ import java.util.concurrent.FutureTask;
 
 import javax.net.ssl.HttpsURLConnection;
 
+import de.herb64.funinspace.BuildConfig;
 import de.herb64.funinspace.MainActivity;
+import de.herb64.funinspace.TextReader;
 import de.herb64.funinspace.models.spaceItem;
+import de.herb64.funinspace.services.apodJobService;
 
 
 /**
@@ -89,7 +94,7 @@ public final class utils {
 
     // random delay to avoid DDOS kind of flooding NASA server with many app instances
     private static final int MIN_DELAY = 900000;
-    private static final int MAX_DELAY = 1800000;
+    private static final int MAX_DELAY = 2700000;
 
     public static final int NO_JSON = 0;
     public static final int JSON_OBJ = 1;
@@ -98,6 +103,8 @@ public final class utils {
     public static final int UNKNOWN = 0;
     public static final int YES = 1;
     public static final int NO = -1;
+
+    //public static final String TAG_READ_FRAGMENT = "text_reader_fragment";
 
     /**
      * Read contents of a text file
@@ -239,10 +246,11 @@ public final class utils {
 
     /**
      * Wrapper for logcat - allows to switch off all statements by constant
-     * @param content
+     * @param content string to be written to log
      */
     public static void info(String content) {
-        if (MainActivity.LOGCAT_INFO) {
+        if (BuildConfig.DEBUG) {
+        //if (MainActivity.LOGCAT_INFO) {
             //String hugo = this.getClass().getSimpleName().toString();
             Log.i("HFCM", content);
         }
@@ -541,9 +549,9 @@ public final class utils {
 
     /**
      * Get the milliseconds to next shuffle full hour based on configured times in preferences
-     * This is rounded to seconds, but this is by far enough
+     * The returned value is rounded to full seconds.
      * @param ctx context
-     * @return milliseconds to next shuffle
+     * @return milliseconds to next shuffle, 0 if no times are set
      */
     public static long getMsToNextShuffle(Context ctx) {
         TimeZone tzSYS = TimeZone.getDefault();
@@ -561,7 +569,6 @@ public final class utils {
                 Integer.decode(hhmmss[2]) * 1000;
 
         SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(ctx);
-
         Set<String> shtimes = sharedPref.getStringSet("wp_shuffle_times", new HashSet<String>());
         if (shtimes.size() == 0) {
             return 0;
@@ -859,13 +866,14 @@ public final class utils {
     }
 
     /**
-     * @param items
-     * @return
+     * Get number of items which are set was wallpaper (including the active one!)
+     * @param items space item list
+     * @return number of items
      */
     public static int getNumWP(ArrayList<spaceItem> items) {
         int count = 0;
         for (spaceItem item : items) {
-            if (item.getWpFlag() >= MainActivity.WP_EXISTS) {   // EXIST + ACTIVE!!!
+            if (item.getWpFlag() >= MainActivity.WP_EXISTS) {
                 count++;
             }
         }
@@ -874,7 +882,7 @@ public final class utils {
 
     /**
      * Create a hashmap from a JSON object string
-     * TODO - keep this as some utility function, but currently no longer used - needs also recheck
+     * TODO - keep this as some utility function, but currently no longer used - also needs recheck
      * @param s String to be parsed...
      * @return HashMap with key / value pairs from object
      */
@@ -1111,6 +1119,34 @@ public final class utils {
             refreshFromDropbox((JSONArray) json);
         }
         */
+    }
+
+    /**
+     * Check, if we have a valid scheduled NASA Json file for the current day
+     * @param ctx context
+     * @param epoch epoch
+     * @return true, if file is found
+     */
+    public static boolean haveValidScheduledJson(Context ctx, long epoch) {
+        String name = apodJobService.APOD_SCHED_PREFIX + epoch + ".json";
+        String content = readf(ctx, name);
+        if (content == null) {
+            return false;
+        }
+        try {
+            JSONObject parent = new JSONObject(content);
+            String sDate = parent.getString("date");
+            if (sDate != null) {
+                long epoch2 = getEpochFromDatestring(sDate);
+                if (epoch2 == epoch) {
+                    return true;
+                }
+            }
+            // here, the file seems to exist, but does not contain a valid json - delete the file?
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     /**
@@ -1483,13 +1519,85 @@ public final class utils {
         try {
             pkgInfo = ctx.getPackageManager().getPackageInfo(pkgName, 0);
             //ApplicationInfo inf = pkgInfo.applicationInfo;
-            String infos = "Version: " + pkgInfo.versionName + ", Build: " + pkgInfo.versionCode;
-            return infos;
+            //String infos = "Version: " + pkgInfo.versionName + ", Build: " + pkgInfo.versionCode;
+            return "Version: " + pkgInfo.versionName;
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
             return "Missing version infos";
         }
     }
+
+    /**
+     * Get version Code as defined in build.gradle
+     * @param ctx context
+     * @return Integer with version code
+     */
+    public static int getVersionCode(Context ctx) {
+        String pkgName = ctx.getPackageName();
+        PackageInfo pkgInfo;
+        try {
+            pkgInfo = ctx.getPackageManager().getPackageInfo(pkgName, 0);
+            return pkgInfo.versionCode;
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
+     * Read out the title and the explanation text for the image. This is done at 2 occasions:
+     * 1. Via CAB menu for a selected item
+     * 2. When watching the image in fullscreen and having this option enabled (default)
+     * If the reader fragment already exists (speaking), the speaker is stopped
+     * @param fm FragmentManager
+     * @param title Title text
+     * @param text Explanation text
+     * @return TextReader object
+     */
+    /*public static TextReader readText(FragmentManager fm, String title, String text) {
+        TextReader readerFragment = (TextReader) fm.findFragmentByTag(TAG_READ_FRAGMENT);
+        if (readerFragment == null) {
+            readerFragment = new TextReader();
+            Bundle fragArguments = new Bundle();
+            fragArguments.putString("explanation", text);
+            fragArguments.putString("title", title);
+            readerFragment.setArguments(fragArguments);
+            fm.beginTransaction().add(readerFragment, TAG_READ_FRAGMENT).commit();
+        } else {
+            Bundle args = readerFragment.getArguments();
+            String currenttitle = args.getString("title");
+            readerFragment.stop();
+            fm.beginTransaction().remove(readerFragment).commit();
+            if (currenttitle != null && !currenttitle.equals(title)) {
+                args.putString("explanation", text);
+                args.putString("title", title);
+                readerFragment.setArguments(args);
+                fm.beginTransaction().add(readerFragment, TAG_READ_FRAGMENT).commit();
+            }
+
+            int u = 0;
+            return null;
+        }
+        return readerFragment;
+    }
+
+    public static void stopRead(FragmentManager fm) {
+        TextReader readerFragment = (TextReader) fm.findFragmentByTag(TAG_READ_FRAGMENT);
+        if (readerFragment != null) {
+            readerFragment.stop();
+            fm.beginTransaction().remove(readerFragment).commit();
+        }
+    }
+
+    public static boolean isReading(FragmentManager fm) {
+        TextReader readerFragment = (TextReader) fm.findFragmentByTag(TAG_READ_FRAGMENT);
+        if (readerFragment != null) {
+            if (readerFragment.isReading()) {
+                return true;
+            }
+        }
+        return false;
+    }*/
 
     ///////////////// J U S T   S O M E   J U N K  /////////////////////////////////////////////////
     // stuff to check

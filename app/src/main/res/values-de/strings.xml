@@ -1,11 +1,12 @@
 <resources>
-    <string name="app_name">FunInSpace</string>
+    <string name="app_name">Fun In Space</string>
     <string name="action_settings">Einstellungen</string>
 
     <string name="hfcm_yes">JA</string>
     <string name="hfcm_no">NEIN</string>
     <string name="hfcm_cancel">ABBRUCH</string>
     <string name="hfcm_proceed">WEITER</string>
+    <string name="hfcm_ok">OK</string>
 
     <string name="lowres">Lowres: %s</string>
     <string name="hires">Hires: %s</string>
@@ -18,29 +19,40 @@
     <string name="title_activity_image">ImageActivity</string>
     <string name="dummy_button">Dummy Button</string>
     <string name="dummy_content">DUMMY\nCONTENT</string>
-    <string name="filetransfer1">Dies erlaubt die Übertragung der JSON Metadaten und Thumbnail Bilder via Sockets an ein Python listener Script auf einem entfernten Server.</string>
-    <string name="rate_limit_exceeded">FunInSpace hat kein aktuelles Bild des Tages anfordern können. Vermutlich ist das API Rate Limit aufgebraucht.</string>
+    <string name="filetransfer1">Dies erlaubt die Übertragung der JSON Metadaten und Thumbnail
+        Bilder via Sockets an ein Python listener Script auf einem entfernten Server.</string>
+    <string name="rate_limit_exceeded">FunInSpace hat kein aktuelles Bild des Tages anfordern
+        können. Vermutlich ist das API Rate Limit aufgebraucht.</string>
     <string name="no_apod">Kein Bild empfangen</string>
-    <string name="no_youtube">FunInSpace erfordert zum Abspielen von YouTube Videos die installierte YouTube App auf Deinem Handy. Bitte installiere diese aus dem Play Store.</string>
+    <string name="no_youtube">FunInSpace erfordert zum Abspielen von YouTube Videos die
+        installierte YouTube App auf Deinem Handy. Bitte installiere diese aus dem Play Store.</string>
     <string name="sorry">Entschuldigung,</string>
+    <string name="title_activity_settings">Einstellungen</string>
     <string name="no_support_yet">Medium zur Zeit noch nicht unterstützt.</string>
 
     <string name="pref_header_general">Allgemein</string>
     <string name="pref_description_wifi_required">Hires Bilder und Videos nur laden, wenn WiFi verfügbar ist.</string>
     <string name="pref_title_wifi_required">WiFi benötigt für Hires Bilder/Videos</string>
 
-    <string name="item_order">Sortierung (inaktiv)</string>
+    <!--string name="item_order">Sortierung (inaktiv)</string> -->
     <string name="newest_first">newest_first</string>
     <string name="enable_tls"><![CDATA[Bitte schalte TLS v1 in Settings > General ein]]></string>
-    <string name="lowres_fallback">Anzeige eines niedriger aufgelösten Bildes, wenn die NASA das hochauflösende Bild nicht bereitstellt, was zuweilen geschehen kann.</string>
+    <string name="lowres_fallback">Anzeige eines niedriger aufgelösten Bildes, wenn die NASA
+        das hochauflösende Bild nicht bereitstellt, was zuweilen geschehen kann.</string>
     <string name="fallback_lowres_title">Alternatives niedrig auflösendes Bild (noch nicht aktiv)</string>
-    <string name="warn_apod_disable">Du hast aktuell das Laden von neuen täglichen Bildern ausgeschaltet. Bitte überprüfe die Einstellungen, um kein Bild zu verpassen.</string>
+    <string name="warn_apod_disable">Du hast aktuell das Laden von neuen täglichen Bildern
+        ausgeschaltet. Bitte überprüfe die Einstellungen, um kein Bild zu verpassen.</string>
     <string name="reminder">Erinnerung</string>
-    <string name="no_email_client">Ich konnte leider keinen passenden e-mail Client auf Deinem Phone finden.</string>
+    <string name="no_email_client">Ich konnte leider keinen passenden e-mail Client auf
+        Deinem Phone finden.</string>
     <string name="no_vimeo_thumb">Für dieses Vimeo Video konnte kein Vorschau Bild erstellt werden</string>
     <string name="pref_debug"> Debug Einstellungen</string>
-    <string name="wallpaper_nothing_to_revert">Du hast noch kein FunInSpace HintergrundBild gesetzt, daher ist nichts zurückzusetzen.</string>
-    <string name="wallpaper_backup_current">Du hast ein neues Hintergrundbild ausgewählt. Dein aktuelles Bild wird nun gesichert, so daß Du es über \'Alten Hintergrund wiederherstellen\' im Hauptmenü zurückspielen kannst.\nAchtung, das ist nicht mehr möglich, wenn Du die App deinstallierst, bevor Du Dein altes Wallpaper wiederhergestellt hast.</string>
+    <string name="wallpaper_nothing_to_revert">Du hast noch kein FunInSpace HintergrundBild
+        gesetzt, daher ist nichts zurückzusetzen.</string>
+    <string name="wallpaper_backup_current">Du hast ein neues Hintergrundbild ausgewählt.
+        Dein aktuelles Bild wird nun gesichert, so daß Du es über \'Alten Hintergrund
+        wiederherstellen\' im Hauptmenü zurückspielen kannst.\nAchtung, das ist nicht mehr möglich,
+        wenn Du die App deinstallierst, bevor Du Dein altes Wallpaper wiederhergestellt hast.</string>
     <string name="restore_original_wallpaper">Alten Hintergrund wiederherstellen</string>
     <!--
     <string-array name="order_titles">
@@ -56,7 +68,8 @@
         Du das Laden auch ohne WLAN erlauben möchtest. Sollen die Einstellungen jetzt angepaßt werden?
         Du kannst die Einstellung jederzeit wieder ändern.</string>
     <string name="wp_no_delete_active">Das Bild \'%s\' ist Dein aktuelles Hintergrundbild. Es wird nicht gelöscht.</string>
-    <string name="wp_confirm_dlg_msg">Möchtest Du \'%s\' als neues Hintergrundbild setzen?</string>
+    <string name="wp_confirm_dlg_msg">Möchtest Du \'%s\' als neues Hintergrundbild setzen? Wenn Du
+    NEIN auswählst, wird das Bild nur zur Liste der Hintergründe für die Shuffle Funktion zugefügt.</string>
     <string name="wp_confirm_dlg_title">Hintergrund ändern?</string>
     <string name="wp_confirm_dlg_pos_button">JA</string>
     <string name="wp_confirm_dlg_neg_button">NEIN</string>
@@ -64,7 +77,7 @@
     <string name="temp_wp_dialog_info">In diesem Menue kann noch kein Hintergrundbild gesetzt
         werden. Bitte in der Vollbildanzeige einfach lange klicken, um ein Hintergrundbild
         zu erstellen.</string>
-    <string name="toast_wp_start_select">Start der Hintergrundbild Auswahl…</string>
+    <string name="toast_wp_start_select">==TIP==\nWeiteres Long Press zur Bestätigung Deiner Auswahl</string>
     <string name="toast_wp_select_finished">Hintergrundbild wurde ausgewählt…</string>
     <string name="wp_select_rect_string">Hintergrund Auswahl</string>
     <string name="dlg_revert_wp">Aktuelles Hintergrundbild wird entfernt und Dein ursprüngliches
@@ -82,10 +95,9 @@
     <string name="refresh_content">Sync mit Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Bilderliste aktualisieren</string>
     <string name="refresh_dropbox_message">Möchtest Du Deine Bilderliste mit meiner (Herbert\'s)
-        Dropbox aktualisieren? Du kannst dies jederzeit tun. Bilder, die Du einmal gelöscht hast,
-        werden nicht erneut von der Dropbox Liste geladen. Bilder, die Du verpaßt hast, können in
-        der Liste auftauchen, wenn auf der Dropbox inzwischen ein Link hinterlegt wurde. Das passiert
-        allerdings nur von Zeit zu Zeit.</string>
+        Dropbox aktualisieren? Du kannst dies jederzeit tun. Bilder, die Du gelöscht hast,
+        werden nicht erneut von der Dropbox Liste geladen. Wenn Du diese gelöschten Bilder ebenfalls
+        wieder laden möchtest, klicke auf "ALLE BILDER".</string>
 
     <string name="search_option">Vollsuche</string>
     <string name="full_search_explain">Suche in Titel und zusätzlich in Beschreibungstext</string>
@@ -97,9 +109,9 @@
     <string name="set_as_wallpaper">Setze als Hintergrundbild</string>
     <string name="reselect_wallpaper">Hintergrund Ausschnitt neu wählen</string>
     <string name="remove_as_wallpaper">Lösche Hintergrundbild</string>
-    <string name="wp_tip_long_press">==TIP==\nLong Press erlaubt Hintergrundbild Auswahl.</string>
-    <string name="pref_summary_read_text">Den Erklärungstext bei jedem Aufklappen vorlesen.
-        Über das Kontextmenü kann ebenfalls das Vorlesen gestartet werden.</string>
+    <string name="wp_tip_long_press">==TIP==\nLong Press erlaubt Hintergrundbild Ausschnitt Selektion</string>
+    <string name="pref_summary_read_text">Den Erklärungstext während der Bildbetrachtung im Vollbild
+        Modus vorlesen. Über das Kontextmenü kann ebenfalls das Vorlesen gestartet werden.</string>
     <string name="pref_title_read_text">Vorlesen der Erklärung</string>
     <string name="cab_read">Vorlesen</string>
 
@@ -109,8 +121,155 @@
         <item>Hoch</item>
         <item>Optimal</item>
     </string-array>
+    <string-array name="wp_quality_values">
+        <item>25</item>
+        <item>50</item>
+        <item>80</item>
+        <item>100</item>
+    </string-array>
 
+    <!-- Shuffle wallpaper times -->
+    <string name="wp_shuffle_times">Wallpaper Shuffle Times</string>
+    <string-array name="wp_shuffle_times_titles">
+        <item>00:00</item>
+        <item>01:00</item>
+        <item>02:00</item>
+        <item>03:00</item>
+        <item>04:00</item>
+        <item>05:00</item>
+        <item>06:00</item>
+        <item>07:00</item>
+        <item>08:00</item>
+        <item>09:00</item>
+        <item>10:00</item>
+        <item>11:00</item>
+        <item>12:00</item>
+        <item>13:00</item>
+        <item>14:00</item>
+        <item>15:00</item>
+        <item>16:00</item>
+        <item>17:00</item>
+        <item>18:00</item>
+        <item>19:00</item>
+        <item>20:00</item>
+        <item>21:00</item>
+        <item>22:00</item>
+        <item>23:00</item>
+    </string-array>
+    <string-array name="wp_shuffle_times_values">
+        <item>00</item>
+        <item>01</item>
+        <item>02</item>
+        <item>03</item>
+        <item>04</item>
+        <item>05</item>
+        <item>06</item>
+        <item>07</item>
+        <item>08</item>
+        <item>09</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+    </string-array>
+    <string-array name="wp_shuffle_times_defaults">
+        <item>07</item>
+        <item>08</item>
+        <item>09</item>
+        <item>10</item>
+        <item>11</item>
+        <item>12</item>
+        <item>13</item>
+        <item>14</item>
+        <item>15</item>
+        <item>16</item>
+        <item>17</item>
+        <item>18</item>
+        <item>19</item>
+        <item>20</item>
+        <item>21</item>
+        <item>22</item>
+        <item>23</item>
+    </string-array>
+
+    <!-- Date format to be displayed in listview for each item - derived from epoch -->
+    <string name="df_dd_mm_yyyy">dd.MM.yyyy</string>
     <string name="df_title">Datums Format</string>
+    <!--<string name="date_format">date_format</string> -->
+    <string-array name="df_titles">
+        <item>15.03.1964</item>
+        <item>15. März 1964</item>
+    </string-array>
+    <string-array name="df_values">
+        <item>dd.MM.yyyy</item>
+        <item>dd. MMMM yyyy</item>
+    </string-array>
+
+    <string name="pref_title_social_recommendations">Enable social recommendations</string>
+    <string name="pref_description_social_recommendations">Recommendations for people to contact
+        based on your message history
+    </string>
+
+    <string name="pref_title_display_name">Display name - UNUSED </string>
+    <string name="pref_default_display_name">John Smith</string>
+
+
+    <!-- Example settings for Data & Sync -->
+    <string name="pref_header_data_sync">Data &amp; sync (not used)</string>
+
+    <string name="pref_title_sync_frequency">Sync frequency</string>
+    <string-array name="pref_sync_frequency_titles">
+        <item>15 minutes</item>
+        <item>30 minutes</item>
+        <item>1 hour</item>
+        <item>3 hours</item>
+        <item>6 hours</item>
+        <item>Never</item>
+    </string-array>
+    <string-array name="pref_sync_frequency_values">
+        <item>15</item>
+        <item>30</item>
+        <item>60</item>
+        <item>180</item>
+        <item>360</item>
+        <item>-1</item>
+    </string-array>
+
+    <string-array name="list_preference_entries">
+        <item>Entry 1</item>
+        <item>Entry 2</item>
+        <item>Entry 3</item>
+    </string-array>
+
+    <string-array name="list_preference_entry_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+
+
+    <string name="pref_title_system_sync_settings">System sync settings</string>
+    <!-- Example settings for Notifications -->
+    <string name="pref_header_notifications">Notifications (not used)</string>
+
+    <string name="pref_title_new_message_notifications">New message notifications</string>
+
+    <string name="pref_title_ringtone">Ringtone</string>
+    <string name="pref_ringtone_silent">Silent</string>
+
+    <string name="pref_title_vibrate">Vibrate</string>
+
+
     <string name="wp_quality_summary">Qualität neu erstellter Hintergrundbilder. Bereits
         gespeicherte Bilder werden hierdurch nicht verändert.</string>
     <string name="df_summary">Wähle ein Datumsformat für die Anzeige in der Liste der Bilder.</string>
@@ -132,18 +291,34 @@
         \nWICHTIG: Du hast momentan nicht das Minimum von 2 FunInSpace Hintergründen erstellt, so
         daß momentan kein Shuffle stattfindet. Sobald Du 2 Hintergrundbilder erstellt hast, wird die
         Shuffle Funktion starten.</string>
-    <string name="no_network_for_apod">Ein neues Bild ist zwar verfügbar, aber Du hast keine aktive Netzwerkverbindung. Möglichweise ist der Flugmodus eingeschaltet?</string>
-    <string name="no_network_for_hd">Du hast keine aktive Netzwerkverbindung um Bilder oder Videos anzusehen. Möglichweise ist der Flugmodus eingeschaltet?</string>
+    <string name="no_network_for_apod">Ein neues Bild ist zwar verfügbar, aber Du hast keine
+        aktive Netzwerkverbindung. Möglichweise ist der Flugmodus eingeschaltet?</string>
+    <string name="no_network_for_hd">Du hast keine aktive Netzwerkverbindung um Bilder oder
+        Videos anzusehen. Möglichweise ist der Flugmodus eingeschaltet?</string>
     <string name="no_network">Keine Netzwerkverbindung</string>
     <string name="show_log">Logdatei anzeigen (debug)</string>
+    <string name="about_credits">Image for MP4 by Gregor Cresnar, https://www.flaticon.com/authors/gregor-cresnar
+        \nRocket icon from https://openclipart.org under Creative Commons Zero 1.0 Public Domain License
+        \nVector graphics from https://material.io/icons
+        \nSounds by https://notificationsounds.com
+    </string>
     <string name="action_slide_show">Bilder Show (zukünftig)</string>
     <string name="pref_debug_summary">Diese Einstellungen sind nur für Testzwecke (Debugging) vorgesehen.</string>
     <string name="wp_shuffle_title">Hintergrund Shuffle</string>
-    <string name="wp_shuffle_summary">Momentan nur für Android 5 und höher - Shuffle erfolgt zu wählbaren Zeiten, jeweils zur vollen Stunde.</string>
+    <string name="wp_shuffle_summary">Momentan nur für Android 5 und höher - Shuffle erfolgt
+        zu wählbaren Zeiten, jeweils zur vollen Stunde.</string>
     <string name="wp_shuffle_times_title">Shuffle Zeiten</string>
-    <string name="wp_shuffle_times_summary">Wähle die Stunden, zu denen ein Shuffle des Hintergrundbildes erfolgen soll.</string>
+    <string name="wp_shuffle_times_summary">Wähle die Stunden, zu denen ein Shuffle des
+        Hintergrundbildes erfolgen soll.</string>
     <string name="apod_bg_load_title">Tägliches Bild automatisch laden</string>
-    <string name="apod_bg_load_summary">omentan nur für Android 5 und höher - lade Informationen zum
+    <string name="apod_bg_load_summary">Momentan nur für Android 5 und höher - lade Informationen zum
         täglichen Bild auch ohne daß die App gestartet wird. Dies ist nützlich, um Bilder nicht zu
         verpassen, da diese dann beim nächsten Start der App nachgeladen werden.</string>
+    <string name="privacy_policy">Datenschutzerklärung</string>
+    <string name="action_help">Hilfe</string>
+    <string name="dropbox_reload_fullsync">ALLE BILDER</string>
+
+    <string name="version_update_title">App Update installiert</string>
+    <string name="version_update_201801242">Das Vorlesen der Erklärung wurde geändert. Anstatt beim
+        Ausklappen des Textes wird nun während des Betrachtens des Bildes vorgelesen.</string>
 </resources>

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">FunInSpace</string>
+    <string name="app_name">Fun In Space</string>
     <string name="action_settings">Settings</string>
 
     <string name="hfcm_yes">YES</string>
@@ -19,10 +19,13 @@
     <string name="title_activity_image">ImageActivity</string>
     <string name="dummy_button">Dummy Button</string>
     <string name="dummy_content">DUMMY\nCONTENT</string>
-    <string name="filetransfer1">This allows to transfer the JSON metadata files and thumbnail images via Socket to a listener Python script running on a remote machine.</string>
-    <string name="rate_limit_exceeded">FunInSpace could not load a new daily image. Most likely, the API rate limit has been exceeded.</string>
+    <string name="filetransfer1">This allows to transfer the JSON metadata files and thumbnail
+        images via Socket to a listener Python script running on a remote machine.</string>
+    <string name="rate_limit_exceeded">FunInSpace could not load a new daily image. Most likely,
+        the API rate limit has been exceeded.</string>
     <string name="no_apod">No Image received</string>
-    <string name="no_youtube">FunInSpace needs to have the YouTube App installed on your phone in order to play YouTube videos. Please install the YouTube App from the App Store</string>
+    <string name="no_youtube">FunInSpace needs to have the YouTube App installed on your phone in
+        order to play YouTube videos. Please install the YouTube App from the App Store</string>
     <string name="sorry">I\'m so sorry, but</string>
     <string name="title_activity_settings">Settings</string>
 
@@ -215,69 +218,79 @@
     <string name="pref_title_wifi_required"> Load Hires/Video with Wifi only</string>
     <string name="newest_first">newest_first</string>
     <string name="enable_tls"><![CDATA[Please enable TLS v1 in Settings > General]]></string>
-    <string name="lowres_fallback">Fall back to lower resolution image if NASA has a bad link for hires image, which happens from time to time</string>
+    <string name="lowres_fallback">Fall back to lower resolution image if NASA has a bad link
+        for hires image, which happens from time to time</string>
     <string name="fallback_lowres_title">Fallback to lowres (NOT YET ACTIVE)</string>
-    <string name="warn_apod_disable">You have currently disabled the load of new daily images. Please change your settings to avoid missing the daily image.</string>
+    <string name="warn_apod_disable">You have currently disabled the load of new daily images.
+        Please change your settings to avoid missing the daily image.</string>
     <string name="reminder">Reminder</string>
     <string name="no_email_client">Could not find any suitable e-mail client on your device</string>
     <string name="no_vimeo_thumb">Could not create a thumbnail image for this Vimeo video</string>
     <string name="pref_debug"> Debug settings</string>
-    <string name="wallpaper_nothing_to_revert">You did not set any FunInSpace Wallpaper yet, so there\'s nothing to restore</string>
-    <string name="wallpaper_backup_current">You have set a new wallpaper. Saving your current Wallpaper, so that you can restore this by using \'Restore Original Wallpaper\' in Main Menu.\nNote, that this is not possible any more, if you deinstall the App before restoring</string>
+    <string name="wallpaper_nothing_to_revert">You did not set any FunInSpace Wallpaper yet,
+        so there\'s nothing to restore</string>
+    <string name="wallpaper_backup_current">You have set a new wallpaper. Saving your current
+        Wallpaper, so that you can restore this by using \'Restore Original Wallpaper\' in Main
+        Menu.\nNote, that this is not possible any more, if you deinstall the App before restoring</string>
     <string name="restore_original_wallpaper">Restore Original Wallpaper</string>
     <string name="hires_no_wifi">A WiFi connection is needed to load video or hires images to save
         bandwidth. You do not have a WiFi connection currently. You can adjust your settings
     to allow loading video or hires images without WiFi as well. Should the setting be changed now?
     You can change this setting at any time.</string>
     <string name="wp_no_delete_active">Image \'%s\' is your current wallpaper. This will not be deleted.</string>
-    <string name="wp_confirm_dlg_msg">Do you want to set \'%s\' as your new wallpaper?</string>
+    <string name="wp_confirm_dlg_msg">Do you want to set \'%s\' as your current wallpaper?
+    If you select NO, this will just be added to the list of wallpapers available for shuffle</string>
     <string name="wp_confirm_dlg_title">Change wallpaper?</string>
     <string name="wp_confirm_dlg_pos_button">YES</string>
     <string name="wp_confirm_dlg_neg_button">NO</string>
     <string name="dlg_title_info">Info</string>
-    <string name="temp_wp_dialog_info">Please have a long click on the image in fullscreen mode, which allows to select a wallpaper range. Using this menu does
+    <string name="temp_wp_dialog_info">Please have a long click on the image in fullscreen mode,
+        which allows to select a wallpaper range. Using this menu does
         not currently allow to set a wallpaper</string>
-    <string name="toast_wp_start_select">Starting wallpaper selection mode …</string>
+    <string name="toast_wp_start_select">==TIP==\nAnother Long Press confirms your selection</string>
     <string name="toast_wp_select_finished">Wallpaper has been created …</string>
     <string name="wp_select_rect_string">Wallpaper select</string>
     <string name="dlg_revert_wp">Removing FunInSpace Wallpaper and reverting to your original image…</string>
     <string name="action_filter">Filter</string>
 
-
     <!-- Dropbox related stuff -->
     <string name="dropbox_init_mobile">FunInSpace does now initialize and you can choose to load
         a bunch of more historical image data. You have no wifi active currently. Do you want
-        to load the data anyway? You can decide to load at a later time using Resync</string>
+        to load the data anyway? You can decide to load at any time using Resync</string>
     <string name="dropbox_init_wifi">FunInSpace does now initialize and you can choose to load a
-        bunch of historical data to have some images available. You can later on sync as well.</string>
+        bunch of historical data to have some images available. You can sync at any later time as well.</string>
     <string name="dropbox_init_no_network">You do not have any active network connection. Please
         start the app again with an active network.</string>
     <string name="refresh_content">Resync with Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Refresh of image list</string>
-    <string name="refresh_dropbox_message">Do you want to refresh your list with my (Herbert\'s)
-        Dropbox informations? If images are missing, just try to reload later, as dropbox might
-        not be updated every day. Images, you have deleted, will not be loaded again.</string>
+    <string name="refresh_dropbox_message">Do you want to refresh your image list with my (Herbert\'s)
+        Dropbox informations? Images, that you have deleted, will not be loaded again. If you want
+        to reload these deleted images, click "FULL SYNC".</string>
 
     <string name="search_option">Full Search</string>
     <string name="full_search_explain">Search in explanation text in addition to title only</string>
-    <string name="test_mail_text">Just a test email sent by the FunInSpace App. The attachment contains a debugging logfile. TIP: Add yourself as .cc to see, what has been sent.</string>
+    <string name="test_mail_text">Just a test email sent by the FunInSpace App. The attachment
+        contains a debugging logfile. TIP: Add yourself as .cc to see, what has been sent.</string>
     <string name="test_mail_subject">Greetings from FunInSpace</string>
     <string name="rating">Rating</string>
     <string name="set_as_wallpaper">Set as wallpaper</string>
     <string name="reselect_wallpaper">Choose new wallpaper range</string>
     <string name="remove_as_wallpaper">Remove wallpaper</string>
     <string name="wp_tip_long_press">==TIP==\nLong Press on image for wallpaper selection</string>
-    <string name="pref_summary_read_text">Read out the explanation on each foldout of the explanation text. The context menu also offers a \'read out\' option.</string>
+    <string name="pref_summary_read_text">Read out the explanation text for the image while watching
+        the image in fullscreen. The context menu also offers a \'read out\' option.</string>
     <string name="pref_title_read_text">Read explanation</string>
     <string name="cab_read">Read out</string>
-    <string name="wp_quality_summary">Quality of newly saved wallpaper images. Images that have already been saved are not changed by this setting.</string>
+    <string name="wp_quality_summary">Quality of newly saved wallpaper images. Images that have
+        already been saved are not changed by this setting.</string>
     <string name="df_summary">Choose the format of date you like to be shown in the list of images.</string>
     <string name="hires_save_summary">Keep local copy of hires images on your device.\nNote:
         Videos will always be streamed and never get stored locally. Currently, this is limited to
         20 percent of free available storage, automatic deletion done if more memory is used. To be
         configurable later…</string>
     <string name="hires_save_title">Save Hires Images locally</string>
-    <string name="rgb565_thumbs_summary">Use lower color resolution Thumbnail pictures to save memory. Check, if you see any difference in the list.</string>
+    <string name="rgb565_thumbs_summary">Use lower color resolution Thumbnail pictures to save
+        memory. Check, if you see any difference in the list.</string>
     <string name="rgb565_thumbs_title">Thumbnail color quality</string>
     <string name="apod_already_loaded">Image of today already loaded. Next image available in %.1f hours</string>
     <string name="email_log">Email log to Herbert</string>
@@ -291,8 +304,10 @@
         of 2 FunInSpace wallpapers selected, so that no shuffle will take place for now.
         As soon as you select the minimum of 2 wallpapers, the shuffle function will start.
         In "Shuffle Times" setting you can determine, at which hours a shuffle should be done.</string>
-    <string name="no_network_for_apod">A new image is available, but you do not have an active network connection. Maybe flightmode is enabled?</string>
-    <string name="no_network_for_hd">You do not have an active network connection to load the image or video. Maybe flightmode is enabled?</string>
+    <string name="no_network_for_apod">A new image is available, but you do not have an active
+        network connection. Maybe flightmode is enabled?</string>
+    <string name="no_network_for_hd">You do not have an active network connection to load the
+        image or video. Maybe flightmode is enabled?</string>
     <string name="no_network">No network connection</string>
     <string name="show_log">Display logfile (debug)</string>
     <string name="about_credits">Image for MP4 by Gregor Cresnar, https://www.flaticon.com/authors/gregor-cresnar
@@ -303,11 +318,20 @@
     <string name="action_slide_show">Slide Show (future)</string>
     <string name="pref_debug_summary">These settings are meant for testing and debugging purposes only.</string>
     <string name="wp_shuffle_title">Wallpaper shuffle</string>
-    <string name="wp_shuffle_summary">Currently only available with Android 5 or higher - shuffle is done at selected full hours, if switched on.</string>
+    <string name="wp_shuffle_summary">Currently only available with Android 5 or higher - shuffle
+        is done at selected full hours, if switched on.</string>
     <string name="wp_shuffle_times_title">Shuffle times</string>
     <string name="wp_shuffle_times_summary">Select the hours at which a wallpaper shuffle should be done.</string>
     <string name="apod_bg_load_title">Daily image scheduler</string>
-    <string name="apod_bg_load_summary">Currently only available with Android 5 or higher. Load the
+    <string name="apod_bg_load_summary">Currently only available with Android 5 or higher. Load
         information about the daily image, even if the App is not started on that day. This helps
         to avoid missing images, because these get loaded at next start of the app.</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="action_help">Help</string>
+    <string name="dropbox_reload_fullsync">FULL SYNC</string>
+
+    <string name="version_update_title">App has been updated</string>
+    <string name="version_update_201801242">Reading of explanations has been changed. Instead of
+        reading the explanation when expanding the text, the explanation is now read while viewing
+        the image.</string>
 </resources>
