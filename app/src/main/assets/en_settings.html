@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Fun In Space Settings Help</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="hfcm.css">
+</head>
+
+<body>
+
+<div class="content">
+    <h1>General Settings</h1>
+    <p><b>Load Hires/Video with Wifi only</b></p>
+    <p>This setting defines, if images or videos should be loaded only, if a Wifi connection is
+    available. By default, this is switched on to save traffic.</p>
+    <p id="localcopy"><b>Save Hires Images locally</b></p>
+    <p>By default, this is switched off, so that on each image view, the image data is loaded via
+    network from NASA. You can switch on this option to save a local copy of the image.</p>
+    <p><b>Used Memory for Hires images</b></p>
+    <p>If storing images on your phone, this can consume quite a lot of memory, especially because
+    the images from NASA can be very large. With this setting, you decide, how many percent of the
+    currently available space can be used. After each view of an image, <i>Fun in Space</i> does
+    perform a cleanup. If available free space has shrunk for any reason (also if other apps did
+    consume more memory), the app does a deletion of images, depending on their size and the
+    rating you have set. The small symbol on the lower left of the thumbnail is removed for those
+    images, for which the local copy has been removed, indicating, that this will be loaded from
+    network the next time (which might cause other images to be removed)</p>
+    <p id="shuffle"><b>Wallpaper Shuffle</b></p>
+    <p>This is disabled by default. If you switch this on, <i>Fun In space</i> begins to shuffle
+    your phone background with a random selected wallpaper from those images, for which you have
+    defined a wallpaper selection.</p>
+    <p><b>Wallpaper Shuffle Times</b></p>
+    <p>These are the times, at which shuffle will take place.</p>
+    <p><b>Wallpaper Image Quality</b></p>
+    <p>to describe</p>
+    <p><b>Get daily info in background</b></p>
+    <p>NASA only provides the daily info for an image at the given day. On the next day, a new information
+    is available. This means, if you do not run the app on a certain day, you might loose that image.
+    (The planned archive search might come in here...). This option makes sure, that even if you
+    don't start the app for several days, <i>Fun In Space</i> tries to get the daily information
+    in background (provided your phone is switched on). On the next start, all missed infos are
+    checked and missing thumbnails are created.</p>
+    <p>Note, that the switchover to the new image takes place at 00:00 NASA server time, which is in
+    Timezone New York. This means, that availability of the image depends on our timezone. The image might appear in the afternoon,
+    if you are located in Japan.</p>
+    <p><b>Play sound on background load</b></p>
+    <p>This is switched off by default. If switched on, a sound is played as soon as a valid APOD
+    info has been collected in background. Depending on your timezone, this might happen during the
+    night.</p>
+    <p><b>Thumbnail color quality</b></p>
+    <p>to be described</p>
+    <p><b>Read explanation</b></p>
+    <p>This allows to read the explanation while watching an image in fullscreen. By default, this
+    is disabled.</p>
+    <p><b>Date Format</b></p>
+    <p>select the date format you like - todo - improve and add more formats</p>
+    <p><b>Fallback to lowres (not yet active)</b></p>
+    <p>to be done</p>
+    <p><b>Full Search</b></p>
+    <p>This is disabled by default. The search function can also search the explanation text, if
+    this is enabled.</p>
+
+    <h1>Debug Settings</h1>
+    These are just settings used for debugging purposes.
+</div>
+
+</body>
+</html>
