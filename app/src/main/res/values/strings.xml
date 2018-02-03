@@ -2,6 +2,8 @@
     <string name="app_name">Fun In Space</string>
     <string name="action_settings">Settings</string>
 
+    <string name="html_help_basepage">en_help.html</string>
+
     <string name="hfcm_yes">YES</string>
     <string name="hfcm_no">NO</string>
     <string name="hfcm_cancel">CANCEL</string>
@@ -320,18 +322,40 @@
     <string name="wp_shuffle_title">Wallpaper shuffle</string>
     <string name="wp_shuffle_summary">Currently only available with Android 5 or higher - shuffle
         is done at selected full hours, if switched on.</string>
-    <string name="wp_shuffle_times_title">Shuffle times</string>
+    <string name="wp_shuffle_times_title">Wallpaper Shuffle times</string>
     <string name="wp_shuffle_times_summary">Select the hours at which a wallpaper shuffle should be done.</string>
-    <string name="apod_bg_load_title">Daily image scheduler</string>
+    <string name="apod_bg_load_title">Get daily info in background</string>
     <string name="apod_bg_load_summary">Currently only available with Android 5 or higher. Load
         information about the daily image, even if the App is not started on that day. This helps
         to avoid missing images, because these get loaded at next start of the app.</string>
+    <string name="apod_bg_load_sound_title">Play sound on background load</string>
+    <string name="apod_bg_load_sound_summary">This notifies you, that a new APOD information has been
+    loaded. Switch this on, if you like to hear "new apod" on successful information load.</string>
     <string name="privacy_policy">Privacy Policy</string>
     <string name="action_help">Help</string>
     <string name="dropbox_reload_fullsync">FULL SYNC</string>
 
+    <!-- Setting of hires cache limit -->
+    <string name="hd_cachelimit_title">Used Memory for Hires images</string>
+    <string name="hd_cachelimit_summary">This defines the maximum percentage of the current free internal memory
+    in percent, that is used for storing hires images locally. If reaching the limit, automatic deletions take place.</string>
+    <string-array name="hd_cachelimit_entries">
+        <item>20%</item>
+        <item>40%</item>
+        <item>60%</item>
+        <item>80%</item>
+    </string-array>
+    <string-array name="hd_cachelimit_values">
+        <item>20</item>
+        <item>40</item>
+        <item>60</item>
+        <item>80</item>
+    </string-array>
+
     <string name="version_update_title">App has been updated</string>
-    <string name="version_update_201801242">Reading of explanations has been changed. Instead of
+    <string name="version_update_201801242">* Reading of explanations has been changed. Instead of
         reading the explanation when expanding the text, the explanation is now read while viewing
-        the image.</string>
+        the image. You can disable the reading in settings.</string>
+    <string name="version_update_201801281">* The app does now load infos about the daily image in
+    background by default, even if it is not running. You can disable this in in settings.</string>
 </resources>

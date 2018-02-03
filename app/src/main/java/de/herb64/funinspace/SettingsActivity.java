@@ -81,6 +81,9 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
                 if (listPreference.getKey().equals("wp_shuffle_times")) {
                     returnIntent.putExtra("wp_shuffle_times", listPreference.getValue());
                 }
+                if (listPreference.getKey().equals("hd_cachelimit")) {
+                    returnIntent.putExtra("hd_cachelimit", listPreference.getValue());
+                }
 
                 // Set the summary to reflect the new value.
                 preference.setSummary(
@@ -214,15 +217,17 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
                 // https://stackoverflow.com/questions/22444773/how-to-enable-disable-a-preference
                 getPreferenceScreen().findPreference("apod_bg_load").setEnabled(false);
+                getPreferenceScreen().findPreference("apod_bg_load_sound").setEnabled(false);
                 getPreferenceScreen().findPreference("wallpaper_shuffle").setEnabled(false);
                 getPreferenceScreen().findPreference("wp_shuffle_times").setEnabled(false);
+                //getPreferenceScreen().findPreference("hd_cachelimit").setEnabled(false);
             }
 
             // Bind the summaries of EditText/List/Dialog/Ringtone preferences
             // to their values. When their values change, their summaries are
             // updated to reflect the new value, per the Android Design
             // guidelines.
-            bindPreferenceSummaryToValue(findPreference("example_text"));
+            //bindPreferenceSummaryToValue(findPreference("example_text"));
             //bindPreferenceSummaryToValue(findPreference("example_list"));
             // important to have listener called
             //bindPreferenceSummaryToValue(findPreference("item_order"));

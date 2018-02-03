@@ -23,6 +23,17 @@
         android:summary="@string/hires_save_summary"
         android:title="@string/hires_save_title" />
 
+    <!-- 27.01.2018 - add selection of max mem used, the below seekbar pref was ugly -->
+    <ListPreference
+        android:defaultValue="20"
+        android:entries="@array/hd_cachelimit_entries"
+        android:entryValues="@array/hd_cachelimit_values"
+        android:key="hd_cachelimit"
+        android:negativeButtonText="@null"
+        android:positiveButtonText="@null"
+        android:summary="@string/hd_cachelimit_summary"
+        android:title="@string/hd_cachelimit_title" />
+
     <!-- Just as a test, works, but not nice in terms of font size, indenting, and warning
          about not being allowed by inspection...
     <SeekBarPreference
@@ -47,24 +58,6 @@
         android:summary="@string/wp_shuffle_times_summary"
         android:title="@string/wp_shuffle_times_title" />
 
-    <SwitchPreference
-        android:defaultValue="false"
-        android:key="apod_bg_load"
-        android:summary="@string/apod_bg_load_summary"
-        android:title="@string/apod_bg_load_title" />
-
-    <SwitchPreference
-        android:defaultValue="false"
-        android:key="rgb565_thumbs"
-        android:summary="@string/rgb565_thumbs_summary"
-        android:title="@string/rgb565_thumbs_title" />
-
-    <SwitchPreference
-        android:defaultValue="true"
-        android:key="read_out"
-        android:summary="@string/pref_summary_read_text"
-        android:title="@string/pref_title_read_text" />
-
     <!-- 10.11.2017 - add selection of wallpaper image quality -->
     <ListPreference
         android:defaultValue="80"
@@ -75,6 +68,30 @@
         android:positiveButtonText="@null"
         android:summary="@string/wp_quality_summary"
         android:title="@string/wallpaper_quality" />
+
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="apod_bg_load"
+        android:summary="@string/apod_bg_load_summary"
+        android:title="@string/apod_bg_load_title" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="apod_bg_load_sound"
+        android:summary="@string/apod_bg_load_sound_summary"
+        android:title="@string/apod_bg_load_sound_title" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="rgb565_thumbs"
+        android:summary="@string/rgb565_thumbs_summary"
+        android:title="@string/rgb565_thumbs_title" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="read_out"
+        android:summary="@string/pref_summary_read_text"
+        android:title="@string/pref_title_read_text" />
 
     <!-- 16.11.2017 - add selection for date format -->
     <ListPreference
@@ -109,6 +126,7 @@
 
     <!-- NOTE: EditTextPreference accepts EditText attributes. -->
     <!-- NOTE: EditTextPreference's summary should be set to its value by the activity code. -->
+    <!--
     <EditTextPreference
         android:capitalize="words"
         android:defaultValue="@string/pref_default_display_name"
@@ -117,7 +135,9 @@
         android:maxLines="1"
         android:selectAllOnFocus="true"
         android:singleLine="true"
-        android:title="@string/pref_title_display_name" />
+        android:title="@string/pref_title_display_name"
+        android:visibility="invisible" />
+        -->
 
 
     <!-- NOTE: Hide buttons to simplify the UI. Users can touch outside the dialog to

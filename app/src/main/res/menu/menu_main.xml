@@ -13,23 +13,28 @@
         app:showAsAction="ifRoom" />
     -->
 
+    <!-- android:icon="@android:drawable/ic_menu_send"
+         android:icon="@drawable/ic_send_24px"-->
     <item
         android:id="@+id/action_xfer"
-        android:icon="@android:drawable/ic_menu_send"
+        android:icon="@drawable/ic_file_upload_24px"
         android:orderInCategory="97"
         android:title="FileTransfer (Debug)"
         app:showAsAction="ifRoom" />
+
+    <!-- android:icon="@android:drawable/ic_menu_info_details" -->
     <item
         android:id="@+id/action_debuginfo"
         android:orderInCategory="90"
         android:title="Debuginfo"
-        android:icon="@android:drawable/ic_menu_info_details"
+        android:icon="@drawable/ic_bug_report_black_24px"
         app:showAsAction="ifRoom" />
 
+    <!-- android:icon="@android:drawable/ic_menu_slideshow" -->
     <item
         android:id="@+id/action_slideshow"
         android:enabled="false"
-        android:icon="@android:drawable/ic_menu_slideshow"
+        android:icon="@drawable/ic_slideshow_24px"
         android:orderInCategory="91"
         android:title="@string/action_slide_show"
         app:showAsAction="ifRoom" />
@@ -37,57 +42,62 @@
     <item
         android:id="@+id/action_search_apod"
         android:enabled="false"
-        android:icon="@android:drawable/ic_menu_search"
+        android:icon="@drawable/ic_search_cloud"
         android:orderInCategory="93"
         android:title="@string/search_nasa_archive"
         app:showAsAction="ifRoom" />
 
+    <!-- android:icon="@android:drawable/ic_dialog_email" -->
     <item
         android:id="@+id/action_mail"
-        android:icon="@android:drawable/ic_dialog_email"
+        android:icon="@drawable/ic_mail_outline_24px"
         android:orderInCategory="94"
         android:title="@string/email_log" />
 
+    <!-- android:icon="@android:drawable/ic_menu_set_as" -->
     <item
         android:id="@+id/action_showlog"
-        android:icon="@android:drawable/ic_menu_set_as"
+        android:icon="@drawable/ic_report_problem_24px"
         android:orderInCategory="94"
         android:title="@string/show_log" />
 
+    <!-- android:icon="@android:drawable/ic_menu_info_details" -->
     <item
         android:id="@+id/action_about"
-        android:icon="@android:drawable/ic_menu_info_details"
+        android:icon="@drawable/ic_info_outline_24px"
         android:orderInCategory="97"
         android:title="About"
         app:showAsAction="ifRoom" />
     <item
         android:id="@+id/action_privacy"
-        android:icon="@android:drawable/ic_menu_myplaces"
+        android:icon="@drawable/ic_security_24px"
         android:orderInCategory="98"
         android:title="@string/privacy_policy"
         app:showAsAction="ifRoom" />
+
+    <!-- android:icon="@android:drawable/ic_menu_help" -->
     <item
         android:id="@+id/action_help"
-        android:icon="@android:drawable/ic_menu_help"
+        android:icon="@drawable/ic_help_outline_24px"
         android:orderInCategory="99"
         android:title="@string/action_help"
         app:showAsAction="ifRoom" />
 
-    <item
+    <!-- <item
         android:id="@+id/action_crash"
-        android:enabled="false"
         android:icon="@android:drawable/stat_sys_warning"
         android:orderInCategory="100"
         android:title="Create TEST CRASH"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" /> -->
 
     <!-- Some code to make searchview appear as menu item
          I did remove android:orderInCategory statement
-         see https://www.youtube.com/watch?v=9OWmnYPX1uc -->
+         see https://www.youtube.com/watch?v=9OWmnYPX1uc
+         android:icon="@android:drawable/ic_menu_search"-->
     <item
         android:id="@+id/action_search"
         android:title="Search"
-        android:icon="@android:drawable/ic_menu_search"
+        android:icon="@drawable/ic_search_24px"
         app:showAsAction="always|collapseActionView"
         app:actionViewClass="android.support.v7.widget.SearchView" />
 
@@ -105,26 +115,29 @@
         app:showAsAction="always|collapseActionView"
         app:actionViewClass="de.herb64.funinspace.FilterView" />
 
+    <!-- android:icon="@android:drawable/ic_menu_preferences" -->
     <item
         android:id="@+id/action_settings"
         android:orderInCategory="10"
         android:title="@string/action_settings"
-        android:icon="@android:drawable/ic_menu_preferences"
+        android:icon="@drawable/ic_settings_24px"
         app:showAsAction="always" />
 
     <!-- This is for resync with dropbox metadata json. Most likely not part of final version
          but useful to resync stuff without new installation -->
+    <!-- android:icon="@android:drawable/ic_popup_sync" -->
     <item
         android:id="@+id/dropbox_sync"
         android:orderInCategory="90"
         android:title="@string/refresh_content"
         app:showAsAction="ifRoom"
-        android:icon="@android:drawable/ic_popup_sync" />
+        android:icon="@drawable/ic_sync_black_24dp" />
 
-    <!-- Add restore wallpaper option for test users to be able to revert to their original -->
+    <!-- Add restore wallpaper option for test users to be able to revert to their original
+         android:icon="@android:drawable/ic_menu_revert"-->
     <item
         android:id="@+id/restore_wallpaper"
-        android:icon="@android:drawable/ic_menu_revert"
+        android:icon="@drawable/ic_settings_backup_restore_24px"
         android:orderInCategory="92"
         android:title="@string/restore_original_wallpaper"
         app:showAsAction="ifRoom" />

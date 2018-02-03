@@ -2,6 +2,7 @@ package de.herb64.funinspace.services;
 
 import android.app.Notification;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
@@ -9,10 +10,12 @@ import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PersistableBundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
@@ -105,6 +108,9 @@ public class apodJobService extends JobService {
         // By this logic, the app does not give up after one single try. E.g. APOD might be delayed
         // or server errors might happen.
 
+        // TODO: check, if the current days apod is already in nasatest.json - if so, we just
+        //       reschedule without doing any load of apod image
+
         Locale loc = Locale.getDefault();
         int count = jobParameters.getExtras().getInt("COUNT");  // now used to count retries
         String url = jobParameters.getExtras().getString("URL");
@@ -115,6 +121,21 @@ public class apodJobService extends JobService {
         // First step in new logic: check for valid json - this is just the verification, after
         // which we reschedule for the next day.
         long epoch = utils.getNASAEpoch();
+
+        // add check, if today's epoch already in json (is last entry in this case) - if so, just
+        // reschedule for next day
+        if (utils.todaysImageAlreadyInList(getApplicationContext(), epoch)) {
+            utils.logAppend(getApplicationContext(),
+                    MainActivity.DEBUG_LOG,
+                    String.format(loc,
+                            "onStartJob(%d) - APOD - already in local json for epoch %d",
+                            count, epoch));
+            // here, we can close this now
+            jobFinished(jobParameters, false);  // false: no reschedule, work is done
+            scheduleNext(utils.getMsToNextApod(getApplicationContext()), DEADLINE_DELAY, 0, url);
+            return true;
+        }
+
         if (utils.haveValidScheduledJson(getApplicationContext(), epoch)) {
             // in this case, just schedule for the next day and keep the json file for processing
             // in getScheduledAPODs(), when user opens the app GUI
@@ -127,17 +148,29 @@ public class apodJobService extends JobService {
             // TODO - seems we need custom big view to make it appear expanded...
             // TODO - notification ids... (998...)
             // TODO - launch app if clicking...
-            Notification notification  = new NotificationCompat.Builder(this)
-                    //.setCategory(Notification.CATEGORY_MESSAGE)
-                    .setContentTitle("New APOD")
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
+            builder.setContentTitle("New APOD")
                     .setContentText("New apod loaded")
                     .setSmallIcon(R.mipmap.ic_launcher)
-                    .setAutoCancel(true)
-                    .setSound(Uri.parse("android.resource://"
-                            + this.getPackageName() + "/" + R.raw.newapod))
-                    //.setVibrate()
-                    //.setVisibility(Notification.VISIBILITY_PUBLIC)
-                    .build();
+                    .setAutoCancel(true);
+            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+            if (sharedPref.getBoolean("apod_bg_load_sound", false)) {
+                builder.setSound(Uri.parse("android.resource://"
+                        + this.getPackageName() + "/" + R.raw.newapod));
+            }
+
+            // New: clicking on notification now starts the App UI
+            Intent notificationIntent = new Intent(this, MainActivity.class);
+            PendingIntent pendingIntent = PendingIntent.getActivity(this, 0,
+                    notificationIntent, 0);
+            notificationIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            builder.setContentIntent(pendingIntent);
+            builder.setOngoing(true);
+            builder.setSubText("TODO Herbert: put in more infos here into the notification");
+
+            Notification notification = builder.build();
             NotificationManager notificationManager =
                     (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (notificationManager != null) {
@@ -146,7 +179,14 @@ public class apodJobService extends JobService {
                 utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                         "onStartJob(" + count + ") - APOD - notificationManager is null");
             }
-            // here, we can close this now
+
+            // TODO - send broadcast to update UI, in case it is open at time of new apod
+            Intent intent = new Intent();
+            //intent.putExtra("NEWWP", wpfile);
+            intent.setAction(MainActivity.BCAST_APOD);
+            sendBroadcast(intent);
+
+            // we can close this now
             jobFinished(jobParameters, false);  // false: no reschedule, work is done
             scheduleNext(utils.getMsToNextApod(getApplicationContext()), DEADLINE_DELAY, 0, url);
             return true;

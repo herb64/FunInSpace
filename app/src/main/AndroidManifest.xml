@@ -44,7 +44,9 @@
             android:theme="@style/AppTheme.NoActionBar" />
 
         <activity android:name=".PrivacyActivity"/>
-        <activity android:name=".HelpActivity"/>
+
+        <activity android:name=".HelpActivity"
+            android:theme="@style/AppTheme.NoActionBar" />
 
         <activity
             android:name=".MP4Activity"

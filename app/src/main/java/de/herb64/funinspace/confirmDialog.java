@@ -41,7 +41,7 @@ public class confirmDialog extends AppCompatDialogFragment {
      */
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
-        //return super.onCreateDialog(savedInstanceState);
+        //return super.onCreateDialog(savedInstanceState);      // TODO: should we call it?
         final String title = getArguments().getString("TITLE");
         final String msg = getArguments().getString("MESSAGE");
         final String pos = getArguments().getString("POS");
@@ -51,6 +51,10 @@ public class confirmDialog extends AppCompatDialogFragment {
         final int idx = getArguments().getInt("IDX");
         final int iconid = getArguments().getInt("ICON_ID");
         final float textsize = getArguments().getFloat("MSGSIZE");
+
+        if (savedInstanceState != null) {
+            tag = savedInstanceState.getString("TAG");
+        }
 
         final DialogInterface.OnClickListener listener = new DialogInterface.OnClickListener() {
 
@@ -88,5 +92,16 @@ public class confirmDialog extends AppCompatDialogFragment {
             }
         }
         return dialog;
+    }
+
+    /**
+     * Save the TAG information at least to avoid crash when closing dialog after configuration
+     * change happened while displaying the dialog
+     * @param outState
+     */
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putString("TAG", tag);
     }
 }

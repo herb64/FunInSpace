@@ -35,6 +35,7 @@ public class MP4Activity extends AppCompatActivity {
     private MediaController mc;
     private ProgressBar pbLoad;
     private String mp4Url;
+    private boolean bShowStats;
     private int start;
     private boolean bIsPlaying;
 
@@ -146,11 +147,13 @@ public class MP4Activity extends AppCompatActivity {
             mp4Url = savedInstanceState.getString("mp4url");
             start = savedInstanceState.getInt("playpos");
             bIsPlaying = savedInstanceState.getBoolean("isplaying");
+            bShowStats = savedInstanceState.getBoolean("showstats");
             Log.i("HFCM", "Restored instance: " + mp4Url + ", Pos: " + start +
                     " ,Playing: " + bIsPlaying);
         } else {
             Intent intent = getIntent();
             mp4Url = intent.getStringExtra("mp4url");
+            bShowStats = intent.getBooleanExtra("showstats", true);
             start = 0;
             bIsPlaying = true;
         }
@@ -175,6 +178,7 @@ public class MP4Activity extends AppCompatActivity {
         outState.putInt("playpos", mp4View.getCurrentPosition());
         outState.putBoolean("isplaying", mp4View.isPlaying());
         outState.putString("mp4url", mp4Url);
+        outState.putBoolean("showstats", bShowStats);
         /*Log.i("HFCM", "Saving instance: " + mp4Url +
                 ", Pos: " + mp4View.getCurrentPosition() +
                 ", Playing: " + mp4View.isPlaying());*/
@@ -223,7 +227,7 @@ public class MP4Activity extends AppCompatActivity {
          */
         @Override
         protected void onPostExecute(ArrayList<String> strings) {
-            if (!bitrate.equals("0.0")) {
+            if (bShowStats && !bitrate.equals("0.0")) {
                 Toast.makeText(getApplicationContext(),
                         "Bitrate: "
                         + new DecimalFormat("#.##").format(Float.parseFloat(bitrate) / 1048576)

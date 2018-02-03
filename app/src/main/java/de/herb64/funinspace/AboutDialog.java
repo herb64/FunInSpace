@@ -41,7 +41,7 @@ public class AboutDialog extends Dialog {
         TextView tvInfoTitle = findViewById(R.id.tv_about_infos_title);
         TextView tvInfoContent = findViewById(R.id.tv_about_infos_content);
         tvInfoTitle.setText("About the app");
-        tvInfoContent.setText("This is the alpha testing version of FunInSpace. This app delivers the daily image provided by NASA ...");
+        tvInfoContent.setText("This is the alpha testing version of FunInSpace, which delivers the daily image provided by NASA ...");
         tvInfoContent.setTextSize(10f);
 
         TextView tvCredTitle = findViewById(R.id.tv_about_credits_title);
@@ -59,7 +59,7 @@ public class AboutDialog extends Dialog {
         TextView tvThksTitle = findViewById(R.id.tv_about_thanks_title);
         TextView tvThksContent = findViewById(R.id.tv_about_thanks_content);
         tvThksTitle.setText("Special thanks");
-        tvThksContent.setText("Special thanks for very early testing to Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger");
+        tvThksContent.setText("Special thanks for very early testing to Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger, Gerhard Biefel");
         tvThksContent.setTextSize(10f);
 
         /* WebView: does load once, then not ... alternating. loadUrl does not work at all...

@@ -114,7 +114,7 @@ public class MainActivity extends AppCompatActivity
     private spaceAdapter adp;
     private JSONArray parent;
     private String jsonData;
-    private String localJson = "nasatest.json";
+    //private String localJson = "nasatest.json";
     protected thumbClickListener myThumbClickListener;
     //private ratingChangeListener myRatingChangeListener;
     private ListView myItemsLV;
@@ -128,7 +128,13 @@ public class MainActivity extends AppCompatActivity
     private boolean dateFormatChanged;      // important: need true after installation
     private boolean wpShuffleChanged;
     private boolean wpShuffleTimesChanged;
-    private boolean bgApodLoadChanged;
+
+    //private boolean bgApodLoadChanged;    // new, simple logic, was bad before...
+    private boolean bg_apod_load;
+
+    private String hd_cachelimit;           // MAX_HIRES_PERCENT
+    private int hd_maxmempct;               //
+
     private int currentWallpaperIndex = -1;
     protected TimeZone tzNASA;
     protected Calendar cNASA;
@@ -161,6 +167,8 @@ public class MainActivity extends AppCompatActivity
 
     //private static final String ABOUT_VERSION = "0.5.8 (alpha)\nBuild Date 2017-12-19\n";
     // infos now only in build.gradle - utils.getVersionInfo() grabs data for about dialog
+
+    public static final String localJson = "nasatest.json";
 
     // for logcat wrapper - utils.java
     public static final boolean LOGCAT_INFO = false;
@@ -195,6 +203,7 @@ public class MainActivity extends AppCompatActivity
     protected static final int MAX_HIRES_PERCENT = 20;          // TODO - make config option
     public static final int JOB_ID_SHUFFLE = 85407;
     public static final String BCAST_SHUFFLE = "SHUFFLE";
+    public static final String BCAST_APOD = "APOD";
     public static final String BCAST_THUMB = "THUMB";
     public static final String DEBUG_LOG = "funinspace.log";
     private static final String FILE_PROVIDER = "de.herb64.funinspace.fileprovider";
@@ -276,7 +285,13 @@ public class MainActivity extends AppCompatActivity
         thumbQualityChanged = !sharedPref.contains("rgb565_thumbs");
         wpShuffleChanged = !sharedPref.contains("wallpaper_shuffle");
         wpShuffleTimesChanged = !sharedPref.contains("wp_shuffle_times");
-        bgApodLoadChanged = !sharedPref.contains("apod_bg_load");
+
+        //bgApodLoadChanged = !sharedPref.contains("apod_bg_load");
+        bg_apod_load = sharedPref.getBoolean("apod_bg_load", true);
+
+        hd_cachelimit = sharedPref.getString("hd_cachelimit", "20");
+        hd_maxmempct = Integer.decode(hd_cachelimit);
+
         sharedPref.registerOnSharedPreferenceChangeListener(prefChangeListener);
 
         // Timezone and Calendar objects used to base our timestamps on current NASA TimeZone
@@ -480,12 +495,12 @@ public class MainActivity extends AppCompatActivity
                 reader = (TextReader) fm.findFragmentByTag(TextReader.TAG_READ_FRAGMENT);
                 if (reader != null && reader.isReading()) {
                     Log.i("HFCM", "CAB init: tts is reading");
-                    item_read.setIcon(android.R.drawable.ic_lock_silent_mode);
+                    item_read.setIcon(R.drawable.ic_menu_stop_read);
                 } else {
                     if (reader == null) {
                         Log.i("HFCM", "CAB init: reader is null");
                     }
-                    item_read.setIcon(android.R.drawable.ic_lock_silent_mode_off);
+                    item_read.setIcon(R.drawable.ic_menu_start_read);
                 }
 
                 return true;        // ???
@@ -648,9 +663,9 @@ public class MainActivity extends AppCompatActivity
                         if (reader != null) {
                             if (reader.read(myList.get(selected.get(0)).getTitle(),
                                     myList.get(selected.get(0)).getExplanation())) {
-                                menuItem.setIcon(android.R.drawable.ic_lock_silent_mode);
+                                menuItem.setIcon(R.drawable.ic_menu_stop_read);
                             } else {
-                                menuItem.setIcon(android.R.drawable.ic_lock_silent_mode_off);
+                                menuItem.setIcon(R.drawable.ic_menu_start_read);
                             }
                         }
                         return true;
@@ -755,6 +770,9 @@ public class MainActivity extends AppCompatActivity
                 devInfo.setGlMaxTextureSize(maxTextureSize);
                 SharedPreferences.Editor editor = sharedPref.edit();
                 editor.putBoolean("INITIAL_LAUNCH", true);
+                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    editor.putBoolean("apod_bg_load", false); // by default it is true
+                }
                 editor.apply();
                 parent = new JSONArray();
                 // at initial run, do a network test which does not fall into DNS wait...
@@ -798,17 +816,19 @@ public class MainActivity extends AppCompatActivity
         // TODO: better one receiver with multiple filters or multiple receivers with one filter?
         // the latter allows for multiple files, which do not grow too large and allow to deregister
         // single receivers, while others can remain active.
-        IntentFilter netFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+        /*IntentFilter netFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         netFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         networkReceiver = new NetworkBcastReceiver();
-        registerReceiver(networkReceiver, netFilter);
+        registerReceiver(networkReceiver, netFilter);*/
 
         // Broadcast Receiver to handle events, mostly to update the UI immediately (e.g. wallpaper
         // symbol in thumbnail)
-        // TODO - own class for receiver
+        // TODO - own class for receiver - for now add airplane mode here:
         IntentFilter filter = new IntentFilter();
         filter.addAction(BCAST_SHUFFLE);
+        filter.addAction(BCAST_APOD);
         filter.addAction(BCAST_THUMB);
+        filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         //filter.addCategory();
         receiver = new BroadcastReceiver() {
             @Override
@@ -827,6 +847,19 @@ public class MainActivity extends AppCompatActivity
                         }
                         adp.notifyDataSetChanged();
                         break;
+                    case BCAST_APOD:
+                        // APOD background loader found valid json while ui running: refresh list
+                        getScheduledAPODs();
+                        getLatestAPOD();
+                        adp.notifyDataSetChanged();
+                        break;
+                    case Intent.ACTION_AIRPLANE_MODE_CHANGED:
+                        // TODO seems we need to test if network is ready - and check, if switched on or off...
+                        SystemClock.sleep(2000);            // TODO: quite ugly...
+                        getScheduledAPODs();
+                        getLatestAPOD();
+                        adp.notifyDataSetChanged();
+                        break;
                     case BCAST_THUMB:
                         // This one is not used...
                         break;
@@ -839,10 +872,10 @@ public class MainActivity extends AppCompatActivity
 
         // Reschedule jobs, that are expected to be active but not running at app start
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
             if (sharedPref.getBoolean("wallpaper_shuffle", false) &&
                     utils.getNumWP(myList) >= 2) {
-                JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-                List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
                 boolean needReload = true;
                 for (JobInfo pending : allPendingJobs) {
                     if (pending.getId() == JOB_ID_SHUFFLE) {
@@ -850,12 +883,25 @@ public class MainActivity extends AppCompatActivity
                     }
                 }
                 if (needReload) {
-                    //new dialogDisplay(MainActivity.this,
-                    //        "Wallpaper Shuffle has been terminated, although it should be active. Reactivating now...");
                     scheduleShuffle(utils.getMsToNextShuffle(getApplicationContext()));
                     utils.logAppend(getApplicationContext(),
                             DEBUG_LOG,
                             "Shuffle schedule found inactive although enabled in settings, restarting...");
+                }
+            }
+            if (sharedPref.getBoolean("apod_bg_load", true)) {
+                boolean needReload = true;
+                for (JobInfo pending : allPendingJobs) {
+                    if (pending.getId() == apodJobService.JOB_ID_APOD) {
+                        needReload = false;
+                    }
+                }
+                if (needReload) {
+                    long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
+                    scheduleApod(ms2NextApod, apodJobService.DEADLINE_DELAY);
+                    utils.logAppend(getApplicationContext(),
+                            DEBUG_LOG,
+                            "APOD schedule found inactive ... starting...");
                 }
             }
         }
@@ -1327,6 +1373,7 @@ public class MainActivity extends AppCompatActivity
     private void playMP4(String url) {
         Intent mp4Intent = new Intent(MainActivity.this, MP4Activity.class);
         mp4Intent.putExtra("mp4url", url);
+        mp4Intent.putExtra("showstats", true);
         startActivity(mp4Intent);
 
         // D O C U    S T U F F !!!
@@ -1392,7 +1439,8 @@ public class MainActivity extends AppCompatActivity
                 if (data.getBooleanExtra("new_hd_cached_file", false)) {
                     ArrayList<Integer> del = utils.cleanupFiles(getApplicationContext(),
                             myList,
-                            MAX_HIRES_PERCENT,
+                            //MAX_HIRES_PERCENT,
+                            hd_maxmempct,
                             listidx);
                     for (int i : del) {
                         myList.get(i).setCached(false);
@@ -1506,7 +1554,43 @@ public class MainActivity extends AppCompatActivity
                                 "Shuffle reschedule due to times reselect");
                     }
                 }
-                if (bgApodLoadChanged) {
+
+                if (sharedPref.getBoolean("apod_bg_load", true) ^ bg_apod_load) {
+                    bg_apod_load ^= true;
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                        //boolean bgload = sharedPref.getBoolean("apod_bg_load", false);
+                        if (bg_apod_load) {
+                            long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
+                            scheduleApod(ms2NextApod, apodJobService.DEADLINE_DELAY);
+                            utils.logAppend(getApplicationContext(),
+                                    DEBUG_LOG,
+                                    "Enabled APOD Loader in settings, next apod in " +
+                                            ms2NextApod/1000 + " seconds"
+                            );
+
+                        } else {
+                            //JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+                            if (utils.cancelJob(getApplicationContext(),
+                                    apodJobService.JOB_ID_APOD)) {
+                                utils.logAppend(getApplicationContext(),
+                                        DEBUG_LOG,
+                                        "Disabled APOD background load in settings");
+                                Toast.makeText(MainActivity.this, "APOD Background loader switched off",
+                                        Toast.LENGTH_LONG).show();
+                            } else {
+                                utils.logAppend(getApplicationContext(),
+                                        DEBUG_LOG,
+                                        "Error disabling APOD background loader schedule");
+                            }
+                            //scheduler.cancel(JOB_ID_APOD);
+                        }
+                    } else {
+                        new dialogDisplay(MainActivity.this,
+                                "Not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
+                    }
+                }
+
+                /*if (bgApodLoadChanged) {
                     bgApodLoadChanged = false;
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                         boolean bgload = sharedPref.getBoolean("apod_bg_load", false);
@@ -1538,6 +1622,19 @@ public class MainActivity extends AppCompatActivity
                     } else {
                         new dialogDisplay(MainActivity.this,
                                 "Not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
+                    }
+                }*/
+
+                // Cache memory limit for hires images: if this value is lowered, we should run
+                // a cleanup to reflect the new value - maybe warn the user before...
+                if (!sharedPref.getString("hd_cachelimit", "20").equals(hd_cachelimit)) {
+                    int hd_current = hd_maxmempct;
+                    hd_cachelimit = sharedPref.getString("hd_cachelimit", "20");
+                    hd_maxmempct = Integer.decode(hd_cachelimit);
+                    if (hd_maxmempct < hd_current) {
+                        //Log.i("HFCM", "Running cleanupFiles (hdmax lowered from " +
+                        //        hd_current + " to " + hd_maxmempct + ")");
+                        utils.cleanupFiles(getApplicationContext(), myList, hd_maxmempct, -1);
                     }
                 }
             }
@@ -1573,9 +1670,9 @@ public class MainActivity extends AppCompatActivity
                     if (changed.equals("wp_shuffle_times")) {
                         wpShuffleTimesChanged ^= true;
                     }
-                    if (changed.equals("apod_bg_load")) {
+                    /*if (changed.equals("apod_bg_load")) {
                         bgApodLoadChanged ^= true;
-                    }
+                    }*/
                     if (changed.equals("full_search")) {
                         // this one: just set on each single toggle
                         adp.setFullSearch(sharedPref.getBoolean("full_search", false));
@@ -1804,6 +1901,7 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_debuginfo) {
+            scheduleApod(5000, 5000);
             new dialogDisplay(this, devInfo.getDeviceInfo() +
                     devInfo.getActMgrMemoryInfo(true) +
                     devInfo.getGLInfo() +
@@ -1822,6 +1920,7 @@ public class MainActivity extends AppCompatActivity
         }
         if (id == R.id.action_help) {
             Intent helpIntent = new Intent(this, HelpActivity.class);
+            helpIntent.putExtra("help_start_url", getString(R.string.html_help_basepage));
             startActivity(helpIntent);
             return true;
         }
@@ -2041,6 +2140,18 @@ public class MainActivity extends AppCompatActivity
      */
     public void getMissingApodInfos() {
         //int count = 0;
+        long conntime = utils.testSocketConnect(2000);
+        if (conntime == 2000) {
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "getMissingApodInfos() - testSocketConnect TIMEOUT (" + conntime + "ms)");
+            new dialogDisplay(MainActivity.this,
+                    getString(R.string.no_network_for_apod),
+                    getString(R.string.no_network));
+            return;
+        } else {
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "getMissingApodInfos() - testSocketConnect OK (" + conntime + "ms)");
+        }
         for(int i=0; i<myList.size(); i++) {
             if (myList.get(i).getBmpThumb() == null) {      // TODO change with later possible glide implementation
                 //count++;
@@ -2229,7 +2340,8 @@ public class MainActivity extends AppCompatActivity
         myList.clear();
         addItems();
         getMissingApodInfos();
-        utils.cleanupFiles(getApplicationContext(), myList, MAX_HIRES_PERCENT, -1);
+        utils.cleanupFiles(getApplicationContext(), myList, hd_maxmempct, -1); // MAX_HIRES_PERCENT
+
         adp.notifyDataSetChanged();
     }
 
@@ -2246,6 +2358,18 @@ public class MainActivity extends AppCompatActivity
         // There's no wildcard filter possible - subdirectories for less files per type ??
         File dir = new File(getApplicationContext().getFilesDir().getPath());
         String[] names = dir.list();
+
+        // only add items, if network connection is available to load additional infos, else keep
+        // the s___ file for later processing - we might use bcast services as trigger
+        if (names.length > 0) {
+            long conntime = utils.testSocketConnect(2000);
+            if (conntime == 2000) {
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "getScheduledAPODs() - testSocketConnect TIMEOUT (" + conntime + "ms)");
+                return;
+            }
+        }
+
         for (String name : names) {
             if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
                 spaceItem item = utils.createSpaceItemFromJsonFile(getApplicationContext(), name);
@@ -3093,8 +3217,8 @@ public class MainActivity extends AppCompatActivity
         int versionCodeInPrefs = sharedPref.getInt("versioncode", -1);
 
         // set these for testing only
-        //versionCodeInPrefs = 1;
-        //versionCodeCurrent = 201801212;
+        //versionCodeInPrefs = 201801242;
+        //versionCodeCurrent = 201802031;
 
         if (versionCodeInPrefs < versionCodeCurrent) {
             utils.logAppend(getApplicationContext(), DEBUG_LOG,
@@ -3106,6 +3230,7 @@ public class MainActivity extends AppCompatActivity
             if (versionCodeInPrefs == -1) {
                 return;
             }
+            String updateString = "";
             // CHANGES DONE FOR VERSION UPDATES
             // 21.01.2018
             // Changes from 201801192 > 201801241: read_out now for image viewing, default "true"
@@ -3113,15 +3238,29 @@ public class MainActivity extends AppCompatActivity
                 //editor = sharedPref.edit();
                 //editor.putBoolean("read_out", true);
                 //editor.apply();
-                new dialogDisplay(this,
-                        getString(R.string.version_update_201801242),
-                        getString(R.string.version_update_title));
             }
             // Revert change from 201801192 > 201801241 in default option
             if (versionCodeInPrefs == 201801241 && versionCodeCurrent >= 201801242) {
                 editor = sharedPref.edit();
                 editor.putBoolean("read_out", false);   // revert change from 201801241
                 editor.apply();
+                updateString += getString(R.string.version_update_201801242) + "\n";
+            }
+            // Enable APOD load by default
+            if (versionCodeInPrefs <= 201801242 && versionCodeCurrent >= 201802031) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    editor = sharedPref.edit();
+                    editor.putBoolean("apod_bg_load", true); // change default to true
+                    editor.apply();
+                    long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
+                    scheduleApod(ms2NextApod, apodJobService.DEADLINE_DELAY);
+                    updateString += getString(R.string.version_update_201801281) + "\n";
+                }
+            }
+            if (!updateString.isEmpty()) {
+                new dialogDisplay(this,
+                        updateString,
+                        getString(R.string.version_update_title));
             }
         }
     }

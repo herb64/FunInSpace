@@ -1,13 +1,13 @@
 <!-- Source for pathdata: https://materialdesignicons.com/
-     TODO: check licensing, this has been just taken for testing
+     TODO: check licensing, this has been just taken for testing - now replaced by material.io
      alternative from material.io/icons: M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z -->
+<!-- M3,2H21V2H21V4H20.92L15,9.92V22.91L9,16.91V9.91L3.09,4H3V2M11,16.08L13,18.08V9H13.09L18.09,4H5.92L10.92,9H11V16.08Z" -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportHeight="24.0"
     android:viewportWidth="24.0">
     <path
-        android:fillColor="#FF8080A0"
-
-        android:pathData="M3,2H21V2H21V4H20.92L15,9.92V22.91L9,16.91V9.91L3.09,4H3V2M11,16.08L13,18.08V9H13.09L18.09,4H5.92L10.92,9H11V16.08Z" />
+        android:fillColor="@color/menu_icon_active"
+        android:pathData="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
 </vector>

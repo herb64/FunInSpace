@@ -38,6 +38,7 @@ public class dialogDisplay {
                     @Override
                     public void onClick(DialogInterface dialogInterface, int i) {
                         // hmm, what could we do here??
+                        dialogInterface.dismiss();
                     }
                 });
         builder.create();
@@ -59,6 +60,7 @@ public class dialogDisplay {
                     @Override
                     public void onClick(DialogInterface dialogInterface, int i) {
                         // hmm, what could we do here??
+                        dialogInterface.dismiss();
                     }
                 });
         builder.create();
@@ -81,6 +83,7 @@ public class dialogDisplay {
                             @Override
                             public void onClick(DialogInterface dialogInterface, int i) {
                                 // hmm, what could we do here??
+                                dialogInterface.dismiss();
                             }
                         }).
                 show();

@@ -1121,6 +1121,30 @@ public final class utils {
         */
     }
 
+    public static boolean todaysImageAlreadyInList(Context ctx, long epoch) {
+        String jsonData = null;
+        long latestEpoch = 0;
+        File jsonFile = new File(ctx.getFilesDir(), MainActivity.localJson);
+        if (jsonFile.exists()) {
+            jsonData = readf(ctx, MainActivity.localJson);
+            try {
+                JSONArray parent = new JSONArray(jsonData);
+                latestEpoch = parent.getJSONObject(parent.length()-1).
+                        getJSONObject("Content").
+                        getLong("DateTime");
+                if (epoch == latestEpoch) {
+                    return true;
+                }
+            } catch (JSONException e) {
+                logAppend(ctx, MainActivity.DEBUG_LOG,
+                        "todaysImageAlreadyInList() - JSONException " + MainActivity.localJson);
+                e.printStackTrace();
+                return false;
+            }
+        }
+        return false;
+    }
+
     /**
      * Check, if we have a valid scheduled NASA Json file for the current day
      * @param ctx context

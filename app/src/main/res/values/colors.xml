@@ -7,6 +7,8 @@
     <color name="colorAccent">#FF4081</color>
 
     <color name="color_hfcm_yellow_bright">#FFFF00</color>
+    <color name="menu_icon_active">#FF9090B0</color>
+    <color name="menu_icon_inactive">#FFC0C0F0</color>
 
     <color name="black_overlay">#66000000</color>
 </resources>

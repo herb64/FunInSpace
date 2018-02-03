@@ -1,0 +1,11 @@
+<!-- via: https://iconmonstr.com/audio-11-svg/
+     https://iconmonstr.com/license/-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="24dp"
+        android:height="24dp"
+        android:viewportWidth="24.0"
+        android:viewportHeight="24.0">
+    <path
+        android:fillColor="@color/menu_icon_active"
+        android:pathData="M22,1.269l-18.455,22.731 -1.545,-1.269 3.841,-4.731h-1.827v-10h4.986v6.091l2.014,-2.463v-3.628l5.365,-2.981 4.076,-5.019 1.545,1.269zM11.014,17.195v0.805l8.986,5v-16.873l-8.986,11.068z"/>
+</vector>

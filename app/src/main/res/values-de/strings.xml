@@ -2,6 +2,8 @@
     <string name="app_name">Fun In Space</string>
     <string name="action_settings">Einstellungen</string>
 
+    <string name="html_help_basepage">en_help.html</string>
+
     <string name="hfcm_yes">JA</string>
     <string name="hfcm_no">NEIN</string>
     <string name="hfcm_cancel">ABBRUCH</string>
@@ -310,15 +312,40 @@
     <string name="wp_shuffle_times_title">Shuffle Zeiten</string>
     <string name="wp_shuffle_times_summary">Wähle die Stunden, zu denen ein Shuffle des
         Hintergrundbildes erfolgen soll.</string>
-    <string name="apod_bg_load_title">Tägliches Bild automatisch laden</string>
+    <string name="apod_bg_load_title">Tägliche Infos im Hintergrund laden</string>
     <string name="apod_bg_load_summary">Momentan nur für Android 5 und höher - lade Informationen zum
         täglichen Bild auch ohne daß die App gestartet wird. Dies ist nützlich, um Bilder nicht zu
         verpassen, da diese dann beim nächsten Start der App nachgeladen werden.</string>
+    <string name="apod_bg_load_sound_title">Spiele Sound bei neuem Bild</string>
+    <string name="apod_bg_load_sound_summary">Ein Sound erinnert daran, daß im Hintergrund die Infos
+    zu einem neuen Bild geladen worden sind. In der deutschen Zeitzone geschieht dies zwischen 6 und
+    7 Uhr, daher ist die Einstellung standardmäßig abgeschaltet.</string>
     <string name="privacy_policy">Datenschutzerklärung</string>
     <string name="action_help">Hilfe</string>
     <string name="dropbox_reload_fullsync">ALLE BILDER</string>
 
+    <!-- Setting of hires cache limit -->
+    <string name="hd_cachelimit_title">Speicherlimit für Bilder</string>
+    <string name="hd_cachelimit_summary">Dies definiert, wieviel Prozent des derzeit freien Speichers
+    für das Speichern von Bildern verwendet werden kann. Bei Überschreiten wird automatisch gelöscht.</string>
+    <string-array name="hd_cachelimit_entries">
+        <item>20%</item>
+        <item>40%</item>
+        <item>60%</item>
+        <item>80%</item>
+    </string-array>
+    <string-array name="hd_cachelimit_values">
+        <item>20</item>
+        <item>40</item>
+        <item>60</item>
+        <item>80</item>
+    </string-array>
+
     <string name="version_update_title">App Update installiert</string>
-    <string name="version_update_201801242">Das Vorlesen der Erklärung wurde geändert. Anstatt beim
-        Ausklappen des Textes wird nun während des Betrachtens des Bildes vorgelesen.</string>
+    <string name="version_update_201801242">* Das Vorlesen der Erklärung wurde geändert. Anstatt beim
+        Ausklappen des Textes wird nun während des Betrachtens des Bildes vorgelesen. Du kannst
+    das Vorlesen in den Einstellungen abstellen.</string>
+    <string name="version_update_201801281">* Informationen zum täglichen Bild werden nun standardmäßig
+    täglich geladen, auch wenn die App nicht gestartet wurde. Du kannst das in den Einstellungen
+    wieder abschalten.</string>
 </resources>

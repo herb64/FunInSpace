@@ -1,0 +1,93 @@
+{
+    box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+/* Style the top navigation bar */
+.topnav {
+    overflow: hidden;
+    background-color: #333;
+}
+
+/* Style the topnav links */
+.topnav a {
+    float: left;
+    display: block;
+    color: #f2f2f2;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+.titlebar {
+    color: #f2f2f2;
+    background-color: #333;
+    padding: 10px;
+    text-align: center;
+    font-weight: bold;
+    width: 100%;
+    /*position: fixed;*/    /* keep position fixed when scrolling */
+}
+
+.titlebar2 {
+    color: #f2f2f2;
+    background-color: #333;
+    padding: -10px;
+    text-align: center;
+    font-weight: bold;
+    width: 100%;
+    position: fixed;    /* keep position fixed when scrolling */
+}
+
+/* Change color on hover */
+.topnav a:hover {
+    background-color: #ddd;
+    color: black;
+}
+
+/* Style the content */
+.content {
+    background-color: #ddd;
+    padding: 10px;
+    /*padding-top: 130px;*/
+}
+
+/* Style the footer */
+.footer {
+    color: #f2f2f2;
+    background-color: #333;
+    padding: 10px;
+}
+
+/* default for image: float to left */
+img {
+    float: left;
+}
+
+a:link {
+    color: #000055;
+    background-color: transparent;
+    text-decoration: none;
+    font-weight: bold;
+}
+a:visited {
+    color: #000055;
+    background-color: transparent;
+    text-decoration: none;
+    font-weight: bold;
+}
+a:hover {
+    color: #000055;
+    background-color: transparent;
+    text-decoration: none;
+    font-weight: bold;
+}
+a:active {
+    color: #000055;
+    background-color: transparent;
+    text-decoration: none;
+    font-weight: bold;
+}

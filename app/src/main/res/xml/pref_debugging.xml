@@ -3,9 +3,17 @@
 
     <SwitchPreference
         android:defaultValue="true"
-        android:key="enable_tls_pre_lollipop"
-        android:summary="Enable TLS v1 on Android below 5.0 (disable this one only if asked by Herbert to do so)"
-        android:title="TLS v1 Security" />
+        android:key="show_debug_infos"
+        android:summary="Show information for debugging, like the bitmap loader screen after each
+        display of a hires image or some info Toasts. You can switch this off if you like and turn
+        it on again if Herbert asks for this."
+        android:title="Display debug informations" />
+
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="youtube_fullscreen"
+        android:summary="Activate the new fullscreen youtube play functionality for testing - there are still issues with device rotation.. and more??"
+        android:title="Test YouTube fullscreen" />
 
     <SwitchPreference
         android:defaultValue="false"
@@ -27,15 +35,8 @@
 
     <SwitchPreference
         android:defaultValue="true"
-        android:key="show_debug_infos"
-        android:summary="Show information for debugging, like the bitmap loader screen after each display of a hires image or some info Toasts. You can switch this off if you like and turn it on again if Herbert asks for this."
-        android:title="Display debug informations" />
-
-    <SwitchPreference
-        android:defaultValue="false"
-        android:key="youtube_fullscreen"
-        android:summary="Activate the new fullscreen youtube play functionality for testing - there are still issues with device rotation.. and more??"
-        android:title="Test YouTube fullscreen" />
-
+        android:key="enable_tls_pre_lollipop"
+        android:summary="Enable TLS v1 on Android below 5.0 (disable this one only if asked by Herbert to do so)"
+        android:title="TLS v1 Security" />
 
 </PreferenceScreen>

@@ -8,17 +8,19 @@
 
     <!-- Strange: the GUI constructs icon as tools:icon which just
     displays uppercase title in the bar as text, while android:icon works as
-    expected. Seems that the tools are not available...-->
+    expected. Seems that the tools are not available...
+    android:icon="@android:drawable/ic_menu_delete" -->
     <item
         android:id="@+id/cab_delete"
-        android:icon="@android:drawable/ic_menu_delete"
+        android:icon="@drawable/ic_delete_black_24px"
         android:title="Delete"
         app:showAsAction="ifRoom" />
 
-    <!-- Read item -->
+    <!-- Read item
+    android:icon="@android:drawable/ic_lock_silent_mode_off"-->
     <item
         android:id="@+id/cab_read"
-        android:icon="@android:drawable/ic_lock_silent_mode_off"
+        android:icon="@drawable/ic_menu_start_read"
         android:title="@string/cab_read"
         app:showAsAction="ifRoom" />
 
@@ -26,36 +28,39 @@
         android:id="@+id/cab_share"
         android:title="Share"
         app:showAsAction="ifRoom"
-        android:icon="@android:drawable/ic_menu_share" />
-        <!-- tools:icon="@android:drawable/ic_menu_share" -->
+        android:icon="@drawable/ic_share_black_24px" />
+        <!-- tools:icon="@android:drawable/ic_menu_share"
+        android:icon="@android:drawable/ic_menu_share" -->
 
     <!-- Try to make ratingbar appear in contextual action bar, similar
     to the search view in main bar. See also
     https://developer.android.com/training/appbar/action-views.html
     -> giving up on this for now, see code in MainActivity.java
-    app:showAsAction="ifRoom|collapseActionView"-->
+    app:showAsAction="ifRoom|collapseActionView"
+
+    android:icon="@android:drawable/btn_star"-->
     <item
         android:id="@+id/cab_rating"
         android:title="@string/rating"
         app:showAsAction="ifRoom"
-        android:icon="@android:drawable/btn_star" />
+        android:icon="@drawable/ic_star_black_24px" />
 
     <!-- todo: need new icons for wallpaper - but how to show them in overflow -->
     <item
         android:id="@+id/cab_wallpaper"
         android:title="@string/set_as_wallpaper"
         app:showAsAction="ifRoom"
-        android:icon="@android:drawable/btn_plus" />
+        android:icon="@drawable/ic_wallpaper_black_24px" />
 
     <item
         android:id="@+id/cab_wp_reselect"
-        android:icon="@android:drawable/btn_minus"
+        android:icon="@drawable/ic_photo_size_select_small_black_24px"
         android:title="@string/reselect_wallpaper"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/cab_wp_remove"
-        android:icon="@android:drawable/btn_minus"
+        android:icon="@drawable/ic_remove_circle_outline_black_24px"
         android:title="@string/remove_as_wallpaper"
         app:showAsAction="ifRoom" />
 
