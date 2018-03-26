@@ -7,8 +7,8 @@ android {
         applicationId "de.herb64.funinspace"
         minSdkVersion 16
         targetSdkVersion 26
-        versionCode 201802031
-        versionName "0.7.0 alpha (Build 2018/02/03)"
+        versionCode 201803261
+        versionName "0.7.2 alpha (Build 2018/03/26)"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -38,4 +38,8 @@ dependencies {
     compile 'com.android.support:support-vector-drawable:26.+'
     testCompile 'junit:junit:4.12'
     compile 'com.vimeo.networking:vimeo-networking:1.1.1'
+    // Date range selection tool: https://github.com/savvisingh/DateRangePicker
+    // Note: see also square/android-times-square, which looks so similarto this:
+    // https://github.com/square/android-times-square
+    compile 'com.savvi.datepicker:rangepicker:1.2.0'
 }

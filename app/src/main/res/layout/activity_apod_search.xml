@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="de.herb64.funinspace.ApodSearchActivity"> -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingLeft="16dp"
+    android:paddingRight="16dp"
+    android:orientation="vertical" >
+
+
+    <!--
+    <com.savvi.rangedatepicker.CalendarPickerView
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/datepickerview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="16dp"
+        android:scrollbarStyle="outsideOverlay"
+        android:clipToPadding="false"
+        app:tsquare_dividerColor="@color/colorAccent"
+        app:tsquare_headerTextColor="@color/menu_icon_active"
+        />-->
+
+    <TextView
+        android:id="@+id/searchTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:paddingTop="8dp"
+        android:text="@string/archive_search_title"
+        android:textAppearance="@android:style/TextAppearance.Material.DialogWindowTitle"
+        tools:layout_editor_absoluteX="16dp"
+        tools:layout_editor_absoluteY="16dp" />
+
+    <TextView
+        android:id="@+id/searchExplain"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="16dp"
+        android:text="TextView"
+        tools:layout_editor_absoluteX="16dp"
+        tools:layout_editor_absoluteY="16dp" />
+
+    <!-- hmm, this heavily reminds me of times square picker, but no hint on this in github. But:
+         tsquare_dividerColor is another hint on that -->
+    <com.savvi.rangedatepicker.CalendarPickerView
+        android:id="@+id/datepickerview"
+        android:layout_width="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:footerDividersEnabled="true"
+        android:headerDividersEnabled="true"
+        android:scrollbarStyle="outsideOverlay"
+        app:tsquare_dividerColor="@color/black_overlay"
+        app:tsquare_headerTextColor="@color/menu_icon_active"
+        tools:layout_editor_absoluteX="16dp"
+        tools:layout_editor_absoluteY="16dp">
+
+    </com.savvi.rangedatepicker.CalendarPickerView>
+
+    <!-- Instead of an EditText, use the TextInputLayout which provides a default string -->
+    <android.support.design.widget.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <android.support.design.widget.TextInputEditText
+            android:id="@+id/searchstring"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/archive_search_string_hint" />
+    </android.support.design.widget.TextInputLayout>
+
+    <CheckBox
+        android:id="@+id/cb_archive_search_case_sensitive"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:onClick="onCbClicked"
+        android:text="@string/archive_search_case_sensitive" />
+
+    <CheckBox
+        android:id="@+id/cb_archive_search_reload_deleted"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:onClick="onCbClicked"
+        android:text="@string/archive_search_reload_deleted" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingBottom="16dp"
+        android:weightSum="2">
+
+        <Button
+            android:id="@+id/do_search"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="@string/archive_search_do_search"
+            tools:layout_editor_absoluteX="24dp"
+            tools:layout_editor_absoluteY="495dp" />
+
+        <Button
+            android:id="@+id/cancel_search"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="@string/archive_search_cancel" />
+
+    </LinearLayout>
+
+
+</LinearLayout>
+<!--</android.support.constraint.ConstraintLayout> -->

@@ -8,14 +8,17 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <!-- Required for setPersistent() in JobInfo.builder -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- android:hardwareAccelerated="true"
-     in discussion on playing vimeo in webview... added on 13.10.2017 -->
-
-    <!-- android:debuggable set to false, if we want to publish in debug mode.
+    <!--
+     android:hardwareAccelerated="true"
+     in discussion on playing vimeo in webview... added on 13.10.2017
+    -->
+    <!--
+ android:debuggable set to false, if we want to publish in debug mode.
      See recommendation in tutorial... added on 13.01.2018
-     leads to generate signed apk error if building release - avoid hardcoding... -->
+     leads to generate signed apk error if building release - avoid hardcoding...
+    -->
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -23,6 +26,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
         <!-- android:debuggable="false" -->
         <activity
             android:name=".MainActivity"
@@ -35,58 +39,63 @@
             </intent-filter>
         </activity>
         <!-- configChanges in imageactivity - needed for onConfigurationChanged() -->
-        <!--android:configChanges="orientation|screenSize|keyboardHidden" -->
+        <!-- android:configChanges="orientation|screenSize|keyboardHidden" -->
         <activity
             android:name=".ImageActivity"
             android:theme="@style/AppTheme.NoActionBar" />
-
-        <activity android:name=".VideoActivity"
+        <activity
+            android:name=".VideoActivity"
             android:theme="@style/AppTheme.NoActionBar" />
-
-        <activity android:name=".PrivacyActivity"/>
-
-        <activity android:name=".HelpActivity"
+        <activity android:name=".PrivacyActivity" />
+        <activity
+            android:name=".HelpActivity"
             android:theme="@style/AppTheme.NoActionBar" />
-
         <activity
             android:name=".MP4Activity"
-            android:theme="@style/AppTheme.NoActionBar"/>
-
+            android:theme="@style/AppTheme.NoActionBar" />
         <activity android:name=".TexSizeActivity" />
-
         <activity
             android:name=".SettingsActivity"
-            android:label="@string/title_activity_settings"></activity>
+            android:label="@string/title_activity_settings" />
 
-        <!-- HFCM - 27.20.2017: manually add a provider to the app section to be able to share
+        <!-- HFCM - 22.03.2018: Adding search Activity with date picker library -->
+        <activity
+            android:name=".ApodSearchActivity"
+            android:theme="@style/AppTheme.NoActionBar" />
+
+        <!--
+             HFCM - 27.20.2017: manually add a provider to the app section to be able to share
              files for sending as email attachment
              Note: exported must not be set to true, see my lalatex doc
-                   make sure, that autorities is set to correct package name               -->
+                   make sure, that autorities is set to correct package name
+        -->
         <provider
             android:name="android.support.v4.content.FileProvider"
             android:authorities="de.herb64.funinspace.fileprovider"
-            android:grantUriPermissions="true"
-            android:exported="false">
+            android:exported="false"
+            android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/filepaths" />
         </provider>
 
-        <!-- HFCM - 26.11.2017: manually add for testing JobScheduler. Not having this permission
+        <!--
+             HFCM - 26.11.2017: manually add for testing JobScheduler. Not having this permission
              illegalArgumentException: No such service ComponentInfo{de...services.shuffleJobService}
              TODO: check that exported = true statement!!! (I remember to have read about security)
-             -->
-        <service android:name=".services.shuffleJobService"
-            android:permission="android.permission.BIND_JOB_SERVICE"
-            android:exported="true"/>
-
-        <service android:name=".services.apodJobService"
-            android:permission="android.permission.BIND_JOB_SERVICE"
-            android:exported="true"/>
-
-        <service android:name=".services.thumbLoaderJobService"
-            android:permission="android.permission.BIND_JOB_SERVICE"
-            android:exported="true"/>
+        -->
+        <service
+            android:name=".services.shuffleJobService"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name=".services.apodJobService"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name=".services.thumbLoaderJobService"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
     </application>
 

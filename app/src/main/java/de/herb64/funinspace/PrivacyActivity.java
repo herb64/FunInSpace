@@ -1,6 +1,7 @@
 package de.herb64.funinspace;
 
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
@@ -21,7 +22,9 @@ public class PrivacyActivity extends AppCompatActivity {
         setContentView(R.layout.activity_privacy);
         privacyView = (WebView) findViewById(R.id.wv_privacy);
         // see https://developer.android.com/studio/publish/preparing.html - security
-        WebView.setWebContentsDebuggingEnabled(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(false);
+        }
         privacyView.getSettings().setJavaScriptEnabled(false);
         privacyView.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
         privacyView.getSettings().setAllowFileAccess(false);

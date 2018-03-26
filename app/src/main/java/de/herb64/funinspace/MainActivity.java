@@ -1,7 +1,7 @@
 package de.herb64.funinspace;
 
 import android.annotation.SuppressLint;
-import android.app.Dialog;
+import android.app.NotificationManager;
 import android.app.WallpaperManager;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
@@ -13,9 +13,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.LabeledIntent;
-import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
@@ -26,19 +24,15 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PersistableBundle;
-import android.os.SystemClock;
 import android.preference.PreferenceManager;
-import android.provider.Settings;
-import android.speech.tts.TextToSpeech;
 // import android.support.multidex.MultiDexApplication;
-import android.support.design.widget.CoordinatorLayout;
+import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v4.internal.view.SupportMenuItem;
 import android.support.v7.app.ActionBar;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.view.menu.MenuBuilder;
 import android.support.v7.widget.Toolbar;
@@ -68,13 +62,16 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.regex.Pattern;
 
 import de.herb64.funinspace.helpers.deviceInfo;
 import de.herb64.funinspace.helpers.dialogDisplay;
@@ -82,7 +79,6 @@ import de.herb64.funinspace.helpers.utils;
 import de.herb64.funinspace.models.spaceItem;
 import de.herb64.funinspace.services.apodJobService;
 import de.herb64.funinspace.services.shuffleJobService;
-import de.herb64.funinspace.services.thumbLoaderJobService;
 
 // TODO Log statements: Log.d etc.. should not be contained in final release - how to automate?
 // see https://stackoverflow.com/questions/2446248/remove-all-debug-logging-calls-before-publishing-are-there-tools-to-do-this
@@ -90,17 +86,6 @@ import de.herb64.funinspace.services.thumbLoaderJobService;
 // TODO: if missing or bad hires image url for an image, we need to handle this: fall back to lowres
 // TODO: network check - timeouts, 404 etc..  --- UNMETERED NETWORKS - check this
 // https://developer.android.com/reference/android/net/NetworkCapabilities.html
-
-/*
-  TODO Weak references... check..
-https://github.com/googlesamples/android-JobScheduler/blob/master/Application/src/main/java/com/example/android/jobscheduler/MainActivity.java
-/ Prevent possible leaks with a weak reference.
-private WeakReference<MainActivity> mActivity;
-IncomingMessageHandler(MainActivity activity) {
-            super();
-        this.mActivity = new WeakReference<>(activity);
-        }
- */
 
 
 /*
@@ -129,7 +114,16 @@ public class MainActivity extends AppCompatActivity
     private boolean wpShuffleChanged;
     private boolean wpShuffleTimesChanged;
 
-    //private boolean bgApodLoadChanged;    // new, simple logic, was bad before...
+    // APOD search and load_range releated stuff
+    private boolean restoreDeletedApodsOnSearch;
+    private boolean isCaseSensitive;
+    private boolean isSearch;
+    private String apodSearchString;
+    private String apodSearchBeginDate;
+    private String apodSearchEndDate;
+    // + date range variables could go here in NASA format as strings
+
+    //private boolean bgApodLoadChanged;    // new, simple logic, was bad before... TODO: more of that
     private boolean bg_apod_load;
 
     private String hd_cachelimit;           // MAX_HIRES_PERCENT
@@ -170,6 +164,8 @@ public class MainActivity extends AppCompatActivity
 
     public static final String localJson = "nasatest.json";
 
+    private static final int INIT_DAYS_TO_LOAD = 9;
+
     // for logcat wrapper - utils.java
     public static final boolean LOGCAT_INFO = false;
     public static final boolean LOGCAT_ERROR = false;
@@ -177,6 +173,7 @@ public class MainActivity extends AppCompatActivity
     private static final int HIRES_LOAD_REQUEST = 1;
     private static final int GL_MAX_TEX_SIZE_QUERY = 2;
     private static final int SETTINGS_REQUEST = 3;
+    private static final int APOD_SEARCH_REQUEST = 4;
 
     //private static final int KIB = 1024;
     //private static final int MIB = 1024 * KIB;
@@ -187,11 +184,12 @@ public class MainActivity extends AppCompatActivity
     public static final String M_YOUTUBE = "youtube";
     public static final String M_VIMEO = "vimeo";
     public static final String M_MP4 = "mp4";      // first nasa mp4 on 13.11.2017
+    public static final String M_HTML_VIDEO = "html-video";    // first nasa html on 05.03.2018
     public static final String M_VIDEO_UNKNOWN = "unknown-video";
 
     // dealing with the number of displayed lines in the Explanation text view
     public static final int MAX_ELLIPSED_LINES = 2;
-    protected static final int MAX_LINES = 1000;      // ridiculous, but safe
+    protected static final int MAX_LINES = 1000;    // ridiculous, but safe
     protected static final int MAX_ITEMS = 10000;   // theoretic limit of items - for id handling
 
     // wallpaper related stuff
@@ -238,7 +236,14 @@ public class MainActivity extends AppCompatActivity
 
         long starttime = System.currentTimeMillis();
         utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                "**************  APP START (" + versionCodeCurrent + ") **************");
+                "**************  ONCREATE (" + versionCodeCurrent + ") **************");
+
+        // Clear APOD notification when opening the app
+        NotificationManager notificationManager =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            notificationManager.cancel(apodJobService.APOD_NOTIFY_ID);
+        }
 
         // Create text to speech reader
         FragmentManager fm = getSupportFragmentManager();
@@ -248,10 +253,6 @@ public class MainActivity extends AppCompatActivity
             reader = new TextReader();
             fm.beginTransaction().add(reader, TextReader.TAG_READ_FRAGMENT).commit();
         }
-
-        // just testing - to be removed
-        //float hourstonext = (float)utils.getMsToNextShuffle(getApplicationContext())/3600000f;
-        //Log.i("HFCM", String.format(loc, "Next sched in %.1f hours", hourstonext));
 
         // TODO - improve algorithm for new shuffle wp - low #images vs. high rating
         //String hugo = utils.getRandomWpFileName(getApplicationContext());
@@ -266,10 +267,16 @@ public class MainActivity extends AppCompatActivity
         if (savedInstanceState != null) {
             selected = savedInstanceState.getIntegerArrayList("selecteditems");
             maxTextureSize = savedInstanceState.getInt("maxtexsize");
+            restoreDeletedApodsOnSearch = savedInstanceState.getBoolean("restoreDeletedApodsOnSearch");
+            isSearch = savedInstanceState.getBoolean("isSearch");
+            apodSearchString = savedInstanceState.getString("apodSearchString");
             devInfo.setGlMaxTextureSize(maxTextureSize);
         } else {
             SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
             maxTextureSize = shPref.getInt("maxtexsize", 0);
+            restoreDeletedApodsOnSearch = false;
+            isSearch = false;
+            apodSearchString = "";
             devInfo.setGlMaxTextureSize(maxTextureSize);
             selected = new ArrayList<>();
         }
@@ -423,7 +430,6 @@ public class MainActivity extends AppCompatActivity
             public boolean onCreateActionMode(android.view.ActionMode actionMode, Menu menu) {
                 actionMode.getMenuInflater().inflate(R.menu.menu_cab_main, menu);
                 mActionMode = actionMode;
-                //selected = new ArrayList<>();
                 /* Just for keeping track of actions
                 // Trying to display the RatingBar within CAB, similar to SearchView in main bar
                 // this fails, see lalatex doc for details: RatingBar within Contextual Action Bar*/
@@ -452,6 +458,7 @@ public class MainActivity extends AppCompatActivity
                 //item_setwp.setEnabled(!(selected.size() > 1));
                 MenuItem item_reselect = menu.findItem(R.id.cab_wp_reselect);
                 MenuItem item_remove = menu.findItem(R.id.cab_wp_remove);
+                MenuItem item_cache_remove = menu.findItem(R.id.cab_cached_remove);
                 if (selected.size() == 1) {
                     // For a single selection: non images cannot be selected at all
                     if (!myList.get(selected.get(0)).getMedia().equals(M_IMAGE)) {
@@ -460,6 +467,11 @@ public class MainActivity extends AppCompatActivity
                         item_reselect.setVisible(false);
                         item_remove.setVisible(false);
                         return true;
+                    }
+                    if (myList.get(selected.get(0)).isCached()) {
+                        item_cache_remove.setVisible(true);
+                    } else {
+                        item_cache_remove.setVisible(false);
                     }
                     int wpflag = myList.get(selected.get(0)).getWpFlag();
                     if (wpflag == WP_ACTIVE) {
@@ -487,6 +499,13 @@ public class MainActivity extends AppCompatActivity
                         item_remove.setVisible(false);
                         item_reselect.setVisible(false);
                     }
+                    for (int idx : selected) {
+                        if (myList.get(idx).isCached()) {
+                            item_cache_remove.setVisible(true);
+                            break;
+                        }
+                        item_cache_remove.setVisible(false);
+                    }
                 }
 
                 // Change Read Icon depending on current state
@@ -507,8 +526,13 @@ public class MainActivity extends AppCompatActivity
                 //return false;
             }
 
-            // Now we did click on an action item in our CAB and need to process actions on all
-            // selected SpaceItems in our listview
+            /**
+             * Handle click on action items in contextual action bar to process all selected space
+             * items in the listview
+             * @param actionMode action mode
+             * @param menuItem the clicked menu item
+             * @return boolean
+             */
             @Override
             public boolean onActionItemClicked(android.view.ActionMode actionMode, MenuItem menuItem) {
                 switch (menuItem.getItemId()) {
@@ -669,6 +693,19 @@ public class MainActivity extends AppCompatActivity
                             }
                         }
                         return true;
+                    case R.id.cab_cached_remove:
+                        for (int idx : selected) {
+                            if (myList.get(idx).isCached()) {
+                                File cachedel = new File(getApplicationContext().getFilesDir(),
+                                        myList.get(idx).getThumb().replace("th_", "hd_"));
+                                if (!cachedel.delete()) {
+                                    Log.w("HFCM", "File delete for cached hires did not return true");
+                                }
+                                myList.get(idx).setCached(false);
+                            }
+                        }
+                        adp.notifyDataSetChanged();
+                        return true;
                     default:
                         return false;
                 }
@@ -692,8 +729,8 @@ public class MainActivity extends AppCompatActivity
 
         // Create a listeners for handling clicks on the thumbnail image and for rating changes
         myThumbClickListener = new thumbClickListener();
-        //myRatingChangeListener = new ratingChangeListener();
 
+        // Create space item list and adapter
         myList = new ArrayList<> ();
         adp = new spaceAdapter(getApplicationContext(), MainActivity.this,
                 R.layout.space_item, myList);
@@ -712,17 +749,79 @@ public class MainActivity extends AppCompatActivity
         // code to be run, e.g. handle stuff like json format changes etc...
         processAppUpdates();
 
-        // BBBBBBBBBBBBBBBBBB
         jsonData = null;
         File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
         if (jsonFile.exists()) {
             jsonData = utils.readf(getApplicationContext(), localJson);
         }
 
+        // No longer check for saved instance state here, we always reconstruct jsonData, myList
+        // and parent array on config changes - only check to avoid unneeded calls to getLatestAPODs
+        // On Android 8.0, saving spaceItem ArrayList and JSON data string to savedInstanceState
+        // failed with "Transaction Too Large error".
+        //myList = savedInstanceState.getParcelableArrayList("myList");
+        //jsonData = savedInstanceState.getString("jsonData");
+        if (jsonData != null) {
+            try {
+                parent = new JSONArray(jsonData);
+                addItems();
+            } catch (JSONException e) {
+                e.printStackTrace();
+                parent = new JSONArray();
+                jsonData = "[]";
+            }
+            // Parse the local json file contents and add these to ArrayList
+            //addItems();
+            if (savedInstanceState == null) {
+                getLatestAPODs();
+            }
+        } else {
+            // FIRST LAUNCH if jsonData is null, because it is only filled, if localJson file exists
+            // TODO: offer restore from sd card...
+
+            // query gl texture size, but do not call again, if rotation of phone during init launch
+            SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
+            if (shPref.getInt("maxtexsize", -1) == -1) {
+                Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
+                startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
+                devInfo.setGlMaxTextureSize(maxTextureSize);
+            }
+
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+                SharedPreferences.Editor editor = sharedPref.edit();
+                editor.putBoolean("apod_bg_load", false); // by default it is true
+                editor.apply();
+            }
+
+            parent = new JSONArray();
+            // at initial run, do a network test which does not fall into DNS wait...
+            long conntime = utils.testSocketConnect(1500);
+            if (conntime == 1500) {
+                Bundle fragArguments = new Bundle();
+                fragArguments.putString("TITLE",
+                        "Welcome to FunInSpace");
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "INITIAL_LAUNCH - testSocketConnect TIMEOUT (" + conntime + "ms)");
+                fragArguments.putString("MESSAGE",
+                        getString(R.string.init_no_network));
+                fragArguments.putString("NEG",
+                        getString(R.string.hfcm_ok));
+                fm = getSupportFragmentManager();
+                confirmDialog confirmdlg = new confirmDialog();
+                confirmdlg.setArguments(fragArguments);
+                confirmdlg.show(fm, "INITLAUNCH");
+            } else {
+                getLatestAPODs();
+                initialLaunch();
+            }
+        }
+
+
+        /* OLD CODE which used savedInstanceState to save myList and jsonData string....
         if (savedInstanceState != null) {
-            // The spaceItem internal structure and the json data string are restored.
-            // On Android 8.0 this failed with "Transaction Too Large error", so we do not put this
-            // structure onto the saved instance state and instead recreate it using addItems()
+            // Restore spaceItem ArrayList and JSON data string. On Android 8.0 this failed
+            // with "Transaction Too Large error", so we do not put these onto the saved instance
+            // state any more and instead recreate it using addItems()
             //myList = savedInstanceState.getParcelableArrayList("myList");
             //jsonData = savedInstanceState.getString("jsonData");
             if (jsonData != null) {
@@ -734,13 +833,6 @@ public class MainActivity extends AppCompatActivity
             }
             addItems();
         } else {
-            // BBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-            /*jsonData = null;
-            File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
-            if (jsonFile.exists()) {
-                jsonData = utils.readf(getApplicationContext(), localJson);
-            }*/
-
             // -------------------------------------------------------------------
             // DECIDE, IF WE ARE IN "FIRST LAUNCH" BY PRESENCE OF jsonData CONTENT
             // jsonData != null: we have a file, so not first successful launch
@@ -760,16 +852,15 @@ public class MainActivity extends AppCompatActivity
                 }
                 // Parse the local json file contents and add these to ArrayList
                 addItems();
-                getScheduledAPODs();
-                getLatestAPOD();
-                //listItemsDateInfo();
+                getLatestAPODs();
             } else {
                 // FIRST LAUNCH most likely - TODO: offer restore from sd card...
                 Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
                 startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
                 devInfo.setGlMaxTextureSize(maxTextureSize);
                 SharedPreferences.Editor editor = sharedPref.edit();
-                editor.putBoolean("INITIAL_LAUNCH", true);
+                //editor = sharedPref.edit();
+                //editor.putBoolean("INITIAL_LAUNCH", true);
                 if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
                     editor.putBoolean("apod_bg_load", false); // by default it is true
                 }
@@ -784,7 +875,7 @@ public class MainActivity extends AppCompatActivity
                     utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                             "INITIAL_LAUNCH - testSocketConnect TIMEOUT (" + conntime + "ms)");
                     fragArguments.putString("MESSAGE",
-                            getString(R.string.dropbox_init_no_network));
+                            getString(R.string.init_no_network));
                     fragArguments.putString("NEG",
                             getString(R.string.hfcm_ok));
                     fm = getSupportFragmentManager();
@@ -792,13 +883,11 @@ public class MainActivity extends AppCompatActivity
                     confirmdlg.setArguments(fragArguments);
                     confirmdlg.show(fm, "INITLAUNCH");
                 } else {
-                    getLatestAPOD();
+                    initialLaunch();
                 }
             }
-            // JUST A CONVERSION UTILITY USED DURING DEVELOPMENT - CONVERTED EPOCH VALUES INTO A NEW
-            // JSON FILE FOR UPLOAD TO DROPBOX - NEW TIMEZONE HANDLING NEEDED THIS CHANGE
-            //updateEpochsInJsonDEVEL();
         }
+        ------------------- END OF OLD CODE */
 
         utils.setWPShuffleCandidates(getApplicationContext(), myList);
 
@@ -849,16 +938,21 @@ public class MainActivity extends AppCompatActivity
                         break;
                     case BCAST_APOD:
                         // APOD background loader found valid json while ui running: refresh list
-                        getScheduledAPODs();
-                        getLatestAPOD();
+                        getLatestAPODs();
                         adp.notifyDataSetChanged();
                         break;
                     case Intent.ACTION_AIRPLANE_MODE_CHANGED:
-                        // TODO seems we need to test if network is ready - and check, if switched on or off...
-                        SystemClock.sleep(2000);            // TODO: quite ugly...
-                        getScheduledAPODs();
-                        getLatestAPOD();
-                        adp.notifyDataSetChanged();
+                        // If airplane mode switched on, test network first, then load data if ok
+                        if (!utils.isAirPlaneMode(getApplicationContext())) {
+                            long conntime = utils.testSocketConnect(2000);
+                            if (conntime == 2000) {
+                                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                                        "Airplane mode switched on, testSocketConnect TIMEOUT (" + conntime + "ms)");
+                                break;
+                            }
+                            getLatestAPODs();
+                            adp.notifyDataSetChanged();
+                        }
                         break;
                     case BCAST_THUMB:
                         // This one is not used...
@@ -906,7 +1000,9 @@ public class MainActivity extends AppCompatActivity
             }
         }
 
+        // just to add some log data about networks - could be removed
         utils.getAllNetworksInfo(getApplicationContext());
+
         utils.logAppend(getApplicationContext(),
                 DEBUG_LOG,
                 "onCreate() finished... ",
@@ -1034,6 +1130,9 @@ public class MainActivity extends AppCompatActivity
         //outState.putString("jsonData",jsonData);
         outState.putInt("maxtexsize", maxTextureSize);
         outState.putIntegerArrayList("selecteditems", selected);
+        outState.putBoolean("restoreDeletedApodsOnSearch", restoreDeletedApodsOnSearch);
+        outState.putBoolean("isSearch", isSearch);
+        outState.putString("apodSearchString", apodSearchString);
         Log.i("HFCM", "Saving instance state, selected = " + selected);
     }
 
@@ -1160,11 +1259,45 @@ public class MainActivity extends AppCompatActivity
                         }
                         break;
                     case "INITLAUNCH":
-                    case "DROPBOX_REFRESH":
+                        // initial launch now uses the date range query and gets some days back
+                        //long endEpoch = utils.getDayBeforeEpoch(utils.getNASAEpoch());
+                        long testEpoch = utils.getNASAEpoch();
+                        long endEpoch = utils.getDaysBeforeEpoch(testEpoch, 1);
+                        long beginEpoch = utils.getDaysBeforeEpoch(endEpoch, INIT_DAYS_TO_LOAD - 1);
+                        String beginDate = utils.getNASAStringFromEpoch(beginEpoch);
+                        String endDate = utils.getNASAStringFromEpoch(endEpoch);
+                        // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
+                        new asyncLoad(MainActivity.this,
+                                "APOD_LOAD_RANGE",
+                                sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                                execute(nS()+
+                                        "&start_date=" + beginDate +
+                                        "&end_date=" + endDate);
+                        break;
+                    /*case "DROPBOX_REFRESH":
                         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                                 tag + " - Kick off asyncLoad: DROPBOX_REFRESH");
                         //new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
                         new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
+                        break;*/
+
+                    case "TWO_LAST_MONTHS":
+                        // just for testing - currently shown instead of the search activity
+                        /*testEpoch = utils.getNASAEpoch();
+                        endEpoch = utils.getDaysBeforeEpoch(testEpoch, 130);
+                        beginEpoch = utils.getDaysBeforeEpoch(endEpoch, 9);
+                        beginDate = utils.getNASAStringFromEpoch(beginEpoch);
+                        endDate = utils.getNASAStringFromEpoch(endEpoch);
+                        restoreDeletedApodsOnSearch = false;
+                        isSearch = true;
+                        apodSearchString = "";
+                        // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
+                        new asyncLoad(MainActivity.this,
+                                "APOD_SEARCH_LOAD_RANGE",
+                                sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                                execute(nS()+
+                                        "&start_date=" + beginDate +
+                                        "&end_date=" + endDate);*/
                         break;
 
                     case "NOWIFI-ACCEPT":
@@ -1196,7 +1329,15 @@ public class MainActivity extends AppCompatActivity
                         break;
                     case "INITLAUNCH":
                         // TODO - task close does not yet work, if there comes some return from asyncload
+                        // Negative button: only load image for today.
+                        // this is called also if not network found at initial launch - neg button
+                        // is the ok button in this case - we could use the neutral button here
                         //terminateApp();
+                        // we might check network connectivity again
+                        //new asyncLoad(MainActivity.this,
+                        //        "APOD_LOAD",
+                        //        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                        //        execute(nS());
                         break;
                     case "SHOW_LOG":
                         //Log.i("HFCM", "Clear log");
@@ -1217,11 +1358,29 @@ public class MainActivity extends AppCompatActivity
                     case "SHOW_LOG":
                         emailLogFileToHerbert();
                         break;
-                    case "DROPBOX_REFRESH":
+                    /*case "DROPBOX_REFRESH":
                         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                                 tag + " - Kick off asyncLoad: DROPBOX_FORCE_REFRESH");
                         //new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
                         new asyncLoad(MainActivity.this, "DROPBOX_FORCE_REFRESH").execute(dPJ());
+                        break;*/
+                    case "TWO_LAST_MONTHS":
+                        // just for testing - currently simple dialog instead of search activity
+                        /*long testEpoch = utils.getNASAEpoch();
+                        long endEpoch = utils.getDaysBeforeEpoch(testEpoch, 130);
+                        long beginEpoch = utils.getDaysBeforeEpoch(endEpoch, 9);
+                        String beginDate = utils.getNASAStringFromEpoch(beginEpoch);
+                        String endDate = utils.getNASAStringFromEpoch(endEpoch);
+                        restoreDeletedApodsOnSearch = true;
+                        isSearch = true;
+                        apodSearchString = "";
+                        // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
+                        new asyncLoad(MainActivity.this,
+                                "APOD_SEARCH_LOAD_RANGE",                                           // APOD_SEARCH_DB_SYNC_VERSION retired??
+                                sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                                execute(nS()+
+                                        "&start_date=" + beginDate +
+                                        "&end_date=" + endDate);*/
                         break;
                     default:
                         break;
@@ -1446,6 +1605,7 @@ public class MainActivity extends AppCompatActivity
                         myList.get(i).setCached(false);
                     }
                     adp.notifyDataSetChanged();     // better call at end only once
+                    Log.i("HFCM", "hd cached file was returned in intent, update...");
                 }
 
                 // todo - is the following needed on each return?
@@ -1544,7 +1704,7 @@ public class MainActivity extends AppCompatActivity
                 }
                 if (wpShuffleTimesChanged) {
                     wpShuffleTimesChanged = false;
-                    long test = utils.getMsToNextShuffle(getApplicationContext());
+                    //long test = utils.getMsToNextShuffle(getApplicationContext());
                     //Log.i("HFCM", "Shuffle times change..." + test);
                     if (sharedPref.getBoolean("wallpaper_shuffle", false) &&
                             utils.getNumWP(myList) >= 2) {
@@ -1569,7 +1729,6 @@ public class MainActivity extends AppCompatActivity
                             );
 
                         } else {
-                            //JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
                             if (utils.cancelJob(getApplicationContext(),
                                     apodJobService.JOB_ID_APOD)) {
                                 utils.logAppend(getApplicationContext(),
@@ -1582,48 +1741,12 @@ public class MainActivity extends AppCompatActivity
                                         DEBUG_LOG,
                                         "Error disabling APOD background loader schedule");
                             }
-                            //scheduler.cancel(JOB_ID_APOD);
                         }
                     } else {
                         new dialogDisplay(MainActivity.this,
                                 "Not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
                     }
                 }
-
-                /*if (bgApodLoadChanged) {
-                    bgApodLoadChanged = false;
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                        boolean bgload = sharedPref.getBoolean("apod_bg_load", false);
-                        if (bgload) {
-                            long ms2NextApod = utils.getMsToNextApod(getApplicationContext());
-                            scheduleApod(ms2NextApod, apodJobService.DEADLINE_DELAY);
-                            utils.logAppend(getApplicationContext(),
-                                    DEBUG_LOG,
-                                    "Enabled APOD Loader in settings, next apod in " +
-                                            ms2NextApod/1000 + " seconds"
-                            );
-
-                        } else {
-                            //JobScheduler scheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-                            if (utils.cancelJob(getApplicationContext(),
-                                    apodJobService.JOB_ID_APOD)) {
-                                utils.logAppend(getApplicationContext(),
-                                        DEBUG_LOG,
-                                        "Disabled APOD background load in settings");
-                                Toast.makeText(MainActivity.this, "APOD Background loader switched off",
-                                        Toast.LENGTH_LONG).show();
-                            } else {
-                                utils.logAppend(getApplicationContext(),
-                                        DEBUG_LOG,
-                                        "Error disabling APOD background loader schedule");
-                            }
-                            //scheduler.cancel(JOB_ID_APOD);
-                        }
-                    } else {
-                        new dialogDisplay(MainActivity.this,
-                                "Not yet implemented for Versions below 5 (Lollipop)", "DEBUG ONLY!");
-                    }
-                }*/
 
                 // Cache memory limit for hires images: if this value is lowered, we should run
                 // a cleanup to reflect the new value - maybe warn the user before...
@@ -1637,6 +1760,29 @@ public class MainActivity extends AppCompatActivity
                         utils.cleanupFiles(getApplicationContext(), myList, hd_maxmempct, -1);
                     }
                 }
+            }
+        } else if (requestCode == APOD_SEARCH_REQUEST) {
+            // We now get infos back from ApodSearchActivity:
+            // - search string
+            // - date range
+            // - restore deleted
+            // - case sensitive search
+            if (resultCode == RESULT_OK) {
+                apodSearchString = data.getStringExtra("search");
+                apodSearchBeginDate = data.getStringExtra("beginDate");
+                apodSearchEndDate = data.getStringExtra("endDate");
+                restoreDeletedApodsOnSearch = data.getBooleanExtra("reloadDeleted", false);
+                isCaseSensitive = data.getBooleanExtra("isCaseSensitive", false);
+                Log.i("HFCM", "returned from apod search activity: " + apodSearchString);
+                isSearch = true;
+                // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
+                new asyncLoad(MainActivity.this,
+                        "APOD_SEARCH_LOAD_RANGE",
+                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                        execute(nS()+
+                                "&start_date=" + apodSearchBeginDate +
+                                "&end_date=" + apodSearchEndDate);
+
             }
         }
     }
@@ -1712,22 +1858,7 @@ public class MainActivity extends AppCompatActivity
             m.setOptionalIconsVisible(true);
         }
 
-        // Test menu for apod scheduler debugging - now option in settings dialog
-        /*JobScheduler jobScheduler = null;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            List<JobInfo> allPendingJobs = jobScheduler.getAllPendingJobs();
-            MenuItem scheditem = menu.findItem(R.id.action_schedule_apod_json_load);
-            scheditem.setTitle("Start Schedule APOD (Debug)");
-            for (JobInfo pending : allPendingJobs) {
-                if (pending.getId() == JOB_ID_APOD) {
-                    scheditem.setTitle("Stop Schedule APOD (Debug)");
-                    continue;
-                }
-            }
-        }*/
-
-        // 20.11.2017 Switch MenuItem to SupportMenuItem and use noinspection RestrictedApi  TODO DOCU
+        // 20.11.2017 Switch MenuItem to SupportMenuItem and use noinspection RestrictedApi                             TODO DOCU
         // to allow for registering expand listeners for action view
         final SupportMenuItem searchItem = (SupportMenuItem) menu.findItem(R.id.action_search);
         //noinspection RestrictedApi
@@ -1834,7 +1965,7 @@ public class MainActivity extends AppCompatActivity
             public boolean onMenuItemActionCollapse(MenuItem menuItem) {
                 searchItem.setVisible(true);
                 //adp.cleanMap();
-                //adp.getFilter().filter("");                                  // TODO RE-TEST
+                //adp.getFilter().filter("");                                                               // TODO RE-TEST
                 return true;
             }
         });
@@ -1867,11 +1998,14 @@ public class MainActivity extends AppCompatActivity
      */
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        MenuItem dbResync = menu.findItem(R.id.dropbox_sync);
+        //MenuItem dbResync = menu.findItem(R.id.dropbox_sync);
+        MenuItem search = menu.findItem(R.id.action_search);
         if (unfinishedApods > 0) {
-            dbResync.setEnabled(false);
+            //dbResync.setEnabled(false);
+            search.setEnabled(false);
         } else {
-            dbResync.setEnabled(true);
+            //dbResync.setEnabled(true);
+            search.setEnabled(true);
         }
         // https://stackoverflow.com/questions/9625920/should-the-call-to-the-superclass-method-be-the-first-statement/9626268#9626268
         return super.onPrepareOptionsMenu(menu);
@@ -1901,11 +2035,24 @@ public class MainActivity extends AppCompatActivity
             return true;
         }
         if (id == R.id.action_debuginfo) {
-            scheduleApod(5000, 5000);
+            // USED FOR EXPERIMENTS - will not be needed in final version any more
+
+            //scheduleApod(5000, 5000);
+
             new dialogDisplay(this, devInfo.getDeviceInfo() +
                     devInfo.getActMgrMemoryInfo(true) +
                     devInfo.getGLInfo() +
                     devInfo.getNetworkInfo(true));
+
+            //utils.logWrapped(getApplicationContext(), "wrapped", "This is an entry for wrapper test");
+            //utils.getWrappedLogContents(getApplicationContext(), "wrapped", "testout");
+
+            // https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&start_date=2018-02-05&end_date=2018-02-07
+            /*new asyncLoad(MainActivity.this,
+                    "APOD_LOAD_RANGE",
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                    execute(nS()+"&start_date=2018-01-03&end_date=2018-01-04");*/
+
             return true;
         }
         if (id == R.id.action_slideshow) {
@@ -1975,7 +2122,7 @@ public class MainActivity extends AppCompatActivity
             dlg.show(fm, "SHOW_LOG");
             return true;
         }
-        if (id == R.id.dropbox_sync) {
+        /*if (id == R.id.dropbox_sync) {
             // Refresh metadata with dropbox. This allows to sync personal contents with dropbox
             // comment for old code in lalatex
             Bundle fragArguments = new Bundle();
@@ -1993,7 +2140,7 @@ public class MainActivity extends AppCompatActivity
             // dlg.setTargetFragment(); // only if calling from fragment, not from activity!
             dlg.show(fm, "DROPBOX_REFRESH");
             return true;
-        }
+        }*/
         if (id == R.id.restore_wallpaper) {
             new dialogDisplay(MainActivity.this,
                     getString(R.string.dlg_revert_wp),
@@ -2001,8 +2148,10 @@ public class MainActivity extends AppCompatActivity
             changeWallpaper("");
         }
         if (id == R.id.action_search_apod) {
-            new dialogDisplay(MainActivity.this,
-                    "Searching the NASA APOD Archive is not yet available.", "TODO");
+            // new code using date range picker library - see also build.gradle
+            Intent apodSearchIntent = new Intent(this, ApodSearchActivity.class);
+            startActivityForResult(apodSearchIntent, APOD_SEARCH_REQUEST);
+            return true;
         }
         // TIP: calling 'return super.onOptionsItemSelected(item);' made menu icons disappear after
         //      using overflow menu while having the SearchView open - this was really nasty
@@ -2128,18 +2277,17 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * After filling the array list with all space items, this function is called to check for
-     * any missing data. It does not only get missing thumbs, but does:
+     * After filling the array list with all space items, this function is called to check for any
+     * missing informations:
      * 1. get hires size information (for images)
-     * 2. get vimeo infos thumbnail url / duration (for vimeo videos)
+     * 2. get vimeo infos thumbnail url / duration
      * 3. get thumbnail image (in any case)
      * The function triggers a chain of async operations, depending on type of item.
      * MediaMetadataRetriever might also be able to retrieve an image from a stream, but it is
      * better and faster to retrieve the "offical" thumb...
-     * TODO: check parallel execution option... (executeOnExecutor...)
+     * TODO: check option for parallel execution option... (executeOnExecutor...)
      */
     public void getMissingApodInfos() {
-        //int count = 0;
         long conntime = utils.testSocketConnect(2000);
         if (conntime == 2000) {
             utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
@@ -2153,15 +2301,16 @@ public class MainActivity extends AppCompatActivity
                     "getMissingApodInfos() - testSocketConnect OK (" + conntime + "ms)");
         }
         for(int i=0; i<myList.size(); i++) {
-            if (myList.get(i).getBmpThumb() == null) {      // TODO change with later possible glide implementation
-                //count++;
+            // TODO change with later possible glide implementation
+            if (myList.get(i).getBmpThumb() == null &&
+                    !myList.get(i).getThumb().equals("th_UNKNOWN.jpg")) {
                 unfinishedApods++;
                 myList.get(i).setThumbLoadingState(View.VISIBLE);
                 String sMediaType = myList.get(i).getMedia();
                 String sHiresUrl = myList.get(i).getHires();
                 String imgUrl = myList.get(i).getLowres();
                 String imgSize = myList.get(i).getHiSize();
-                if (sMediaType.equals(M_VIMEO) && imgUrl.isEmpty()) {
+                if (sMediaType.equals(M_VIMEO) && imgUrl.isEmpty()) {   // why check for imgurl empty?
                     // Query vimeo thumbnail URL via oembed API
                     Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG VIM_" + i + ": " + sHiresUrl);
                     new asyncLoad(MainActivity.this, "VIM_" + i).
@@ -2172,271 +2321,149 @@ public class MainActivity extends AppCompatActivity
                 } else if (sMediaType.equals(M_MP4)) {
                     Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG DUR_" + i + ": " + sHiresUrl);
                     new asyncLoad(MainActivity.this, "DUR_" + i).execute(sHiresUrl);
-                } else {
-                    if (imgUrl.isEmpty()) {
+                } else if (sMediaType.equals(M_HTML_VIDEO)) {
+                    // 05.03.2018 - NASA url links to html page for interactive image...
+                    Log.d("HFCM", "getMissingApodInfos() - media_type video with html link!");
+                    if (imgUrl != null && !imgUrl.isEmpty()) {
+                        Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG THUMB_" + i + ": " + imgUrl);
+                        new asyncLoad(MainActivity.this, "THUMB_" + i).execute(imgUrl);
+                    } else {
                         myList.get(i).setThumbLoadingState(View.INVISIBLE);
                         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                                "getMissingApodInfos() - missing lowres URL");
-                        // TODO: keep null image thumb (black) or add missing image or try to use hires to create a thumb...
-                        //       this could be done while loading hires first... think about options
-                        continue;
+                                "getMissingApodInfos() - imgUrl is null or empty");
                     }
-                    Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG THUMB_" + i + ": " + imgUrl);
-                    new asyncLoad(MainActivity.this, "THUMB_" + i).execute(imgUrl);
+                } else {  // TODO double code as with html video link... check how to handle best
+                    // DOCU see "short circuit evaluation" as keyword
+                    if (imgUrl != null && !imgUrl.isEmpty()) {
+                        Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG THUMB_" + i + ": " + imgUrl);
+                        new asyncLoad(MainActivity.this, "THUMB_" + i).execute(imgUrl);
+                    } else {
+                        myList.get(i).setThumbLoadingState(View.INVISIBLE);
+                        utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                                "getMissingApodInfos() - imgUrl is null or empty");
+                    }
                 }
             }
         }
+
         if (unfinishedApods > 0) {
             Toast.makeText(MainActivity.this,
                     getString(R.string.load_miss_thumbs, unfinishedApods),
-                    Toast.LENGTH_LONG).show();
+                    Toast.LENGTH_SHORT).show();
         }
     }
 
     /**
-     * Resync local json data with dropbox json data. A merge is done so that
-     * - Existing local items on the device are not deleted or changed
-     * - Items found on dropbox which do not exist in local array are copied only if
-     *   they have not been previously deleted by user explicitly. These are typically missed APOD
-     *   images (app not used for some time)
-     * - A full reload may be forced by option - this will reload even deleted items
-     * - Items keep their order by timestamp
-     * @param dropbox The JSON Array from dropbox, that has been loaded
-     * @param forceFull if set to true, this forces to reload even previously deleted images
-     */
-    private void resyncWithDropbox(JSONArray dropbox, boolean forceFull) {
-        Set<String> deleted_items= sharedPref.getStringSet("DELETED_ITEMS", new HashSet<String>());
-        Set<String> dropbox_items = new HashSet<>();
-        JSONArray newjson = new JSONArray();
-        int db_skip = 0;
-        int db_add = 0;
-        int l_add = 0;
-
-        for (int i = 0; i < dropbox.length(); i++) {
-            try {
-                String title = dropbox.getJSONObject(i).getJSONObject("Content").getString("Title");
-                dropbox_items.add(title);
-            } catch (JSONException e) {
-                e.printStackTrace();
-                utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                        "resyncWithDropbox() - " + e.getMessage());
-            }
-        }
-
-        int dbidx = 0;
-        for (int lidx = 0; lidx < parent.length(); lidx++) {
-            try {
-                JSONObject lobj = parent.getJSONObject(lidx);
-                JSONObject lcontent = lobj.getJSONObject("Content");
-                String ltitle = lcontent.getString("Title");
-                long lepoch = lcontent.getLong("DateTime");
-                String dbtitle = "";
-                long dbepoch = 0;
-                // Dropbox items done, only local items remain to be added to new json array
-                if (dbidx < dropbox.length()) {
-                    JSONObject dbobj = dropbox.getJSONObject(dbidx);
-                    JSONObject dbcontent = dbobj.getJSONObject("Content");
-                    dbtitle = dbcontent.getString("Title");
-                    dbepoch = dbcontent.getLong("DateTime");
-                } else {
-                    Log.d("HFCM", "DB end - adding local '" + ltitle + "'");
-                    newjson.put(lobj);
-                    l_add++;
-                    continue;
-                }
-                // Dropbox matches local title - add into new json array
-                if (ltitle.equals(dbtitle)) {
-                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (A): " + ltitle + "'");
-                    newjson.put(lobj);
-                    l_add++;
-                    dbidx++;
-                } else if (!dropbox_items.contains(ltitle)) {
-                    Log.d("HFCM", "Info - DB idx: " + dbidx + " - Current local title '" + ltitle + "' not on dropbox");
-                    while (dbepoch <= lepoch) {
-                        if (!deleted_items.contains(dbtitle) || forceFull) {
-                            Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(B) '" + dbtitle + "'");
-
-                            // BBBBBBBBBBBBBBBB
-                            //if (forceFull) {
-                            //    deleted_items.remove(dbtitle);
-                            //}
-
-                            newjson.put(dropbox.getJSONObject(dbidx));
-                            db_add++;
-                        } else {
-                            Log.d("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (B): '" + dbtitle + "'");
-                            db_skip++;
-                        }
-                        dbidx++;
-                        if (dbidx == dropbox.length()) {
-                            break;
-                        }
-                        dbepoch = dropbox.getJSONObject(dbidx).getJSONObject("Content").getLong("DateTime");
-                        dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
-                    }
-                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (B): " + ltitle + "'");
-                    newjson.put(lobj);
-                    l_add++;
-                    dbidx++;
-                } else {
-                    // local title is on dropbox, just fill any possible missing items
-                    while (!dbtitle.equals(ltitle)) {
-                        if (!deleted_items.contains(dbtitle) || forceFull) {
-                            Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(C) '" + dbtitle + "'");
-
-                            // BBBBBBBBBBBBBBBB
-                            //if (forceFull) {
-                            //    deleted_items.remove(dbtitle);
-                            //}
-
-                            newjson.put(dropbox.getJSONObject(dbidx));
-                            db_add++;
-                        } else {
-                        Log.d("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (C): '" + dbtitle + "'");
-                        db_skip++;
-                        }
-                        dbidx++;
-                        dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
-                    }
-                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (C): '" + ltitle + "'");
-                    newjson.put(lobj);
-                    l_add++;
-                    dbidx++;
-                }
-
-            } catch (JSONException e) {
-                e.printStackTrace();
-                Log.e("HFCM", "resyncWithDropbox() - " + e.getMessage());
-                utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                        "resyncWithDropbox() - " + e.getMessage());
-            }
-        }
-        // Add remaining items not in local json from dropbox
-        for (int didx = dbidx; didx < dropbox.length(); didx ++) {
-            String title;
-            try {
-                title = dropbox.getJSONObject(didx).getJSONObject("Content").getString("Title");
-                Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox (D): '" + title + "'");
-                newjson.put(dropbox.getJSONObject(didx));
-                db_add++;
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }
-
-        utils.logAppend(getApplicationContext(),
-                DEBUG_LOG,
-                String.format(loc, "resyncWithDropbox(): LOCAL ADD=%d, DB ADD=%d, DB SKIP=%d",
-                        l_add, db_add, db_skip));
-
-        // TODO how to handle the shared prefs DELETED_ITEMS info?
-        //SharedPreferences.Editor editor = sharedPref.edit();
-        //editor.putStringSet("DELETED_ITEMS", deleted_items);
-        //editor.apply();
-
-        // Activate the contents of the new json array
-        parent = newjson;
-        utils.writeJson(getApplicationContext(), localJson, parent);
-        myList.clear();
-        addItems();
-        getMissingApodInfos();
-        utils.cleanupFiles(getApplicationContext(), myList, hd_maxmempct, -1); // MAX_HIRES_PERCENT
-
-        adp.notifyDataSetChanged();
-    }
-
-    /**
-     * Get APODs, which might have been catched by scheduler daily run. These are inserted first
-     * into the list. This is run BEFORE getting the daily apod and does not involve any network
-     * and async processing.
+     * Get newest APODs since last launch of the app UI. This includes the check for any APODs
+     * already catched by the scheduler.
      * The additional infos on thumbails, image size and (if applicable) vimeo thumbnail url
-     * are added later, in function getMissingApodInfos()
-     * TODO: integrate with getLatestAPOD
+     * are added later using function getMissingApodInfos()
      */
-    private void getScheduledAPODs() {
+    private void getLatestAPODs() {
+        // Network connection is needed to load additional infos. Else skip and keep s___ file(s)
+        // for later processing - we might use bcast services as trigger
+
+        long conntime = utils.testSocketConnect(2000);
+        if (conntime == 2000) {
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "getLatestAPODs() - testSocketConnect TIMEOUT (" + conntime + "ms)");
+            return;
+        }
+
         unfinishedApods = 0;
-        // There's no wildcard filter possible - subdirectories for less files per type ??
+        // No wildcard file filtering - a subdirectory for scheduled files could be used to avoid
+        // too many files in names list...
         File dir = new File(getApplicationContext().getFilesDir().getPath());
         String[] names = dir.list();
 
-        // only add items, if network connection is available to load additional infos, else keep
-        // the s___ file for later processing - we might use bcast services as trigger
-        if (names.length > 0) {
-            long conntime = utils.testSocketConnect(2000);
-            if (conntime == 2000) {
-                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                        "getScheduledAPODs() - testSocketConnect TIMEOUT (" + conntime + "ms)");
-                return;
-            }
-        }
-
-        for (String name : names) {
-            if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
-                spaceItem item = utils.createSpaceItemFromJsonFile(getApplicationContext(), name);
-                if (!item.getTitle().isEmpty()) {
-                    utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                            "getScheduledAPODs(): file = '" + name + "', title ='" + item.getTitle() + "'");
-                    utils.insertSpaceItem(myList, item);
-                } else {
-                    utils.logAppend(getApplicationContext(), DEBUG_LOG,
-                            "getScheduledAPODs(): '" + name + "' - missing item title");
-                }
-            }
-        }
-    }
-
-    /**
-     * Get the latest APOD. This is called on each start of the app AFTER getScheduledAPODs().
-     * Check the age of the current latest image and avoid any NASA query, if it is already up to
-     * date. The time to next apod is calculated, and if this is found to be larger than 0, we do
-     * not need to load a new item from NASA.
-     * TODO: integrate with getScheduledAPODs
-     */
-    private void getLatestAPOD() {
         long timeToNext = 0;
-
         if (!myList.isEmpty()) {
             // FIRST item in myList is latest available item. This is the LAST item in JSON.
             ArrayList<Long> epochs = utils.getNASAEpoch(myList.get(0).getDateTime());
             timeToNext = epochs.get(2);
         }
-        if (timeToNext > 0) {
-            Toast.makeText(MainActivity.this,
-                    String.format(loc, getString(R.string.apod_already_loaded),
-                            (float)timeToNext/(float)3600000),
-                    Toast.LENGTH_LONG).show();
-            // If no apod needs to be loaded, we are done with myList - trigger apod info completion
-            // in case we have some infos stored by scheduler
+
+        // Get information about any missing images since last successful App GUI launch, which
+        // have not been covered by job scheduler. Run a date range query.
+        long check = sharedPref.getLong("LAST_UI_LAUNCH_EPOCH", 0);
+
+        // TESTING ONLY - 04.03.2018 as last date, so it does reload 05.03.2018 and higher
+        //check = 1520143200000L;
+
+        // Fill in epochsToLoad array based on the current date and the last UI launch
+        long current = utils.getNASAEpoch();
+        ArrayList<Long> epochsToLoad = new ArrayList<>();   // epochs to be checked
+        if (check != 0) {
+            //long current = utils.getNASAEpoch();
+            if (check == current) {
+                if (timeToNext != 0) {
+                    Toast.makeText(MainActivity.this,
+                            String.format(loc, getString(R.string.apod_already_loaded),
+                                    (float) timeToNext / (float) 3600000),
+                            Toast.LENGTH_LONG).show();
+                }
+                return;
+            }
+            do {
+                check = utils.getNextDaysEpoch(check);
+                epochsToLoad.add(check);
+                Log.i("HFCM", "Have epoch to load:" + check);
+            } while (check < current);
+        } else {
+            //long current = utils.getNASAEpoch();
+            epochsToLoad.add(current);
+        }
+
+        // Create ArrayList of epoch values from existing s___ files. Any s___ file means that this
+        // one is available from scheduler output, so remove from potential missing epochs.
+        // after this is done, potentialMissing only has those, that need to be loaded, because
+        // scheduler did not provide any data. first one: begindate, last one: end date for query
+        ArrayList<Long> schedEpochs = new ArrayList<>();
+        for (String name : names) {
+            if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
+                long ep = Long.parseLong(name.replaceAll("\\D+",""));
+                schedEpochs.add(ep);
+            }
+        }
+
+        // Insert all items from s___ files into the spaceitem list first.
+        for (long schedEpoch : schedEpochs) {
+            String name = apodJobService.APOD_SCHED_PREFIX + schedEpoch + ".json";
+            spaceItem item = utils.createSpaceItemFromJsonFile(getApplicationContext(), name);
+            if (item != null && !item.getTitle().isEmpty()) {
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "getLatestAPODs(): file = '" + name + "', title ='" + item.getTitle() + "'");
+                utils.insertSpaceItem(myList, item);
+                epochsToLoad.remove(schedEpoch);    // remove from epoch list to be checked
+            } else {
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "getLatestAPODs(): '" + name + "' - null item or missing title");
+            }
+        }
+
+        // epochsToLoad now contains the remaining epochs, for which no s___ file has been found.
+        // The values are in sorted order, so the first and last represent the start and end time to
+        // be queried - for this range, we trigger a NASA API Query to retrieve a JSON Array.
+        // If no elements remain to load, getMissingApodInfos() is called immediately.
+        int nEpochs = epochsToLoad.size();
+        if (nEpochs == 0) {
             getMissingApodInfos();
         } else {
-            if (sharedPref.getBoolean("get_apod", true)) {
-                // Check for active connection: e.g. AVD with wifi connected on host but no external
-                // access (DSL unplugged): Failure is NOT detected by isConnected() - this means,
-                // we run into DNS timeouts - we catch them, but it takes 40 seconds (depending on
-                // number of ip's resolved for the name) - If called at initial launch - very bad!
-                //if (!utils.isNetworkConnected(getApplicationContext())) {
-                long conntime = utils.testSocketConnect(2000);
-                if (conntime == 2000) {
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "getLatestAPOD() - testSocketConnect TIMEOUT (" + conntime + "ms)");
-                    new dialogDisplay(MainActivity.this,
-                            getString(R.string.no_network_for_apod),
-                            getString(R.string.no_network));
-                    return;
-                } else {
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "getLatestAPOD() - testSocketConnect OK (" + conntime + "ms)");
-                }
-                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                        "getLatestAPOD() - Kick off asyncLoad: APOD_LOAD");
-                new asyncLoad(MainActivity.this,
-                        "APOD_LOAD",
-                        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                        execute(sharedPref.getBoolean("get_apod_simulate", false) ? dAS() : nS());
-            } else {
-                new dialogDisplay(this, getString(R.string.warn_apod_disable),
-                        getString(R.string.reminder));
-            }
+            // At least one apod needs to be loaded which not in the scheduled apods list.
+            // This might be the daily one (because it is not yet available) and/or some of the
+            // earlier apods, which were missed by the scheduler (phone switched off, no network)
+            long beginEpoch = epochsToLoad.get(0);
+            long endEpoch = epochsToLoad.get(nEpochs-1);
+            String beginDate = utils.getNASAStringFromEpoch(beginEpoch);
+            String endDate = utils.getNASAStringFromEpoch(endEpoch);
+            // example format for query:
+            // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
+            new asyncLoad(MainActivity.this,
+                    "APOD_LOAD_RANGE",
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                    execute(nS()+
+                            "&start_date=" + beginDate +
+                            "&end_date=" + endDate);
         }
     }
 
@@ -2446,7 +2473,7 @@ public class MainActivity extends AppCompatActivity
      * different tasks.
      * Note: for parallel asynctask execution (executeonexecutor), see also my lalatex document...
      * @param status   Return status. This can either be
-     *                 - HttpURLConnection.HTTP_x - http connection status, 200, 404 etc..
+     *                 - HttpURLConnection.HTTP_n - http connection status, 200, 404 etc..
      *                 - aysncLoad.IOEXCEPTION or similar: connection problems BEFORE http..
      * @param tag      the tag string set by caller to identify the calling procedure. Some tags
      *                 include the list index: TAG_nnn, with nnn = index
@@ -2456,6 +2483,8 @@ public class MainActivity extends AppCompatActivity
     public void processFinish(int status, String tag, Object output) {
         // DOCU switch-case for String type since Java version 7, but not with String.startsWith()
         // Status returned from asyncload: everything not HTTP OK 200 is assumed to be bad
+        // TODO: e.g. on 20.03.2018  503 service unavailable during testing - does not show anything
+        //       shouldn't we have some display on that? otherwise only log entry, but no user interaction
         if (status != HttpURLConnection.HTTP_OK) {
             Log.e("HFCM", "processFinish(), tag = " + tag + " > '" + output + "'");
             utils.logAppend(getApplicationContext(),
@@ -2464,27 +2493,27 @@ public class MainActivity extends AppCompatActivity
         }
 
         if (tag.equals("APOD_LOAD")) {
-            String h = (String)output;
+            String h = (String) output;
             // TODO: test 4.1 with tls off - need to handle return code...
-            if (h.startsWith("Connection")) {       // BAD
+            /*if (h.startsWith("Connection")) {       // BAD
                 new dialogDisplay(MainActivity.this, h + "\n" + getString(R.string.enable_tls), "NASA Connect");
                 return;
-            }
+            }*/
             if (utils.isJson(h) == utils.JSON_OBJ) {
                 spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(), (String) output);
+                // TODO: we should check, if this is a real apod json, and not some http500 etc...
                 utils.insertSpaceItem(myList, item);
 
-                // Add latest epoch into default shared prefs - used by scheduler service
-                SharedPreferences.Editor editor = sharedPref.edit();
-                editor.putLong("LATEST_APOD_EPOCH", item.getDateTime());
-                editor.apply();
+                //SharedPreferences.Editor editor = sharedPref.edit();
+                //editor.putLong("LATEST_APOD_EPOCH", item.getDateTime());
+                //editor.apply();
 
                 getMissingApodInfos();
                 adp.notifyDataSetChanged();
 
                 // from old finalize - do we need it?
                 Toast.makeText(MainActivity.this, R.string.apod_load,
-                            Toast.LENGTH_LONG).show();
+                        Toast.LENGTH_LONG).show();
                 myItemsLV.setSelection(0);
 
             } else {
@@ -2494,55 +2523,291 @@ public class MainActivity extends AppCompatActivity
                 new dialogDisplay(MainActivity.this,
                         "No JSON object received - possible captive portal?\nContent: '" +
                                 first100 + "......'", "APOD_LOAD Debug");
-                return;
+                //return;
+            }
+
+            /* THIS ONE NIGHT NOT BE NEEDED ANY MORE AT ALL, ALSO RETIRING resyncwithdropbox()
+        } else if (tag.equals("APOD_SEARCH_DB_SYNC_VERSION")) {
+            // TODO - add the search string and only add items matching the search term into the
+            //        new list. This even might be done by load_range and can be retired at all ?
+            String h = (String) output;
+            ArrayList<spaceItem> newList = new ArrayList<>();
+            if (utils.isJson(h) == utils.JSON_ARRAY) {
+                try {
+                    JSONArray newarray = new JSONArray(h);
+                    Set<String> deleted_items = sharedPref.getStringSet("DELETED_ITEMS",
+                            new HashSet<String>());
+                    Set<String> deleted_set = new HashSet<>(deleted_items);  // USE A COPY!!!
+                    Boolean recoveredAnyDeleted = false;
+                    for (int i = 0; i < newarray.length(); i++) {
+                        spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(),
+                                newarray.getJSONObject(i).toString());
+                        // we can filter here: if item.title contains a search string - see new global variable for that
+
+                        // handle items on deleted list
+                        if (deleted_items.contains(item.getTitle())) {
+                            if (restoreDeletedApodsOnSearch) {
+                                // insertSpaceItem does not insert existing ones again
+                                utils.insertSpaceItem(newList, item);
+                                deleted_set.remove(item.getTitle());
+                                recoveredAnyDeleted = true;
+                                Log.i("HFCM", "Recovering deleted item: " + item.getTitle());
+                            }
+                        } else {
+                            utils.insertSpaceItem(newList, item);
+                        }
+                    }
+                    // update shared prefs deleted items
+                    if (recoveredAnyDeleted) {
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        editor.putStringSet("DELETED_ITEMS", deleted_set);
+                        editor.apply();
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "APOD_SEARCH_DB_SYNC_VERSION: JSON exception: " + first100);
+                new dialogDisplay(MainActivity.this,
+                        "No JSON object received\nContent: '" +
+                                first100 + "......'", "APOD_SEARCH_DB_SYNC_VERSION Debug");
+            }
+            JSONArray testarray = new JSONArray();
+            //String jsoncontent;
+            for (int i = newList.size()-1; i >= 0; i--) {
+                JSONObject testObj = utils.createJsonObjectFromSpaceItem(newList.get(i));
+                testarray.put(testObj);
+                //jsoncontent = testObj.toString();   // FIX MISSING NEW APOD AFTER ROTATE
+            }
+            Log.i("HFCM", "Have loaded " + newList.size() + " new item(s) via search");
+            if (testarray != null && testarray instanceof JSONArray) {
+                resyncWithDropbox((JSONArray) testarray, restoreDeletedApodsOnSearch);
+            }
+            */
+
+        } else if (tag.equals("APOD_SEARCH_LOAD_RANGE")) {
+            // Search function using the LOAD_RANGE instead resyncWithDropbox() logic
+            String h = (String) output;
+            try {
+                JSONArray newarray = new JSONArray(h);
+                Set<String> deleted_items = null;
+                Set<String> deleted_work = null;
+                if (isSearch) {
+                    deleted_items = sharedPref.getStringSet("DELETED_ITEMS",
+                            new HashSet<String>());
+                    deleted_work = new HashSet<>(deleted_items);  // USE A WORK COPY!!!
+                }
+                Boolean recoveredAnyDeleted = false;
+                int lastInsertIdx = -1;
+                int numRecoveredDeleted = 0;
+                int numSkippedNonMatched = 0;
+                int numSkippedAsDeleted = 0;
+                int numOverallItems = newarray.length();
+                int numInsertedItems = 0;
+                for (int i = 0; i < numOverallItems; i++) {
+                    // new logic - filtering stuff if called from within a search context. If not
+                    // in search context, all items are just added
+                    if (isSearch) {
+                        String title = newarray.getJSONObject(i).getString("title");
+                        String searchtitle;
+                        if (isCaseSensitive) {
+                            searchtitle = title;
+                        } else {
+                            searchtitle = title.toLowerCase();
+                        }
+                        if (!apodSearchString.isEmpty() && !searchtitle.contains(apodSearchString)) {
+                            // 1. FIRST filter should be string filter for search string, independent
+                            //    from deleted items recovery
+                            Log.i("HFCM", "Skipping because '" + apodSearchString + "' not in title: " + title);
+                            numSkippedNonMatched++;
+                            continue;
+                        }
+                        if (!restoreDeletedApodsOnSearch) {
+                            // 2. skip item, if this item had already been deleted by the user and those
+                            //    deleted items should not be restored.
+                            if (deleted_items != null && deleted_items.contains(title)) {
+                                Log.i("HFCM", "Skipping as deleted before with no recovery: " + title);
+                                numSkippedAsDeleted++;
+                                continue;
+                            }
+                        } else {
+                            if (deleted_work != null) {
+                                deleted_work.remove(title);
+                                recoveredAnyDeleted = true;
+                                numRecoveredDeleted++;
+                            }
+                        }
+                    }
+                    // if getting here: add the item. Double items are skipped by insertSpaceItem()
+                    spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(),
+                            newarray.getJSONObject(i).toString());
+                    int lastSuccessfulInsert = utils.insertSpaceItem(myList, item);
+                    if (lastSuccessfulInsert != -1) {
+                        numInsertedItems++;
+                        lastInsertIdx = lastSuccessfulInsert;
+                    }
+                }
+                // update shared prefs deleted items by removing any recovered items from this list
+                if (recoveredAnyDeleted) {
+                    Log.i("HFCM", "Reloaded " + numRecoveredDeleted + " previously deleted items");
+                    SharedPreferences.Editor editor = sharedPref.edit();
+                    editor.putStringSet("DELETED_ITEMS", deleted_work);
+                    editor.apply();
+                }
+                getMissingApodInfos();
+                adp.notifyDataSetChanged();
+                // scroll to the newest image postion that has been successfully inserted
+                if (lastInsertIdx != -1) {
+                    myItemsLV.setSelection(lastInsertIdx);
+                    Log.i("HFCM", "Setting selection index to " + lastInsertIdx);
+                    // TODO: check, if some items are omitted
+                    if (numInsertedItems != numOverallItems) {
+                        new dialogDisplay(MainActivity.this,
+                                "Only " + numInsertedItems + " of " + numOverallItems + " have been loaded",
+                                "NASA Archive search");
+                    }
+                } else {
+                    // No items added by this search at all, check counters for reason
+                    new dialogDisplay(MainActivity.this,
+                            String.format(Locale.getDefault(),
+                                    getString(R.string.archive_search_no_match),
+                                    apodSearchString, apodSearchBeginDate, apodSearchEndDate, numSkippedNonMatched, numSkippedAsDeleted),
+                            "NASA Archive search");
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+                String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "processFinish() - APOD_SEARCH_LOAD_RANGE: JSON exception: " + first100);
+                // TODO - now display a dialog - we might trigger email log sender
+                new dialogDisplay(MainActivity.this,
+                        "processFinish() - No JSON Array received\nContent: '" +
+                                first100 + "......'", "APOD_SEARCH_LOAD_RANGE debug");
+            }
+
+        } else if (tag.equals("APOD_LOAD_RANGE")) {
+            // TODO: this can be done by apod_search_load_range as well with isSearch = false
+            // Apod range loading must return a JSON array, anything else definitely is wrong
+            String h = (String) output;
+            try {
+                JSONArray newarray = new JSONArray(h);
+                for (int i = 0; i < newarray.length(); i++) {
+                    spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(),
+                            newarray.getJSONObject(i).toString());
+                    // we could filter here. if item.title contains string....
+                    utils.insertSpaceItem(myList, item);
+                }
+                getMissingApodInfos();
+                adp.notifyDataSetChanged();
+            } catch (JSONException e) {
+                e.printStackTrace();
+                String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "processFinish() - APOD_LOAD_RANGE: JSON exception: " + first100);
+                // TODO - now display a dialog - we might trigger email log sender
+                new dialogDisplay(MainActivity.this,
+                        "processFinish() - No JSON Array received\nContent: '" +
+                                first100 + "......'", "APOD_LOAD_RANGE");
             }
 
         } else if (tag.startsWith("THUMB_")) {
+            // Thumbnail loading is the last step in the apod processing chain
             int idx = Integer.parseInt(tag.replace("THUMB_",""));
             Log.d("HFCM", "processFinish(), tag = " + tag);
+            myList.get(idx).setThumbLoadingState(View.INVISIBLE);
             if (output instanceof Bitmap) {
-                myList.get(idx).setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
-                        String.valueOf(((Bitmap)output).getHeight()));
+                // 13.03.2018 -> annoying stuff all the time, finally do it !!!!!!!!!!!!!!!!!!!!!!!!
+                // CORRECTION FOR INTERCHANGED HIRES/LOWRES LINKS. Sure, we might have already used
+                // the hires image to create the thumbnail, but this is the first point in time, we
+                // have BOTH sizes available to be able to exchange the links in case NASA did not
+                // provide the correct links, which unfortunately happens quite often. This is the
+                // point in time to correct this in our local database (currently local json file,
+                // which might be changed to sqlite database approach later (search funtion))
+                int nasaLowWidth = ((Bitmap) output).getWidth();
+                int nasaLowHeight = ((Bitmap)output).getHeight();
+                String sz = myList.get(idx).getHiSize();
+                // take care of 'java.lang.NumberFormatException: Invalid int: ""'
+                if (sz.matches("\\d+x\\d+")) {
+                    String[] hs = sz.split("x");
+                    int nasaHighWidth = Integer.valueOf(hs[0]);
+                    int nasaHighHeight = Integer.valueOf(hs[1]);
+                    // get the pixels count to rule out aspect ratio - good idea???
+                    int nasaLow = nasaLowWidth * nasaLowHeight;
+                    int nasaHigh = nasaHighWidth * nasaHighHeight;
+                    if (nasaHigh >= nasaLow) {
+                        // highres >= lowres - no correction needed
+                        myList.get(idx).setLowSize(String.valueOf(nasaLowWidth) + "x" +
+                                String.valueOf(nasaLowHeight));
+                    } else {
+                        // highres < lowres - need correction
+                        utils.logAppend(getApplicationContext(),
+                                MainActivity.DEBUG_LOG,
+                                "NASA hires/lowres correction required...");
+                        myList.get(idx).setLowSize(String.valueOf(nasaHighWidth) + "x" +
+                                String.valueOf(nasaHighHeight));
+                        myList.get(idx).setHiSize(String.valueOf(nasaLowWidth) + "x" +
+                                String.valueOf(nasaLowHeight));
+                        // exchange hires/lowres url strings as well for the correction case only
+                        String tmpHigh = myList.get(idx).getHires();
+                        myList.get(idx).setHires(myList.get(idx).getLowres());
+                        myList.get(idx).setLowres(tmpHigh);
+                    }
+                }
+
+                //myList.get(idx).setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
+                //        String.valueOf(((Bitmap)output).getHeight()));
+
                 // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
                 //thumbFile = new File(getApplicationContext().getFilesDir(), wkItem.getThumb());
                 Bitmap thumbnail = ThumbnailUtils.extractThumbnail((Bitmap) output, 120, 120);
                 myList.get(idx).setBmpThumb(thumbnail);
-                // Write the thumbnail as small jpeg file to internal storage
                 utils.writeJPG(getApplicationContext(), myList.get(idx).getThumb(), thumbnail);
-                myList.get(idx).setThumbLoadingState(View.INVISIBLE);
-                adp.notifyDataSetChanged();
-
-                unfinishedApods--;
-                Log.d("HFCM", "processFinish() - remaining unfinished APODs: " + unfinishedApods);
-                if (unfinishedApods == 0) {
-                    parent = new JSONArray(); // other way to cleanup the array?
-                    for (int i = myList.size()-1; i >= 0; i--) {
-                        JSONObject apodObj = utils.createJsonObjectFromSpaceItem(myList.get(i));
-                        parent.put(apodObj);
-                        jsonData = parent.toString();   // FIX MISSING NEW APOD AFTER ROTATE
-                    }
-                    utils.writeJson(getApplicationContext(), localJson, parent);
-                    File dir = new File(getFilesDir().getPath());
-                    String[] names = dir.list();
-                    for (String name : names) {
-                        if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
-                            File todelete = new File(getFilesDir(), name);
-                            Log.d("HFCM", "Deleting schduled apod: " + name);
-                            if (!todelete.delete()) {
-                                Log.e("HFCM", "Error deleting file: " + name);
-                            }
-                        }
-                    }
-                }
-
-                // this only get's called ONCE, if just single apod is present
-                if (sharedPref.getBoolean("INITIAL_LAUNCH", false)) {
-                    initialLaunch();
-                }
             } else {
                 utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                         tag + ": no Bitmap returned");
+                // maybe set a "not available" image instead of leaving black
             }
+            adp.notifyDataSetChanged();
+
+            unfinishedApods--;
+            Log.d("HFCM", "processFinish() - remaining unfinished APODs: " + unfinishedApods);
+            if (unfinishedApods == 0) {
+                parent = new JSONArray(); // other way to cleanup the array?
+                for (int i = myList.size()-1; i >= 0; i--) {
+                    JSONObject apodObj = utils.createJsonObjectFromSpaceItem(myList.get(i));
+                    parent.put(apodObj);
+                    jsonData = parent.toString();   // FIX MISSING NEW APOD AFTER ROTATE
+                }
+                utils.writeJson(getApplicationContext(), localJson, parent);
+                File dir = new File(getFilesDir().getPath());
+                String[] names = dir.list();
+                for (String name : names) {
+                    if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
+                        File todelete = new File(getFilesDir(), name);
+                        Log.d("HFCM", "Deleting scheduled apod: " + name);
+                        if (!todelete.delete()) {
+                            Log.e("HFCM", "Error deleting file: " + name);
+                        }
+                    }
+                }
+                // Once all items are in, get the newest date and set into sharedprefs
+                // uuuuuuu
+                //long latest = myList.get(0).getDateTime();
+                long latest = utils.getNASAEpoch();
+                utils.logAppend(getApplicationContext(),
+                        DEBUG_LOG,
+                        "Setting LAST_UI_LAUNCH_EPOCH to " + latest + " (" + utils.getNASAStringFromEpoch(latest) + ")");
+                SharedPreferences.Editor editor = sharedPref.edit();
+                editor.putLong("LAST_UI_LAUNCH_EPOCH", latest);
+                editor.apply();
+            }
+
+            // this only get's called ONCE, if just single apod is present
+            /*if (sharedPref.getBoolean("INITIAL_LAUNCH", false)) {
+                initialLaunch();
+            }*/
 
         } else if (tag.startsWith("SIZE_")) {
             int idx = Integer.parseInt(tag.replace("SIZE_", ""));
@@ -2600,8 +2865,7 @@ public class MainActivity extends AppCompatActivity
             // TODO - good idea to refresh after VIM reload?
             adp.notifyDataSetChanged();
 
-        } else if (tag.equals("DROPBOX_REFRESH")) {
-            // TODO - phone rotation and verify, if network checks are done / needed
+        /*} else if (tag.equals("DROPBOX_REFRESH")) {
             Object json;
             try {
                 json = new JSONTokener((String) output).nextValue();
@@ -2610,11 +2874,10 @@ public class MainActivity extends AppCompatActivity
                 return;
             }
             if (json != null && json instanceof JSONArray) {
-                resyncWithDropbox((JSONArray) json, false);
+                //resyncWithDropbox((JSONArray) json, false);
             }
-            getLatestAPOD();
+
         } else if (tag.equals("DROPBOX_FORCE_REFRESH")) {
-            // TODO - phone rotation and verify, if network checks are done / needed
             Object json;
             try {
                 json = new JSONTokener((String) output).nextValue();
@@ -2623,9 +2886,9 @@ public class MainActivity extends AppCompatActivity
                 return;
             }
             if (json != null && json instanceof JSONArray) {
-                resyncWithDropbox((JSONArray) json, true);
-            }
-            getLatestAPOD();
+                //resyncWithDropbox((JSONArray) json, true);
+            }*/
+
         } else {
             new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
         }
@@ -2798,8 +3061,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * Called) at end of the "APODchain", if the initial
-     * launch flag is set to true in shared prefs "INITIAL_LAUNCH"
+     * Called if app is launched the first time at installation.
      */
     private void initialLaunch() {
         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
@@ -2808,9 +3070,6 @@ public class MainActivity extends AppCompatActivity
         fragArguments.putString("TITLE",
                 "Welcome to FunInSpace");
         long connecttime = utils.testSocketConnect(1000);
-        // we skip the actual test, just getting the info about connect time
-        //if (connecttime < 1000) {
-        //if (utils.isNetworkConnected(getApplicationContext())) {
         int type = utils.getActiveNetworkType(getApplicationContext());
         String tname = utils.getActiveNetworkTypeName(getApplicationContext());
         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
@@ -2818,7 +3077,9 @@ public class MainActivity extends AppCompatActivity
         switch (type) {
             case ConnectivityManager.TYPE_MOBILE:
                 fragArguments.putString("MESSAGE",
-                        getString(R.string.dropbox_init_mobile));
+                        String.format(Locale.getDefault(),
+                                getString(R.string.init_mobile),
+                                INIT_DAYS_TO_LOAD));
                 fragArguments.putString("POS",
                         getString(R.string.hfcm_yes));
                 fragArguments.putString("NEG",
@@ -2826,7 +3087,9 @@ public class MainActivity extends AppCompatActivity
                 break;
             case ConnectivityManager.TYPE_WIFI:
                 fragArguments.putString("MESSAGE",
-                        getString(R.string.dropbox_init_wifi));
+                        String.format(Locale.getDefault(),
+                                getString(R.string.init_wifi),
+                                INIT_DAYS_TO_LOAD));
                 fragArguments.putString("POS",
                         getString(R.string.hfcm_proceed));
                 fragArguments.putString("NEG",
@@ -2843,9 +3106,9 @@ public class MainActivity extends AppCompatActivity
                 break;
         }
 
-        SharedPreferences.Editor editor = sharedPref.edit();
+        /*SharedPreferences.Editor editor = sharedPref.edit();
         editor.putBoolean("INITIAL_LAUNCH", false);
-        editor.apply();
+        editor.apply();*/
         FragmentManager fm = getSupportFragmentManager();
         confirmDialog confirmdlg = new confirmDialog();
         confirmdlg.setArguments(fragArguments);
@@ -2974,7 +3237,7 @@ public class MainActivity extends AppCompatActivity
 
 
     /**
-     *
+     * Try to terminate the app, which might be useful if starting without network at initial launch
      */
     public void terminateApp() {
         // see also
@@ -2993,9 +3256,11 @@ public class MainActivity extends AppCompatActivity
     /**
      * Send logfile via email to funinspace mail account
      * TODO: multiple attachments
-     * TODO: attachment does not work with some apps, e.g. inbox (markus)
+     * TODO: attachment does not work with some apps, e.g. inbox (markus) - seems to be solved
      *       https://stackoverflow.com/questions/15946297/sending-email-with-attachment-using-sendto-on-some-devices-doesnt-work
      *       might be because ACTION_SENDTO is bad and we should use ACTION_SEND
+     * TODO: investigate Telekom mail app issue reported by Heiko - no mail content, only topic
+     *       and attachments - seems to be caused by the Telekom app... see extra infos
      */
     private void emailLogFileToHerbert() {
         // TODO AVD failures - seems to be known
@@ -3257,6 +3522,11 @@ public class MainActivity extends AppCompatActivity
                     updateString += getString(R.string.version_update_201801281) + "\n";
                 }
             }
+            // Fixing for 05.03.2018 bug with html and archive search
+            if (versionCodeInPrefs <= 201802031 && versionCodeCurrent >= 201803261) {
+                // TODO also delete the logfile
+                updateString += getString(R.string.version_update_201803261) + "\n";
+            }
             if (!updateString.isEmpty()) {
                 new dialogDisplay(this,
                         updateString,
@@ -3273,8 +3543,6 @@ public class MainActivity extends AppCompatActivity
     ////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 
 
     /**   DEVEL HELPER ONLY!!!
@@ -3351,443 +3619,218 @@ public class MainActivity extends AppCompatActivity
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    //  O L D    C O D E   F R A G M E N T S -- 24.11.2017 Cleanup - GIT Commit
+    //  O L D    C O D E   F R A G M E N T S
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-
     /**
-     * Create a new APOD from information returned in daily NASA JSON
-     * @params String
+     * Retired function to get the latest APOD.
+     * Check the age of the current latest image and avoid any NASA query, if it is already up to
+     * date. The time to next apod is calculated, and if this is found to be larger than 0, we do
+     * not need to load a new item from NASA.
      */
-    /*void createApodFromJsonString(String s) {
+    private void getLatestAPOD() {
+        long timeToNext = 0;
 
-        // Step 1: create the spaceItem object (no hires size, no vimeo thumb url, no thumb)
-        // this needs no async processing at all
-        apodItem = utils.createSpaceItemFromJsonString(getApplicationContext(), s);
-        // CODE MOVED INTO UTILS - createSpaceItemFromJsonString - see end of file as reference
-
-        String sMediaType = apodItem.getMedia();
-        String sHiresUrl = apodItem.getHires();
-        String imgUrl = apodItem.getLowres();
-
-        // Local copy of original apod nasa json file now in utils.createSpaceItemFromJsonString()
-
-        // check, if the following could be moved into checkMissingThumbs - this would allow
-        // to use checkMissingThumbs to be called after all json/list activities to get details
-        if (sMediaType.equals(M_VIMEO)) {
-            // Insert query for vimeo thumbnail URL via oembed API which then triggers img_lowres load
-            // MediaMetadataRetriever might also be able to retrieve a thumbnail, but it is better
-            // and also faster to retrieve the "offical" thumb...
-            Log.i("HFCM", "Launching asyncLoad for VIMEO info: " + sHiresUrl);
-            new asyncLoad(MainActivity.this, "VIMEO_INFO").
-                    execute("https://vimeo.com/api/oembed.json?url=" + sHiresUrl);
-        } else if (sMediaType.equals(M_IMAGE)) {
-            // Insert query for hires image size, which then triggers img_lowres_load
-            new asyncLoad(MainActivity.this, "IMG_HIRES_SIZE_QUERY").execute(sHiresUrl);
-        } else {
-            // actually, lowres is just for thumbnail
-            new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(imgUrl);
+        if (!myList.isEmpty()) {
+            // FIRST item in myList is latest available item. This is the LAST item in JSON.
+            ArrayList<Long> epochs = utils.getNASAEpoch(myList.get(0).getDateTime());
+            timeToNext = epochs.get(2);
         }
-    }*/
-
-
-    /**
-     * Check for any missing thumb images. We iterate all items and for those with no bitmap
-     * contained, we kick of a loader thread, which gets the image file from the given lowres
-     * URL and saves a thumbnail file.
-     */
-    /*public void checkMissingThumbs() {
-        int count = 0;
-        for(int i=0; i<myList.size(); i++) {
-            // TODO: handle VIMEO here - just do it as in apod, so vimeo info is extracted
-            // TODO: also get the hires size information here.
-            // here. checkMissingThumbs could be the way to go all in all
-
-            if (myList.get(i).getBmpThumb() == null && !myList.get(i).getLowres().equals("")) {
-                // TODO unknown not yet checked...
-                myList.get(i).setThumbLoadingState(View.VISIBLE);
-                // TODO: check parallel execution - seems to not load all images / and duplicates
-                new asyncLoad(MainActivity.this,
-                        "THUMB_" + i).
-                        execute(myList.get(i).getLowres());
-                        //executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, myList.get(i).getLowres());
-                count ++;
-            }
-        }
-
-        if (count > 0) {
-            Toast.makeText(MainActivity.this, getString(R.string.load_miss_thumbs, count),
+        if (timeToNext > 0) {
+            // No APOD needs to be loaded (we are done with myList). Trigger apod info completion
+            // in case we have some infos stored by scheduler
+            Toast.makeText(MainActivity.this,
+                    String.format(loc, getString(R.string.apod_already_loaded),
+                            (float)timeToNext/(float)3600000),
                     Toast.LENGTH_LONG).show();
-        }
-    }*/
 
 
-    /**
-     * @param bitmap bitmap object of the lowres image - used for thumbnail creation
-     */
-    /*void finalizeApodWithLowresImage(Bitmap bitmap) {
-        // "Good old ugly" version just iterating all items in ArrayList. This is ok. The first
-        // item should match anyway, because latest image is on top of the list.
-        for (spaceItem item : myList) {
-            if (apodItem.getTitle().equals(item.getTitle())) {
-                // TODO here's the point to check, if the thumbnail file exists (and reload)
-                Toast.makeText(MainActivity.this, R.string.already_loaded,
-                        Toast.LENGTH_LONG).show();
-                return;
-            }
-        }
+            //SharedPreferences.Editor editor = sharedPref.edit();
+            //editor.putLong("LATEST_APOD_EPOCH", myList.get(0).getDateTime());
+            //editor.apply();
 
-        // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
-        if (bitmap != null) {
-            // moved this here...
-            apodItem.setLowSize(String.valueOf(((Bitmap) bitmap).getWidth()) + "x" +
-                    String.valueOf(((Bitmap) bitmap).getHeight()));
-            //File thumbFile = new File(getApplicationContext().getFilesDir(), apodItem.getThumb());
-            Bitmap thumbnail = ThumbnailUtils.extractThumbnail(bitmap, 120, 120);
-            Log.i("HFCM", "Calling utils to write thumb for new APOD:" + apodItem.getTitle());
-            utils.writeJPG(getApplicationContext(), apodItem.getThumb(), thumbnail);
-            apodItem.setBmpThumb(thumbnail);
+            getMissingApodInfos();
         } else {
-            apodItem.setBmpThumb(null);     // just have a black image here TODO missing img?
-        }
-
-        // Create a complete nasatest json object that can be inserted in the json array parent.
-        // JSON is an array of objects, which have a "Type" and a "Content". Type is just
-        // a string, content is another JSON object.
-        JSONObject apodObj = utils.createJsonObjectFromSpaceItem(apodItem);
-
-        // add object to local json array and save json content to internal storage
-        // TODO - better insert into parent and myList at position depending on epoch
-
-        parent.put(apodObj);
-        utils.writeJson(getApplicationContext(), localJson, parent);
-
-        myList.add(0, apodItem);
-        adp.notifyDataSetChanged();
-        // Add latest epoch into default shared prefs - used by scheduler service
-        SharedPreferences.Editor editor = sharedPref.edit();
-        editor.putLong("LATEST_APOD_EPOCH", apodItem.getDateTime());
-        editor.apply();
-
-        Toast.makeText(MainActivity.this, R.string.apod_load,
-                Toast.LENGTH_LONG).show();
-        myItemsLV.setSelection(0);
-    }*/
-
-
-
-    /* from createApodFromJson()
-    THE CODE THAT HAS BEEN MOVED INTO UTILS
-        HashMap<String, String> map = utils.parseStringAsJsonObject(getApplicationContext(), s);
-        // non-existent keys return null string
-        String sCopyright = map.containsKey("copyright") ? map.get("copyright").
-                replaceAll(System.getProperty("line.separator"), " "): "";
-        String sDate = map.containsKey("date") ? map.get("date") : "";
-        String sExplanation = map.containsKey("explanation") ? map.get("explanation") : "";
-        String sHiresUrl = map.containsKey("hdurl") ? map.get("hdurl") : "";
-        String sMediaType = map.containsKey("media_type") ? map.get("media_type") : "";
-        //"service_version"
-        String sTitle = map.containsKey("title") ? map.get("title") : "";
-        String imgUrl = map.containsKey("url") ? map.get("url") : "";
-
-        // at this point, we can check, if the json was some error json returned, see utils code
-        apodItem = new spaceItem();
-
-        JSONObject parent = null;
-        Uri resource_uri = null;
-        resource_uri = Uri.parse(imgUrl);
-
-        // Handle a missing hires url!!
-        if (sHiresUrl.equals("") && sMediaType.equals("image")) {
-            new dialogDisplay(this,
-                    "APOD does not have a link to hires image, will need to fallback to lowres",
-                    "Herbert to be done");
-        }
-
-        // At this point sMediaType contains the NASA delivered string. This gets changed now to
-        // a more specific media type information. It's a little bit messy, because NASA delivered
-        // an MP4 stream as media type "image" on 13.11.2017... need to catch such error situations
-        if (resource_uri != null) {
-            String hiresPS = Uri.parse(sHiresUrl).getLastPathSegment();
-            if (sMediaType.equals("video")) {
-                // note, that this rewrites sMediaType variable!
-                String host = resource_uri.getHost();
-                List<String> path = resource_uri.getPathSegments();
-                apodItem.setHires(resource_uri.toString());
-                if (host.equals("www.youtube.com")) {
-                    // TODO: now we just assume 'embed' link - might not be true always ??
-                    // url> https://www.youtube.com/embed/" + path.get(1) + "?rel=0
-                    // img> https://img.youtube.com/vi/9Vp2jUQ4rNM/0.jpg
-                    // TODO : MediaMetadataRetriever - also can retrieve image from video - FYI
-                    // it's not sure, if this works with youtube, but what about vimeo?
-                    sMediaType = M_YOUTUBE;
-                    apodItem.setThumb("th_" + path.get(1) + ".jpg");
-                    sHiresUrl = imgUrl;
-                    imgUrl = "https://img.youtube.com/vi/" + path.get(1) + "/0.jpg";
-                    apodItem.setLowres(imgUrl);
-                } else if (host.endsWith("vimeo.com")) { // vimeo.com / player.vimeo.com
-                    // see example file from 11.09.2017: link is in url, NOT hdurl
-                    sMediaType = M_VIMEO;
-                    apodItem.setThumb("th_VIMEO_unknown.jpg");
-                    sHiresUrl = imgUrl;
-                    // URL is the link that can be played in a WebView, just not using
-                    // iframe embed at all... doing it like this for now
-                    // TODO: extract video ID and thumbnail url from given video url
-                    // is solved now, but what about "MediaMetadataRetriever"
-                    // thumbnail image name: th_<video-id>.jpg
-                    // Note: this needs a REST API call to gather the required infos..
-                    apodItem.setLowres("");     // will hold thumbnail url
-                } else {
-                    // TODO: MP4 handling for correct media type video
-                    if (hiresPS.endsWith(".mp4") || hiresPS.endsWith(".MP4")) {
-                        sMediaType = M_MP4;
-                        apodItem.setThumb("th_" + resource_uri.getLastPathSegment());
-                        //apodItem.setHires(sHiresUrl);
-                        apodItem.setLowres(imgUrl);
-                    } else {
-                        sMediaType = M_VIDEO_UNKNOWN;
-                        apodItem.setThumb("th_UNKNOWN.jpg");
-                    }
-                }
+//            if (sharedPref.getBoolean("get_apod", true)) {
+            // Check for active connection: e.g. AVD with wifi connected on host but no external
+            // access (DSL unplugged): Failure is NOT detected by isConnected() - this means,
+            // we run into DNS timeouts - we catch them, but it takes 40 seconds (depending on
+            // number of ip's resolved for the name) - If called at initial launch - very bad!
+            //if (!utils.isNetworkConnected(getApplicationContext())) {
+            long conntime = utils.testSocketConnect(2000);
+            if (conntime == 2000) {
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "getLatestAPOD() - testSocketConnect TIMEOUT (" + conntime + "ms)");
+                new dialogDisplay(MainActivity.this,
+                        getString(R.string.no_network_for_apod),
+                        getString(R.string.no_network));
+                return;
             } else {
-                // FIX for NASA sending wrong media type 'image' for MP4 video (13.11.2017)
-                if (hiresPS.endsWith(".mp4") || hiresPS.endsWith(".MP4")) {
-                    sMediaType = M_MP4;
-                }
-                apodItem.setThumb("th_" + resource_uri.getLastPathSegment());
-                //apodItem.setHires(sHiresUrl);
-                apodItem.setLowres(imgUrl);
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "getLatestAPOD() - testSocketConnect OK (" + conntime + "ms)");
             }
+            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                    "getLatestAPOD() - Kick off asyncLoad: APOD_LOAD");
+            new asyncLoad(MainActivity.this,
+                    "APOD_LOAD",
+                    sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
+                    execute(sharedPref.getBoolean("get_apod_simulate", false) ? dAS() : nS());
+//            } else {
+//                new dialogDisplay(this, getString(R.string.warn_apod_disable),
+//                        getString(R.string.reminder));
+//            }
         }
-        // TODO shouldn't super be executed first ??? might have done this bad
-        //super.onPostExecute(s);
-        apodItem.setTitle(sTitle);
-        apodItem.setCopyright(sCopyright);
-        apodItem.setExplanation(sExplanation);
-        apodItem.setHires(sHiresUrl);
-        //long epoch = utils.getNASAEpoch(0).get(0);
-        long epoch = utils.getEpochFromDatestring(sDate);   // FIX to use "date" string from apod
-        apodItem.setDateTime(epoch);
-        apodItem.setMedia(sMediaType);
-        apodItem.setRating(0);
-        apodItem.setLowSize("");
-        apodItem.setHiSize("");
-        // END OF MOVED CODE*/
-
-
-    // OLD refreshFromDropbox() - code now at end of listing for reference only, resyncWithDropbox
-    // is now active.
+    }
 
     /**
-     * Refresh the local json array with contents from the dropbox. The current array is replaced
-     * by the new array by brute force...
-     * - Existing rating values in the local array are preserved
-     * - Thumbnail files of images are deleted, if they are not referenced any more in the new array
-     * //@param dropbox   a JSONArray returned from the call asyncLoad call to dropbox
+     * Retired function for dropbox sync
+     * Resync local json data with dropbox json data. A merge is done so that
+     * - Existing local items on the device are not deleted or changed
+     * - Items found on dropbox which do not exist in local array are copied only if
+     *   they have not been previously deleted by user explicitly. These are typically missed APOD
+     *   images (app not used for some time)
+     * - A full reload may be forced by option - this will reload even deleted items
+     * - Items keep their order by timestamp
+     * @param dropbox The JSON Array from dropbox, that has been loaded
+     * @param forceFull if set to true, this forces to reload even previously deleted images
      */
-    /*private void refreshFromDropbox(JSONArray dropbox) {
-        // 1. metadata on the device which is not on dropbox is lost
-        // 2. deleted items are loaded again and reappear in the list
-        JSONObject obj = null;
-        JSONObject content = null;
-        HashMap<String, Integer> ratings;
-        HashMap<String, String> thumbsToDelete;
+    private void resyncWithDropbox(JSONArray dropbox, boolean forceFull) {
         Set<String> deleted_items= sharedPref.getStringSet("DELETED_ITEMS", new HashSet<String>());
+        Set<String> dropbox_items = new HashSet<>();
+        JSONArray newjson = new JSONArray();
+        int db_skip = 0;
+        int db_add = 0;
+        int l_add = 0;
 
-        // Iterate the currently active json array to fill maps for rating / thumbfilenames
-        ratings = new HashMap<>();
-        thumbsToDelete = new HashMap<>();
-        for (int i = 0; i < parent.length(); i++) {
-            try {
-                content = parent.getJSONObject(i).getJSONObject("Content");
-                if (content != null) {
-                    ratings.put(content.getString("Title"), content.getInt("Rating"));
-                    // All thumbfiles are candidates for deletion
-                    thumbsToDelete.put(content.getString("Title"), content.getString("Thumb"));
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-                Log.e("HFCM", e.toString());
-            }
-        }
-
-        content = null;
-        obj = null;
         for (int i = 0; i < dropbox.length(); i++) {
             try {
-                obj = dropbox.getJSONObject(i);
+                String title = dropbox.getJSONObject(i).getJSONObject("Content").getString("Title");
+                dropbox_items.add(title);
             } catch (JSONException e) {
                 e.printStackTrace();
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "resyncWithDropbox() - " + e.getMessage());
             }
-            try {
-                if (obj != null) {
-                    content = obj.getJSONObject("Content");
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            if (content == null) {
-                continue;
-            }
+        }
 
+        int dbidx = 0;
+        for (int lidx = 0; lidx < parent.length(); lidx++) {
             try {
-                if (deleted_items.contains(content.getString("Title"))) {
-                    Log.i("HFCM", "Skipping dropbox load for user deleted item: '" + content.getString("Title") + "'");
-                    // TODO - make skip active - we might use an option here to force overall load!
-                    // remove the item from dropbox JSON array
-                    //continue;
+                JSONObject lobj = parent.getJSONObject(lidx);
+                JSONObject lcontent = lobj.getJSONObject("Content");
+                String ltitle = lcontent.getString("Title");
+                long lepoch = lcontent.getLong("DateTime");
+                String dbtitle = "";
+                long dbepoch = 0;
+                // Dropbox items done, only local items remain to be added to new json array
+                if (dbidx < dropbox.length()) {
+                    JSONObject dbobj = dropbox.getJSONObject(dbidx);
+                    JSONObject dbcontent = dbobj.getJSONObject("Content");
+                    dbtitle = dbcontent.getString("Title");
+                    dbepoch = dbcontent.getLong("DateTime");
+                } else {
+                    Log.d("HFCM", "DB end - adding local '" + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    continue;
                 }
-                if (ratings.containsKey(content.getString("Title"))) {
-                    if (ratings.get(content.getString("Title")) != content.getInt("Rating")) {
-                        Log.i("HFCM", "Adjust rating for '" + content.getString("Title") +
-                                "' from " + content.getInt("Rating") + " to " +
-                                ratings.get(content.getString("Title")));
+                // Dropbox matches local title - add into new json array
+                if (ltitle.equals(dbtitle)) {
+                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (A): " + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    dbidx++;
+                } else if (!dropbox_items.contains(ltitle)) {
+                    Log.d("HFCM", "Info - DB idx: " + dbidx + " - Current local title '" + ltitle + "' not on dropbox");
+                    while (dbepoch <= lepoch) {
+                        if (!deleted_items.contains(dbtitle) || forceFull) {
+                            Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(B) '" + dbtitle + "'");
+
+                            // BBBBBBBBBBBBBBBB
+                            if (forceFull) {
+                                deleted_items.remove(dbtitle);
+                            }
+
+                            newjson.put(dropbox.getJSONObject(dbidx));
+                            db_add++;
+                        } else {
+                            Log.d("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (B): '" + dbtitle + "'");
+                            db_skip++;
+                        }
+                        dbidx++;
+                        if (dbidx == dropbox.length()) {
+                            break;
+                        }
+                        dbepoch = dropbox.getJSONObject(dbidx).getJSONObject("Content").getLong("DateTime");
+                        dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
                     }
-                    content.put("Rating", ratings.get(content.getString("Title")));
-                    // remove existing item from thumb deletion candidate list
-                    thumbsToDelete.remove(content.getString("Title"));
+                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (B): " + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    dbidx++;
+                } else {
+                    // local title is on dropbox, just fill any possible missing items
+                    while (!dbtitle.equals(ltitle)) {
+                        if (!deleted_items.contains(dbtitle) || forceFull) {
+                            Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox(C) '" + dbtitle + "'");
+
+                            // BBBBBBBBBBBBBBBB
+                            if (forceFull) {
+                                deleted_items.remove(dbtitle);
+                            }
+
+                            newjson.put(dropbox.getJSONObject(dbidx));
+                            db_add++;
+                        } else {
+                            Log.d("HFCM", "DB idx: " + dbidx + " - Skipping deleted from dropbox (C): '" + dbtitle + "'");
+                            db_skip++;
+                        }
+                        dbidx++;
+                        dbtitle = dropbox.getJSONObject(dbidx).getJSONObject("Content").getString("Title");
+                    }
+                    Log.d("HFCM", "DB idx: " + dbidx + " - Adding local (C): '" + ltitle + "'");
+                    newjson.put(lobj);
+                    l_add++;
+                    dbidx++;
                 }
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+                Log.e("HFCM", "resyncWithDropbox() - " + e.getMessage());
+                utils.logAppend(getApplicationContext(), DEBUG_LOG,
+                        "resyncWithDropbox() - " + e.getMessage());
+            }
+        }
+        // Add remaining items not in local json from dropbox
+        for (int didx = dbidx; didx < dropbox.length(); didx ++) {
+            String title;
+            try {
+                title = dropbox.getJSONObject(didx).getJSONObject("Content").getString("Title");
+                Log.d("HFCM", "DB idx: " + dbidx + " - Adding from dropbox (D): '" + title + "'");
+                newjson.put(dropbox.getJSONObject(didx));
+                db_add++;
             } catch (JSONException e) {
                 e.printStackTrace();
             }
         }
-        // Remove remaining thumbs/wallpapers which have no reference any more in the new json array
-        // thumbnails are always present, so use them as filename stem. For wallpapers, just check
-        // by exchanging th_ by wp_.
-        for (String key : thumbsToDelete.keySet()) {
-            Log.i("HFCM", "Delete thumb: " + thumbsToDelete.get(key));
-            new File(getApplicationContext().getFilesDir(), thumbsToDelete.get(key)).delete();
-            // remove orphaned wallpapers as well...
-            // TODO: maybe use more unique prefidx, e.g. th__ and wp__ just to avoid conflicts...
-            //       new app version should clean old files, or just require new install
-            String wpFileName = thumbsToDelete.get(key).replace("th_", "wp_");
-            File wpFile = new File(wpFileName);
-            if (wpFile.exists()) {
-                Log.i("HCFM", "Removing wallpaper orphan " + wpFileName);
-                // TODO: should we remove the active one as well?
-                wpFile.delete();        // TODO check returncode
-            }
-            String hdFileName = thumbsToDelete.get(key).replace("th_", "hd_");
-            File hdFile = new File(hdFileName);
-            if (hdFile.exists()) {
-                Log.i("HCFM", "Removing hires orphan " + hdFileName);
-                hdFile.delete();        // TODO check returncode
-            }
-        }
+
+        utils.logAppend(getApplicationContext(),
+                DEBUG_LOG,
+                String.format(loc, "resyncWithDropbox(): LOCAL ADD=%d, DB ADD=%d, DB SKIP=%d",
+                        l_add, db_add, db_skip));
+
+        // TODO how to handle the shared prefs DELETED_ITEMS info?
+        //SharedPreferences.Editor editor = sharedPref.edit();
+        //editor.putStringSet("DELETED_ITEMS", deleted_items);
+        //editor.apply();
 
         // Activate the contents of the new json array
-        parent = dropbox;
+        parent = newjson;
         utils.writeJson(getApplicationContext(), localJson, parent);
         myList.clear();
         addItems();
-        checkMissingThumbs();
+        getMissingApodInfos();
+        utils.cleanupFiles(getApplicationContext(), myList, hd_maxmempct, -1); // MAX_HIRES_PERCENT
         adp.notifyDataSetChanged();
-        getLatestAPOD();
-    }*/
-
-
-    /* processFinish() retired sections...
-    case "DROPBOX_INIT":        // RETIRED - ALL DONE WITH DROPBOX_REFRESH NOW
-                try {
-                    json = new JSONTokener((String) output).nextValue();
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                    return;
-                }
-                if (json != null && json instanceof JSONArray) {
-                    parent = (JSONArray) json;
-                    utils.writeJson(getApplicationContext(), localJson, parent);
-                    addItems();
-                    checkMissingThumbs();
-                    adp.notifyDataSetChanged();
-                    getLatestAPOD();
-                }
-                break;*/
-
-    // processFinish()  - old switch-case sections, not active any more since 2017-12-15
-    // now for the "exact matches"
-    //switch (tag) {
-            /*case "DROPBOX_REFRESH":
-                // TODO - phone rotation and verify, if network checks are done / needed
-                Object json;
-                try {
-                    json = new JSONTokener((String) output).nextValue();
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                    return;
-                }
-                if (json != null && json instanceof JSONArray) {
-                    //refreshFromDropbox((JSONArray) json);
-                    resyncWithDropbox((JSONArray) json,
-                            sharedPref.getBoolean("force_full_dropbox_sync", false));
-                }
-                break;*/
-
-            /*case "VIMEO_INFO":
-                String thumbUrl = "n/a";
-                String videoId = null;
-                //if (status == asyncLoad.FILENOTFOUND) {  // bad status fails in beginning ...
-                //    break;
-                //}
-                try {
-                    JSONObject parent = new JSONObject((String) output);
-                    videoId = parent.getString("video_id");
-                    thumbUrl = parent.getString("thumbnail_url");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                    Log.e("HFCM", e.getMessage());
-                    new dialogDisplay(this, getString(R.string.no_vimeo_thumb),
-                            "VIMEO INFO JSON ERROR");
-                }
-                if (videoId != null) {
-                    apodItem.setThumb("th_" + videoId + ".jpg");   // thumb filename
-                }
-                apodItem.setLowres(thumbUrl);
-                new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(thumbUrl);
-                break;*/
-            /*case "APOD_LOAD":
-                String h = (String)output;
-                // TODO: test 4.1 with tls off - need to handle return code...
-                if (h.startsWith("Connection")) {
-                    new dialogDisplay(MainActivity.this, h + "\n" + getString(R.string.enable_tls), "NASA Connect");
-                    return;
-                }
-                if (utils.isJson(h) == utils.JSON_OBJ) {
-                    //createApodFromJsonString((String) output);
-                    spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(), (String) output);
-                    utils.insertSpaceItem(myList, item);
-                } else {
-                    String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "APOD_LOAD: JSON exception: " + first100);
-                    new dialogDisplay(MainActivity.this,
-                            "No JSON object received - possible captive portal?\nContent: '" +
-                                    first100 + "......'", "APOD_LOAD Debug");
-                    return;
-                }
-                break;*/
-            /*case "IMG_LOWRES_LOAD":
-                if (output instanceof Bitmap) {
-                    finalizeApodWithLowresImage((Bitmap) output);
-                    if (sharedPref.getBoolean("INITIAL_LAUNCH", false)) {
-                        initialLaunch();
-                    }
-                } else {
-                    Log.e("HFCM", "asyncLoad for lowres image did not return a bitmap");
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "IMG_LOWRES_LOAD - no bitmap returned");
-                }
-                break;
-            case "IMG_HIRES_SIZE_QUERY":
-                // Inserted into chain as with vimeo info query
-                String size = (String)output;
-                apodItem.setHiSize(size);
-                new asyncLoad(MainActivity.this, "IMG_LOWRES_LOAD").execute(apodItem.getLowres());
-                break;*/
-    //default:
-    //    break;
-    //}
-    // recursive call is a really bad idea :)
-    // new asyncLoad(this).execute("some url");
+    }
 }

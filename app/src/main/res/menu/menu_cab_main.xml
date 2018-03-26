@@ -64,4 +64,10 @@
         android:title="@string/remove_as_wallpaper"
         app:showAsAction="ifRoom" />
 
+    <item
+        android:id="@+id/cab_cached_remove"
+        android:icon="@drawable/ic_menu_delete_variant"
+        android:title="@string/remove_cachefile"
+        app:showAsAction="ifRoom" />
+
 </menu>

@@ -21,11 +21,13 @@
         android:summary="Setting this option to on causes ALL items on dropbox being merged into your list, even those, that you have deleted before. This might result in a large list."
         android:title="Dropbox force full sync" />
 
+    <!--
     <SwitchPreference
         android:defaultValue="true"
         android:key="get_apod"
         android:summary="Try to load APOD on each start of app. Turn this off for debugging purposes only."
         android:title="Daily Image loading" />
+        -->
 
     <SwitchPreference
         android:defaultValue="false"

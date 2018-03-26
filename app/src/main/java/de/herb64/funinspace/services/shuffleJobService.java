@@ -48,7 +48,7 @@ public class shuffleJobService extends JobService {
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             serviceComponent = new ComponentName(this, shuffleJobService.class);
         }*/
-        Log.i("HFCM", "Shuffle service has been created");
+        //Log.i("HFCM", "Shuffle service has been created");
     }
 
     /**
@@ -57,7 +57,7 @@ public class shuffleJobService extends JobService {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.i("HFCM", "Shuffle service has been destroyed");
+        //Log.i("HFCM", "Shuffle service has been destroyed");
     }
 
     /**
@@ -85,13 +85,17 @@ public class shuffleJobService extends JobService {
     public boolean onStartJob(JobParameters jobParameters) {
         // This is executed on main thread, so put logic in extra thread, then call jobfinshed
         // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
-        Locale loc;
+
+        /*Locale loc;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N){
             loc = getResources().getConfiguration().getLocales().get(0);
         } else{
             //noinspection deprecation
             loc = getResources().getConfiguration().locale;
-        }
+        }*/
+
+        Locale loc = Locale.getDefault();
+
         int count = jobParameters.getExtras().getInt("COUNT");
 
         String wpfile = utils.getRandomWpFileName(this);
@@ -109,10 +113,6 @@ public class shuffleJobService extends JobService {
             SharedPreferences.Editor editor = sharedPref.edit();
             editor.putString("CURRENT_WALLPAPER_FILE", wpfile);
             editor.apply();
-
-            //utils.logAppend(getApplicationContext(),
-            //        MainActivity.DEBUG_LOG,
-            //        "Job" + count + " - SHUFFLE - " + wpfile);
 
             // TODO seems we need custom big view to make it appear expanded - for later...
             // TODO notification on Android O - some problem
@@ -205,17 +205,17 @@ public class shuffleJobService extends JobService {
             builder.setOverrideDeadline(minDelay + 15000);  // TODO: why is deadline needed?
             builder.setPersisted(true);                     // See also manifest!!
 
-            // Extras to pass to the job - well, passing filename not good...
+            // Extras to pass to the job - using a counter - we should drop that later...
             PersistableBundle extras = new PersistableBundle();
             extras.putInt("COUNT", count+1);
             builder.setExtras(extras);
 
-            JobInfo jobInfo = builder.build();
-            Log.i("HFCM", jobInfo.toString());
+            //JobInfo jobInfo = builder.build();
+            //Log.i("HFCM", jobInfo.toString());
 
             // Just in preparation of scheduling apod retrieve job
-            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-            ArrayList<Long> data = utils.getNASAEpoch(sharedPref.getLong("LATEST_APOD_EPOCH", 0));
+            //SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+            //ArrayList<Long> data = utils.getNASAEpoch(sharedPref.getLong("LATEST_APOD_EPOCH", 0));
             String logentry = String.format(loc,
                     "Job %d - SHUFFLE - new file: '%s', time to next: %d seconds",
                     count , wpfile, minDelay/1000);

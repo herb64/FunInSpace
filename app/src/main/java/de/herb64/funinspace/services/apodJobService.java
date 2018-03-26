@@ -42,10 +42,15 @@ import de.herb64.funinspace.helpers.utils;
 public class apodJobService extends JobService {
 
     // Randomize NASA Server access with scheduled operations to avoid "DDOS behaviour"
-    //private static final int MIN_DELAY = 900000;
-    //private static final int MAX_DELAY = 1800000;
+    public static final int APOD_NOTIFY_ID = 998;
     public static final int JOB_ID_APOD = 3124;
+    private static final long DEADLINE = 10000;
     public static final long DEADLINE_DELAY = 300000;
+    private static final long RESCHEDULE_BASE = 30000;
+    private static final long SOCK_TIMEOUT_SCHEDULE_MS = 30000;
+    private static final long SOCK_TIMEOUT_MAX_SCHED = 1200000;
+    private static final long RECHECK_SCHEDULE_MS = 300000;
+    private static final long RECHECK_MAX_SCHED = 3600000;
     public static final String APOD_SCHED_PREFIX = "s___";
     private static final int SOCK_TIMEOUT = 3000;
 
@@ -98,11 +103,12 @@ public class apodJobService extends JobService {
         // https://medium.com/google-developers/scheduling-jobs-like-a-pro-with-jobscheduler-286ef8510129
         // Service is destroyed on app close, but is recreated when job is scheduled
 
-        // TODO: new logic to verify, if correct apod is loaded + retries in case of failure
-        // 1. check for existing valid scheduled apod file (s___<epoch>.json) for today. Valid
+        // TODO: docu logic to verify, if correct apod is loaded + retries in case of failure
+        // 1. Check, if new apod already in local json structure - if so, no action required
+        // 2. check for existing valid scheduled apod file (s___<epoch>.json) for today. Valid
         //    means, that the apod contains a date field (yyyy-mm-dd) matching the correct epoch.
         // a) If it does not exist or is invalid: trigger a the apodJsonLoader and reschedule a new
-        //    run in 2 minutes to verify existence after running apodJsonLoader.
+        //    run to verify existence after running apodJsonLoader.
         // b) If a valid one with current epoch in content exists: done. Schedule for next day
         //    This can be repeated with increasing intervals.
         // By this logic, the app does not give up after one single try. E.g. APOD might be delayed
@@ -118,11 +124,9 @@ public class apodJobService extends JobService {
         // java.lang.IllegalAccessError: Method 'void android.os.BaseBundle.putBoolean(java.lang.String, boolean)' is inaccessible to class 'de.herb64.funinspace.MainActivity'
         boolean tls = true;
 
-        // First step in new logic: check for valid json - this is just the verification, after
-        // which we reschedule for the next day.
         long epoch = utils.getNASAEpoch();
 
-        // add check, if today's epoch already in json (is last entry in this case) - if so, just
+        // Check, if today's epoch already in json (is last entry in this case) - if so, just
         // reschedule for next day
         if (utils.todaysImageAlreadyInList(getApplicationContext(), epoch)) {
             utils.logAppend(getApplicationContext(),
@@ -136,23 +140,32 @@ public class apodJobService extends JobService {
             return true;
         }
 
-        if (utils.haveValidScheduledJson(getApplicationContext(), epoch)) {
+        // This one might not be needed, because loading via range should be done on ui load - this
+        // also makes android 4 load missed images without scheduler. Scheduler now only useful
+        // to send a notification about new image availability
+        //SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+        //long lastUILaunchEpoch = sharedPref.getLong("LAST_UI_LAUNCH_EPOCH", 0);
+
+        // Check for valid json - this is the verification, after which we reschedule for the next day.
+        String sTitle = utils.haveValidScheduledJson(getApplicationContext(), epoch);
+
+        if (sTitle != null) {
             // in this case, just schedule for the next day and keep the json file for processing
             // in getScheduledAPODs(), when user opens the app GUI
             utils.logAppend(getApplicationContext(),
                     MainActivity.DEBUG_LOG,
-                    "onStartJob(" + count + ") - APOD - valid file " +
-                            String.format(loc,
-                                    APOD_SCHED_PREFIX + "%d.json", epoch));
+                    String.format(loc,"onStartJob(%d) - APOD - valid file %s%d.json - '%s'",
+                            count, APOD_SCHED_PREFIX, epoch, sTitle));
 
             // TODO - seems we need custom big view to make it appear expanded...
-            // TODO - notification ids... (998...)
-            // TODO - launch app if clicking...
+            // TODO - notification ids...
 
             NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
-            builder.setContentTitle("New APOD")
-                    .setContentText("New apod loaded")
+            builder.setContentTitle(getString(R.string.notify_apod_title))
+                    .setContentText(getString(R.string.notify_apod_content))
                     .setSmallIcon(R.mipmap.ic_launcher)
+                    .setStyle(new NotificationCompat.BigTextStyle()
+                        .bigText(getString(R.string.notify_apod_content)))
                     .setAutoCancel(true);
             SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
             if (sharedPref.getBoolean("apod_bg_load_sound", false)) {
@@ -167,20 +180,20 @@ public class apodJobService extends JobService {
             notificationIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
                     | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             builder.setContentIntent(pendingIntent);
-            builder.setOngoing(true);
-            builder.setSubText("TODO Herbert: put in more infos here into the notification");
+            builder.setOngoing(false);  // if true, user cannot swipe out the notification (Heinz)
+            builder.setSubText(String.format(loc, getString(R.string.notify_apod_subtext),sTitle));
 
             Notification notification = builder.build();
             NotificationManager notificationManager =
                     (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (notificationManager != null) {
-                notificationManager.notify(998, notification);
+                notificationManager.notify(APOD_NOTIFY_ID, notification);
             } else {
                 utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                         "onStartJob(" + count + ") - APOD - notificationManager is null");
             }
 
-            // TODO - send broadcast to update UI, in case it is open at time of new apod
+            // Send broadcast to update UI, in case it is open at time of new apod
             Intent intent = new Intent();
             //intent.putExtra("NEWWP", wpfile);
             intent.setAction(MainActivity.BCAST_APOD);
@@ -197,15 +210,19 @@ public class apodJobService extends JobService {
                 MainActivity.DEBUG_LOG,
                 "onStartJob(" + count + ") - APOD - currently active network type: " + actNetType);
 
+        // if socket connection test fails, reschedule by increasing interval
         long conntime = utils.testSocketConnect(SOCK_TIMEOUT);
         if (conntime == SOCK_TIMEOUT) {
-            // reschedule by increasing timeout - TODO: handle too large increases
-            long nxt = 30000 + count * 30000;
+            // reschedule by increasing timeout - limit to 20 minutes
+            long nxt = RESCHEDULE_BASE + count * SOCK_TIMEOUT_SCHEDULE_MS;
+            if (nxt > SOCK_TIMEOUT_MAX_SCHED) {
+                nxt = SOCK_TIMEOUT_MAX_SCHED;
+            }
             utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                     "onStartJob(" + count + ") - testSocketConnect TIMEOUT (" + conntime + "ms), reschedule by " + nxt/1000 + " seconds...");
             // finish and schedule retry
             jobFinished(jobParameters, false);  // false: no reschedule, work is done
-            scheduleNext(nxt, 10000, count, url);
+            scheduleNext(nxt, DEADLINE, count, url);
             return true;
         } else {
             count = 0;
@@ -221,38 +238,13 @@ public class apodJobService extends JobService {
                 tls);
         new Thread(loader).start();
 
-        /*utils.logAppend(getApplicationContext(),
-                MainActivity.DEBUG_LOG,
-                "onStartJob(): Job" + count + " - APOD - " +
-                        String.format(loc,
-                                APOD_SCHED_PREFIX + "%d.json", epoch));*/
-
-        /*Notification notification  = new NotificationCompat.Builder(this)
-                //.setCategory(Notification.CATEGORY_MESSAGE)
-                .setContentTitle("New APOD")
-                .setContentText("New apod loaded")
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setAutoCancel(true)
-                .setSound(Uri.parse("android.resource://"
-                        + this.getPackageName() + "/" + R.raw.newapod))
-                //.setVibrate()
-                //.setVisibility(Notification.VISIBILITY_PUBLIC)
-                .build();
-        NotificationManager notificationManager =
-                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (notificationManager != null) {
-            notificationManager.notify(998, notification);
-        } else {
-            utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                    "onStartJob() - APOD - notificationManager is null");
-        }*/
-
-        // send a broadcast - not needed here - see shuffleJobService.java for code
-
-        //Log.i("HFCM", "Job ID " + jobParameters.getJobId() + " now finished");
+        // reschedule for check in increasing intervals
         jobFinished(jobParameters, false);  // false: need no reschedule, work is done
-        long nxt = 30000 + count * 300000;
-        scheduleNext(nxt, 10000, count, url);
+        long nxt = RESCHEDULE_BASE + count * RECHECK_SCHEDULE_MS;
+        if (nxt > RECHECK_MAX_SCHED) {
+            nxt = RECHECK_MAX_SCHED;
+        }
+        scheduleNext(nxt, DEADLINE, count, url);
         return true;    // no more work to be done with this job
     }
 
@@ -264,7 +256,7 @@ public class apodJobService extends JobService {
      */
     @Override
     public boolean onStopJob(JobParameters jobParameters) {
-        Log.i("HFCM", "onStopJob received: APOD");
+        //Log.i("HFCM", "onStopJob received: APOD");
         return false;   // false: drop the job
     }
 
@@ -293,7 +285,7 @@ public class apodJobService extends JobService {
             builder.setExtras(extras);
 
             JobInfo jobInfo = builder.build();
-            Log.i("HFCM", jobInfo.toString());
+            //Log.i("HFCM", jobInfo.toString());
 
             String logentry = String.format(Locale.getDefault(),
                     "schedNext (%d), Time to next: %d(+%d) seconds (incl. random delay)",
@@ -307,7 +299,7 @@ public class apodJobService extends JobService {
                 scheduler.schedule(builder.build());
             } else {
                 utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                        "scheduleNext() - APOD - null scheduler object - scheduler not built");
+                        "scheduleNext() - APOD - null scheduler object");
             }
         }
     }

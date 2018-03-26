@@ -238,11 +238,15 @@ public class ImageActivity extends AppCompatActivity implements ImgHiresFragment
             explanation = savedInstanceState.getString("explanation");
             title = savedInstanceState.getString("title");
             wallPaperSelectMode = false;
+            // Fix to make "cached" symbol show up immediately, also if phone has been rotated
+            // while in image view.
             if (myBitmap != null) {
                 initializeMatrix();
+                setResult(RESULT_OK, returnIntent);
+            } else {
+                // TODO Docu: it is important to call setResult after restoring instance state again
+                setResult(RESULT_CANCELED, returnIntent);
             }
-            // TODO Docu: it is important to call setResult after restoring instance state again
-            setResult(RESULT_CANCELED, returnIntent);
         } else {
             Intent intent = getIntent();
             strHires = intent.getStringExtra("hiresurl");

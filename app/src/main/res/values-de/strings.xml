@@ -42,8 +42,8 @@
     <string name="lowres_fallback">Anzeige eines niedriger aufgelösten Bildes, wenn die NASA
         das hochauflösende Bild nicht bereitstellt, was zuweilen geschehen kann.</string>
     <string name="fallback_lowres_title">Alternatives niedrig auflösendes Bild (noch nicht aktiv)</string>
-    <string name="warn_apod_disable">Du hast aktuell das Laden von neuen täglichen Bildern
-        ausgeschaltet. Bitte überprüfe die Einstellungen, um kein Bild zu verpassen.</string>
+    <!--<string name="warn_apod_disable">Du hast aktuell das Laden von neuen täglichen Bildern
+        ausgeschaltet. Bitte überprüfe die Einstellungen, um kein Bild zu verpassen.</string>-->
     <string name="reminder">Erinnerung</string>
     <string name="no_email_client">Ich konnte leider keinen passenden e-mail Client auf
         Deinem Phone finden.</string>
@@ -87,12 +87,14 @@
     <string name="action_filter">Filter</string>
 
     <!-- Dropbox related stuff -->
-    <string name="dropbox_init_mobile">FunInSpace does now initialize and you can choose to load a
-        bunch of more historical image data. You have no wifi active currently. Do you want to
-        load the data anyway? You can decide to load at a later time using Resync</string>
-    <string name="dropbox_init_wifi">FunInSpace does now initialize and you can choose to load a
-        bunch of historical data to have some images available. You can later on sync as well.</string>
-    <string name="dropbox_init_no_network">Du hast keine aktive Netzwerkverbindung. Bitte starte die
+    <string name="init_mobile">FunInSpace wurde zum ersten Mal gestartet. Du kannst neben
+    dem heutigen Bild die Bilder der letzten %d Tage laden um Deine Liste schon einmal zu füllen.
+    Wifi ist nicht aktiv. Möchtest Du trotzdem diese Bilder jetzt laden? Du kannst jederzeit auch
+    Bilder über die Archiv Suche nachladen.</string>
+    <string name="init_wifi">FunInSpace wurde zum ersten Mal gestartet. Du kannst neben
+    dem heutigen Bild die Bilder der letzten %d Tage laden um Deine Liste schon einmal zu füllen.
+    Du kannst auch später noch Bilder nachladen. Allerdings ist die Suche noch nicht verfügbar.</string>
+    <string name="init_no_network">Du hast keine aktive Netzwerkverbindung. Bitte starte die
         App neu, wenn Du in ein Netzwerk verbunden bist.</string>
     <string name="refresh_content">Sync mit Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Bilderliste aktualisieren</string>
@@ -284,7 +286,7 @@
     <string name="rgb565_thumbs_title">Thumbnail Farbauflösung</string>
     <string name="apod_already_loaded">Bild des Tages bereits geladen. Nächstes Bild in %.1f Stunden verfügbar.</string>
     <string name="email_log">Email Log an Herbert</string>
-    <string name="search_nasa_archive">Suche NASA Archiv (zukünftig)</string>
+    <string name="search_nasa_archive">Suche im NASA Archiv</string>
     <string name="wp_shuffle_enabled">Das Hintergrundbild wird zu den vollen Stunden die Du in der
         Einstellung "Shuffle Zeiten" gewählt hast, mit einem zufälligen Bild aus Deinen FunInSpace
         Hintergründen gesetzt.</string>
@@ -348,4 +350,26 @@
     <string name="version_update_201801281">* Informationen zum täglichen Bild werden nun standardmäßig
     täglich geladen, auch wenn die App nicht gestartet wurde. Du kannst das in den Einstellungen
     wieder abschalten.</string>
+    <string name="version_update_201803261">* Entschuldigung für die lange Verzögerung. Die Abstürze
+        seit 05.03.2018 durch einen nicht abgefangenen NASA link sind nun endlich gefixt. Das
+        Synchronisieren mit meiner Dropbox ist nun entfernt. Stattdessen kannst du erstmal über die
+        NASA Archiv Suchfunktion Bilder nachladen.</string>
+
+    <string name="remove_cachefile">Lösche lokale Kopie</string>
+    <string name="notify_apod_title">Fun In Space neues Bild</string>
+    <string name="notify_apod_content">Eine neue Bildinformation ist im Hintergrund geladen worden.</string>
+    <string name="notify_apod_subtext">Titel: \'%s\'</string>
+
+    <string name="archive_search_title">NASA Archiv Suche</string>
+    <string name="archive_search_no_match">Keine Bilder mit \'%s\' im Titel gefunden für den angegebenen Zeitraum
+    von %s bis %s. %d Bilder stimmten nicht mit dem Suchbegriff überein. %d Bilder entsprachen zwar
+    dem Suchbegriff, aber wurden als vorher gelöscht nicht erneut geladen, da das Flag hierzu nicht
+    gesetzt war.</string>
+    <string name="archive_search_string_hint">Suchbegriff (optional)</string>
+    <string name="archive_search_explain">Suche nach Bildern in einem Datumsbereich. Begrenzt auf %d
+    Tage. Optional kann ein Suchwort mitgegeben werden.</string>
+    <string name="archive_search_case_sensitive">Suche mit Groß/Kleinschreibung</string>
+    <string name="archive_search_reload_deleted">Bereits gelöschte Bilder ebenfalls laden</string>
+    <string name="archive_search_do_search">Suchen</string>
+    <string name="archive_search_cancel">Abbruch</string>
 </resources>

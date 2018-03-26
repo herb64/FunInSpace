@@ -223,8 +223,8 @@
     <string name="lowres_fallback">Fall back to lower resolution image if NASA has a bad link
         for hires image, which happens from time to time</string>
     <string name="fallback_lowres_title">Fallback to lowres (NOT YET ACTIVE)</string>
-    <string name="warn_apod_disable">You have currently disabled the load of new daily images.
-        Please change your settings to avoid missing the daily image.</string>
+    <!--<string name="warn_apod_disable">You have currently disabled the load of new daily images.
+        Please change your settings to avoid missing the daily image.</string>-->
     <string name="reminder">Reminder</string>
     <string name="no_email_client">Could not find any suitable e-mail client on your device</string>
     <string name="no_vimeo_thumb">Could not create a thumbnail image for this Vimeo video</string>
@@ -256,18 +256,20 @@
     <string name="action_filter">Filter</string>
 
     <!-- Dropbox related stuff -->
-    <string name="dropbox_init_mobile">FunInSpace does now initialize and you can choose to load
-        a bunch of more historical image data. You have no wifi active currently. Do you want
-        to load the data anyway? You can decide to load at any time using Resync</string>
-    <string name="dropbox_init_wifi">FunInSpace does now initialize and you can choose to load a
-        bunch of historical data to have some images available. You can sync at any later time as well.</string>
-    <string name="dropbox_init_no_network">You do not have any active network connection. Please
+    <string name="init_mobile">FunInSpace does now initialize and you can choose to load
+        images of the last %d days to fill your list. You have no wifi active currently. Do you want
+        to load the data now anyway? You can load images via NASA archive search at any time.</string>
+    <string name="init_wifi">FunInSpace does now initialize and you can choose to load
+        images of the last %d days to fill your list.</string>
+    <string name="init_no_network">You do not have any active network connection. Please
         start the app again with an active network.</string>
     <string name="refresh_content">Resync with Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Refresh of image list</string>
     <string name="refresh_dropbox_message">Do you want to refresh your image list with my (Herbert\'s)
         Dropbox informations? Images, that you have deleted, will not be loaded again. If you want
         to reload these deleted images, click "FULL SYNC".</string>
+
+
 
     <string name="search_option">Full Search</string>
     <string name="full_search_explain">Search in explanation text in addition to title only</string>
@@ -296,7 +298,7 @@
     <string name="rgb565_thumbs_title">Thumbnail color quality</string>
     <string name="apod_already_loaded">Image of today already loaded. Next image available in %.1f hours</string>
     <string name="email_log">Email log to Herbert</string>
-    <string name="search_nasa_archive">Search NASA Archive (future)</string>
+    <string name="search_nasa_archive">Search NASA Archive</string>
     <string name="wp_shuffle_enabled">Schedule has been set to change the wallpaper at full hours
         selected by you in setting "Shuffle Times" randomly from those wallpapers, that you have
         currently selected.
@@ -358,4 +360,25 @@
         the image. You can disable the reading in settings.</string>
     <string name="version_update_201801281">* The app does now load infos about the daily image in
     background by default, even if it is not running. You can disable this in in settings.</string>
+    <string name="version_update_201803261">* My apologies for the long delay. Finally I fixed the
+        crash from 05.03.2018, caused by an unhandled link from NASA.\nThe dropbox sync has now been
+        removed. You can now use the new NASA archive search to load images instead. This still
+    might need some improvement.</string>
+
+    <string name="remove_cachefile">Remove local copy</string>
+    <string name="notify_apod_title">Fun In Space new image</string>
+    <string name="notify_apod_content">New daily image info has been loaded in background.</string>
+    <string name="notify_apod_subtext">Title: \'%s\'</string>
+
+    <string name="archive_search_title">NASA Archive search</string>
+    <string name="archive_search_no_match">No images found matching \'%s\' within given date range
+        from %s to %s. %d items did not match the search string. %d previously deleted items did
+    match but have not been loaded because the flag was not set.</string>
+    <string name="archive_search_string_hint">Search string (optional)</string>
+    <string name="archive_search_explain">Select a date range, currently limited to %d days. Optional
+        search string can be entered as well.</string>
+    <string name="archive_search_case_sensitive">Search case sensitive</string>
+    <string name="archive_search_reload_deleted">Also reload previously deleted images</string>
+    <string name="archive_search_do_search">Search</string>
+    <string name="archive_search_cancel">Cancel</string>
 </resources>

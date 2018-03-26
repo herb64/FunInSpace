@@ -41,7 +41,7 @@
 
     <item
         android:id="@+id/action_search_apod"
-        android:enabled="false"
+        android:enabled="true"
         android:icon="@drawable/ic_search_cloud"
         android:orderInCategory="93"
         android:title="@string/search_nasa_archive"
@@ -128,10 +128,12 @@
     <!-- android:icon="@android:drawable/ic_popup_sync" -->
     <item
         android:id="@+id/dropbox_sync"
+        android:enabled="false"
+        android:icon="@drawable/ic_sync_black_24dp"
         android:orderInCategory="90"
         android:title="@string/refresh_content"
-        app:showAsAction="ifRoom"
-        android:icon="@drawable/ic_sync_black_24dp" />
+        android:visible="false"
+        app:showAsAction="ifRoom" />
 
     <!-- Add restore wallpaper option for test users to be able to revert to their original
          android:icon="@android:drawable/ic_menu_revert"-->

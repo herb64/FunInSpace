@@ -59,7 +59,7 @@ public class AboutDialog extends Dialog {
         TextView tvThksTitle = findViewById(R.id.tv_about_thanks_title);
         TextView tvThksContent = findViewById(R.id.tv_about_thanks_content);
         tvThksTitle.setText("Special thanks");
-        tvThksContent.setText("Special thanks for very early testing to Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger, Gerhard Biefel");
+        tvThksContent.setText("Special thanks for very early testing to Klaus Eckel, Michael Lauffs, Jonathan Hermann, Markus Hilger, Gerhard Biefel, Heinz Günther, Heiko Kretsch");
         tvThksContent.setTextSize(10f);
 
         /* WebView: does load once, then not ... alternating. loadUrl does not work at all...

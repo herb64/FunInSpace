@@ -1,5 +1,6 @@
 package de.herb64.funinspace.helpers;
 
+import android.provider.Settings;
 import android.support.v4.app.FragmentManager;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
@@ -45,6 +46,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.RandomAccessFile;
 import java.lang.reflect.Array;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
@@ -189,6 +191,69 @@ public final class utils {
     }
 
     /**
+     * Experimental
+     * @param ctx context
+     * @param filename filename to write to
+     * @param content content
+     */
+    public static void logWrapped(Context ctx, String filename, String content) {
+        //info(content);
+        if (ctx == null) {
+            return;
+        }
+        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(ctx);
+        long ptr = sharedPref.getLong("LOG_FILE_POINTER", 0);
+        //SharedPreferences.Editor editor = sharedPref.edit();
+        //editor.putLong("LOG_FILE_POINTER", 1000);
+        //editor.apply();
+        // keep the current pointer to the next write position in shared prefs
+        String timestamp = new SimpleDateFormat(LOG_TS_FORMAT,Locale.getDefault()).
+                format(System.currentTimeMillis());
+        String logentry = timestamp + " > " + content + "\n";
+        File logFile = new File(ctx.getFilesDir(), filename);
+        RandomAccessFile file = null;
+        try {
+            file = new RandomAccessFile(logFile, "rw");
+            long currentLength = file.length();
+            file.seek(ptr);
+            if (currentLength + logentry.length() > 300) {
+                //file.setLength(0);
+                file.seek(0);
+            }
+            //file.seek(file.length());
+            //file.seek(0);
+            file.write(logentry.getBytes());
+            file.close();
+        } catch (FileNotFoundException e1) {
+            e1.printStackTrace();
+        } catch (IOException e) {
+            Log.e("HFCM", "writeToFile()", e);
+        }
+    }
+
+    /**
+     * Experimental
+     * @param ctx context
+     * @param wrapfile wrapped file
+     * @param outfile output file (to be sent as log)
+     */
+    public static void getWrappedLogContents(Context ctx, String wrapfile, String outfile) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            FileInputStream fin = ctx.openFileInput(wrapfile);
+            int ch;
+            while ((ch = fin.read()) != -1) {
+                sb.append((char) ch);
+            }
+            fin.close();
+        } catch (IOException e) {
+            Log.e("HFCM", "printFileContents()", e);
+        }
+        Log.d("HFCM", "current content: " + sb.toString());
+        writef(ctx, outfile, sb.toString());
+    }
+
+    /**
      * Append content with timestamp to a given logfile
      * @param ctx context
      * @param filename filename to append to
@@ -315,7 +380,7 @@ public final class utils {
 
     /**
      * Get simple value of NASA epoch for current day at 00:00:00
-     * @return
+     * @return epoch value or 0 if error
      */
     public static long getNASAEpoch() {
         Locale loc = Locale.getDefault();
@@ -337,7 +402,7 @@ public final class utils {
     }
 
     /**
-     * Calculate some epoch values based on TimeZone New York //TODO cleanup - lot of unused stuff..
+     * Calculate some epoch values based on TimeZone New York
      * TODO: checkout DateTimeFormatter as modern way in Java to handle dates/times
      * @param latestImgEpoch epoch from latest image or 0, if no delta to next img needed
      * @return ArrayList of 3 long values containing epoch values:
@@ -523,6 +588,73 @@ public final class utils {
     }
 
     /**
+     * Create string in "NASA format" for API date queries from a given epoch value
+     * @param epoch epoch to be converted
+     * @return String in yyyy-mm-dd format
+     */
+    public static String getNASAStringFromEpoch(long epoch) {
+        SimpleDateFormat dF = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        dF.setTimeZone(tzNASA);
+        dF.setCalendar(Calendar.getInstance(tzNASA));
+        return dF.format(epoch);
+    }
+
+
+    /** TODO: new function for using range of apods query
+     * Get next day's epoch value for a given epoch - used to iterate day by day. We could just add
+     * 86400000 milliseconds, but using calendar is safe for leap seconds etc..
+     * @param epoch base epoch
+     * @return the epoch for the next day 00:00:00
+     */
+    public static long getNextDaysEpoch(long epoch) {
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        Calendar cNASA = Calendar.getInstance(tzNASA);
+        cNASA.setTimeInMillis(epoch);
+        cNASA.add(Calendar.DATE, 1);    // add 1 day here
+        String yyyymmddNASA = String.format(Locale.getDefault(), "%04d-%02d-%02d",
+                cNASA.get(Calendar.YEAR),
+                cNASA.get(Calendar.MONTH) + 1,
+                cNASA.get(Calendar.DAY_OF_MONTH));
+        return getEpochFromDatestring(yyyymmddNASA);
+    }
+
+    /**
+     * Get epoch value for one month before. Note: e.g. for 30.03. this returns 28.02.
+     * @param epoch current date epoch
+     * @return the epoch for one month before 00:00:00
+     */
+    public static long getMonthBeforeEpoch(long epoch) {
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        Calendar cNASA = Calendar.getInstance(tzNASA);
+        cNASA.setTimeInMillis(epoch);
+        cNASA.add(Calendar.MONTH, -1);  // one month before
+        String yyyymmddNASA = String.format(Locale.getDefault(), "%04d-%02d-%02d",
+                cNASA.get(Calendar.YEAR),
+                cNASA.get(Calendar.MONTH) + 1,
+                cNASA.get(Calendar.DAY_OF_MONTH));
+        return getEpochFromDatestring(yyyymmddNASA);
+    }
+
+    /**
+     * Get epoch value for 'n' days before current date
+     * @param epoch current date epoch
+     * @param days number of days to go back
+     * @return the epoch for the resulting day 00:00:00
+     */
+    public static long getDaysBeforeEpoch(long epoch, int days) {
+        TimeZone tzNASA = TimeZone.getTimeZone("America/New_York");
+        Calendar cNASA = Calendar.getInstance(tzNASA);
+        cNASA.setTimeInMillis(epoch);
+        cNASA.add(Calendar.DATE, -days);  // n days before
+        String yyyymmddNASA = String.format(Locale.getDefault(), "%04d-%02d-%02d",
+                cNASA.get(Calendar.YEAR),
+                cNASA.get(Calendar.MONTH) + 1,
+                cNASA.get(Calendar.DAY_OF_MONTH));
+        return getEpochFromDatestring(yyyymmddNASA);
+    }
+
+    /**
      * Get the milliseconds from current time to next full hour.
      * @param locale locale
      * @return long ms to wait for full hour
@@ -670,10 +802,14 @@ public final class utils {
     public static ArrayList<Integer> cleanupFiles(Context ctx, ArrayList<spaceItem> items, int maxPercent, int skip) {
         // filenamefilter does not allow wildcard... could use java.nio.file... but not avail..
         long maxHdMem = getAvailableInternalMem() * maxPercent / 102400;
-        Log.i("HFCM", "avail bytes: " + getAvailableInternalMem() + ", percent: " + maxPercent + ", resulting max KIB:" + maxHdMem);
+        //Log.i("HFCM", "avail bytes: " + getAvailableInternalMem() + ", percent: " + maxPercent + ", resulting max KIB:" + maxHdMem);
 
         //String logString = "";
-        logAppend(ctx, MainActivity.DEBUG_LOG, "Starting file cleanup with maxHdMem " + maxHdMem + "KiB");
+        logAppend(ctx, MainActivity.DEBUG_LOG,
+                "cleanupFiles(): avail bytes: " + getAvailableInternalMem() +
+                        ", percent: " + maxPercent +
+                        ", resulting max KIB:" + maxHdMem);
+        //logAppend(ctx, MainActivity.DEBUG_LOG, "Starting file cleanup with maxHdMem " + maxHdMem + "KiB");
         // Create array lists of all th/wp/hd files in filesystem - potential orphans list
         ArrayList<String> orphans = new ArrayList<>();
         File dir = new File(ctx.getFilesDir().getPath());
@@ -908,16 +1044,19 @@ public final class utils {
      * Create a spaceItem with null thumbnail image from a given json file
      * @param ctx context
      * @param filename JSON file
-     * @return spaceItem (empty if error)
+     * @return spaceItem (null if error, e.g. file not found)
      */
     public static spaceItem createSpaceItemFromJsonFile(Context ctx, String filename) {
-        spaceItem item = new spaceItem();
+        //spaceItem item = new spaceItem(); // new is redundant
         String content = readf(ctx, filename);
         // TODO - check with isJson and check, if it is a NASA json (e.g. has correct attr)
         if (content != null) {
-            item = createSpaceItemFromJsonString(ctx, content);
+            //item = createSpaceItemFromJsonString(ctx, content);
+            return createSpaceItemFromJsonString(ctx, content);
+        } else {
+            return null;
         }
-        return item;
+        //return item;
     }
 
     /**
@@ -988,6 +1127,7 @@ public final class utils {
         // At this point sMediaType contains the NASA delivered string. This gets changed now to
         // a more specific media type information. It's a little bit messy, because NASA delivered
         // an MP4 stream as media type "image" on 13.11.2017... need to catch such error situations
+        // 05.03.2018 - NASA returned html link as url with media_type "video"
         if (resource_uri != null) {
             String hiresPS = Uri.parse(sHiresUrl).getLastPathSegment();
             if (sMediaType.equals("video")) {
@@ -1018,6 +1158,11 @@ public final class utils {
                     // thumbnail image name: th_<video-id>.jpg
                     // Note: this needs a REST API call to gather the required infos..
                     item.setLowres("");     // to be filled with thumbnail URL later
+                } else if (imgUrl.endsWith(".html")) {                                                         // TODO BAD HACK !!!!!!!!!!!!!!!
+                    // TODO; bad hack here for html from nasa, see 2018.03.05                                    !!!!!!!!!!!!!!!
+                    sMediaType = MainActivity.M_HTML_VIDEO;
+                    item.setThumb("th_UNKNOWN.jpg");
+                    item.setLowres(imgUrl);
                 } else {
                     // TODO: MP4 handling for correct media type video
                     if (hiresPS.endsWith(".mp4") || hiresPS.endsWith(".MP4")) {
@@ -1121,6 +1266,13 @@ public final class utils {
         */
     }
 
+    /**
+     * Check, if the image for today is already contained in the local json. This might be the case
+     * if the user starts the UI on the current day, but APOD has not yet been changed by NASA
+     * @param ctx context
+     * @param epoch epoch value of current day
+     * @return
+     */
     public static boolean todaysImageAlreadyInList(Context ctx, long epoch) {
         String jsonData = null;
         long latestEpoch = 0;
@@ -1146,31 +1298,33 @@ public final class utils {
     }
 
     /**
-     * Check, if we have a valid scheduled NASA Json file for the current day
+     * Check, if we have a valid scheduled NASA Json file for the current day. If yes, the title
+     * of this image is returned.
      * @param ctx context
      * @param epoch epoch
-     * @return true, if file is found
+     * @return String with title of image. If no valid json for this day: null
      */
-    public static boolean haveValidScheduledJson(Context ctx, long epoch) {
+    public static String haveValidScheduledJson(Context ctx, long epoch) {
         String name = apodJobService.APOD_SCHED_PREFIX + epoch + ".json";
         String content = readf(ctx, name);
         if (content == null) {
-            return false;
+            return null;
         }
         try {
             JSONObject parent = new JSONObject(content);
             String sDate = parent.getString("date");
+            String sTitle = parent.getString("title");
             if (sDate != null) {
                 long epoch2 = getEpochFromDatestring(sDate);
                 if (epoch2 == epoch) {
-                    return true;
+                    return sTitle;
                 }
             }
             // here, the file seems to exist, but does not contain a valid json - delete the file?
         } catch (JSONException e) {
             e.printStackTrace();
         }
-        return false;
+        return null;
     }
 
     /**
@@ -1178,30 +1332,41 @@ public final class utils {
      * are skipped.
      * @param list The arraylist, into which items get inserted
      * @param newitem The new item to be inserted
-     * @return true if success - currently not used
+     * @return integer with index of insertion point, -1 if not inserted
      */
-    public static boolean insertSpaceItem(ArrayList<spaceItem> list, spaceItem newitem) {
+    public static int insertSpaceItem(ArrayList<spaceItem> list, spaceItem newitem) {
         // Iterate through the list. Most likely the item is to be added at the beginning of the
         // list, because this is called for items with current epoch values - so iteration should
         // be very short. ArrayList is sorted by descending epochs.
+        // TODO: Rethink, if search allows for old date ranges as well - iteration count
         long newepoch = newitem.getDateTime();
         String newtitle = newitem.getTitle();
         int idx = 0;
         for (spaceItem item : list) {
             if (item.getTitle().equals(newtitle)) {
                 Log.i("HFCM", "insertSpaceItem() - title already in list, index " + idx + " - " + newtitle);
-                return false;
+                return -1;
             }
             if (newepoch > item.getDateTime()) {
                 list.add(idx, newitem);
                 Log.i("HFCM", "insertSpaceItem() - insert at index " + idx + " - " + newtitle);
-                return true;
+                return idx;
             }
             idx++;
         }
         Log.i("HFCM", "insertSpaceItem() - append at end - " + newtitle);
         list.add(newitem);
-        return true;
+        return list.size()-1;
+    }
+
+    /**
+     * Check, if we are in airplane mode
+     * @param ctx
+     * @return
+     */
+    public static boolean isAirPlaneMode(Context ctx) {
+        return Settings.Global.getInt(ctx.getContentResolver(),
+                Settings.System.AIRPLANE_MODE_ON, 0) != 0;
     }
 
 
