@@ -8,6 +8,7 @@ import android.widget.Filter;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 
+import de.herb64.funinspace.helpers.utils;
 import de.herb64.funinspace.models.spaceItem;
 
 /**
@@ -93,6 +94,8 @@ public class spaceItemFilter extends Filter {
         ArrayList<spaceItem> filteredItems = new ArrayList<>();
         idxMap.clear();
         int key = 0;
+        boolean isCaseSensitive = adapter.isCaseSensitive();
+        boolean isFullSearch = adapter.getFullSearch();
         for (int i = 0; i< filterList.size(); i++) {
             if (adapter.getFullSearch()) {
                 if (filterList.get(i).getTitle().toUpperCase().contains(filterTerm) ||
@@ -106,15 +109,42 @@ public class spaceItemFilter extends Filter {
                     idxMap.append(key++, i);
                 }
             }
+            /*if (isCaseSensitive) {
+                if (isFullSearch) {
+                    if (filterList.get(i).getTitle().contains(filterTerm) ||
+                            filterList.get(i).getExplanation().contains(filterTerm)) {
+                        filteredItems.add(filterList.get(i));
+                        idxMap.append(key++, i);
+                    }
+                } else {
+                    if (filterList.get(i).getTitle().contains(filterTerm)) {
+                        filteredItems.add(filterList.get(i));
+                        idxMap.append(key++, i);
+                    }
+                }
+
+            } else {
+                if (isFullSearch) {
+                    if (utils.stringContainsCaseInsensitive(filterList.get(i).getTitle(), filterTerm) ||
+                            utils.stringContainsCaseInsensitive(filterList.get(i).getTitle(), filterTerm)) {
+                        filteredItems.add(filterList.get(i));
+                        idxMap.append(key++, i);
+                    }
+                } else {
+                    if (utils.stringContainsCaseInsensitive(filterList.get(i).getTitle(), filterTerm)) {
+                        filteredItems.add(filterList.get(i));
+                        idxMap.append(key++, i);
+                    }
+                }
+            }*/
         }
         return filteredItems;
     }
 
     /**
-     * The NEW FILTER function for NON TEXT search (filter my media type, rating, wallpaper...)
+     * FILTER function for NON TEXT constraints (e.g. by media type, rating, wallpaper status ...)
      * Search for space items, that match constraints, which are passed in a special format string.
-     * This one exists as alternative to the text search and allows to filter for other constraints
-     * such as rating, mediatype, wallpaper status or any other feature.
+     * This one exists as alternative to the text search.
      * @param s the constraints string (rating:video:wp:width:height)
      * @return The matching space items in an array list
      */

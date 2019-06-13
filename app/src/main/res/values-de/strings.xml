@@ -96,15 +96,17 @@
     Du kannst auch später noch Bilder nachladen. Allerdings ist die Suche noch nicht verfügbar.</string>
     <string name="init_no_network">Du hast keine aktive Netzwerkverbindung. Bitte starte die
         App neu, wenn Du in ein Netzwerk verbunden bist.</string>
-    <string name="refresh_content">Sync mit Herbert\'s Dropbox</string>
+    <!--<string name="refresh_content">Sync mit Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Bilderliste aktualisieren</string>
     <string name="refresh_dropbox_message">Möchtest Du Deine Bilderliste mit meiner (Herbert\'s)
         Dropbox aktualisieren? Du kannst dies jederzeit tun. Bilder, die Du gelöscht hast,
         werden nicht erneut von der Dropbox Liste geladen. Wenn Du diese gelöschten Bilder ebenfalls
-        wieder laden möchtest, klicke auf "ALLE BILDER".</string>
+        wieder laden möchtest, klicke auf "ALLE BILDER".</string>-->
 
-    <string name="search_option">Vollsuche</string>
-    <string name="full_search_explain">Suche in Titel und zusätzlich in Beschreibungstext</string>
+    <string name="case_sensitive_option">Groß/Kleinschreibung</string>
+    <string name="case_sensitive_search_explain">Suche und Filter mit Berücksichtigung von Groß/Kleinschreibung</string>
+    <string name="search_option">Vollsuche/filter</string>
+    <string name="full_search_explain">Suche und Filter in Titel und zusätzlich im Beschreibungstext</string>
     <string name="test_mail_text">Nur eine Test e-mail. Im Anhang ist das Debug Logfile für die App
         während der Testphase. TIP: setze Dich auf Kopie, dann kannst Du lesen, was
         verschickt wurde. :)</string>
@@ -324,7 +326,7 @@
     7 Uhr, daher ist die Einstellung standardmäßig abgeschaltet.</string>
     <string name="privacy_policy">Datenschutzerklärung</string>
     <string name="action_help">Hilfe</string>
-    <string name="dropbox_reload_fullsync">ALLE BILDER</string>
+    <!--<string name="dropbox_reload_fullsync">ALLE BILDER</string>-->
 
     <!-- Setting of hires cache limit -->
     <string name="hd_cachelimit_title">Speicherlimit für Bilder</string>
@@ -354,6 +356,9 @@
         seit 05.03.2018 durch einen nicht abgefangenen NASA link sind nun endlich gefixt. Das
         Synchronisieren mit meiner Dropbox ist nun entfernt. Stattdessen kannst du erstmal über die
         NASA Archiv Suchfunktion Bilder nachladen.</string>
+    <string name="version_update_201906111">* Quick fix für das Problem, daß eine Livestream
+        URL der NASA am 02.06.2019 zu einem Crash führt. Der Livestream kann noch nicht gespielt
+        werden, daran wird noch gearbeitet (ustream.tv).</string>
 
     <string name="remove_cachefile">Lösche lokale Kopie</string>
     <string name="notify_apod_title">Fun In Space neues Bild</string>
@@ -372,4 +377,7 @@
     <string name="archive_search_reload_deleted">Bereits gelöschte Bilder ebenfalls laden</string>
     <string name="archive_search_do_search">Suchen</string>
     <string name="archive_search_cancel">Abbruch</string>
+    <string name="archive_search_exceeded">Der maximal erlaubte Suchzeitraum von %d Tagen ist
+    überschritten. Bitte selektiere ein kleineres Intervall.</string>
+    <string name="archive_search_full">Suche in Titel UND Erklärung</string>
 </resources>

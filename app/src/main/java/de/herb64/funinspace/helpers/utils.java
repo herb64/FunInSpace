@@ -789,9 +789,6 @@ public final class utils {
     /**
      *  Cleanup: - remove any orphaned wallpaper/thumbnail/hires image files
      *           - remove hires images if max space exceeded (size and rating dependent)
-     *           - TODO: removing local json copies of nasa data (maybe those older than 100 days)
-     *                   note, that these are lost forever after deletion. But on any user device
-     *                   they are not needed at all...
      *           - TODO: handle too many wallpaper files eating up memory
      * @param ctx context
      * @param items arraylist with spaceitems
@@ -1110,12 +1107,11 @@ public final class utils {
             }
             sExplanation = parent.getString("explanation");
 
-            // Keep local copy of original NASA JSON as reference for debugging. This content can
-            // only be loaded on the specific day, else never again (see also cleanupFiles)
-            if (sDate != null) {
+            // Keep local copy of original NASA JSON as reference for debugging.
+            /*if (sDate != null) {
                 long epoch = getEpochFromDatestring(sDate);
                 utils.writeJson(ctx, String.valueOf(epoch) + ".json", parent);
-            }
+            }*/
         } catch (JSONException e) {
             e.printStackTrace();
             logAppend(ctx, MainActivity.DEBUG_LOG,
@@ -1128,6 +1124,9 @@ public final class utils {
         // a more specific media type information. It's a little bit messy, because NASA delivered
         // an MP4 stream as media type "image" on 13.11.2017... need to catch such error situations
         // 05.03.2018 - NASA returned html link as url with media_type "video"
+        // 08.08.2018 - NASA returned link https://www.meteorshowers.org/view/iau-7 - type "video"
+        //              for this interactive website...
+        // 03.06.2019 - NASE returns link to ustream.com - live stream
         if (resource_uri != null) {
             String hiresPS = Uri.parse(sHiresUrl).getLastPathSegment();
             if (sMediaType.equals("video")) {
@@ -1160,6 +1159,11 @@ public final class utils {
                     item.setLowres("");     // to be filled with thumbnail URL later
                 } else if (imgUrl.endsWith(".html")) {                                                         // TODO BAD HACK !!!!!!!!!!!!!!!
                     // TODO; bad hack here for html from nasa, see 2018.03.05                                    !!!!!!!!!!!!!!!
+                    sMediaType = MainActivity.M_HTML_VIDEO;
+                    item.setThumb("th_UNKNOWN.jpg");
+                    item.setLowres(imgUrl);
+                } else if (host.equals("www.ustream.tv")) {
+                    // TODO: bad hack only for ustream.tv, 02.06.2019 image of the day
                     sMediaType = MainActivity.M_HTML_VIDEO;
                     item.setThumb("th_UNKNOWN.jpg");
                     item.setLowres(imgUrl);
@@ -1731,6 +1735,32 @@ public final class utils {
             e.printStackTrace();
             return 0;
         }
+    }
+
+    /**
+     * Check if string is contained in another string in CASE INSENSITIVE way. See also
+     * https://stackoverflow.com/questions/86780/how-to-check-if-a-string-contains-another-string-in-a-case-insensitive-manner-in/25379180#25379180
+     * @param base      the base string
+     * @param toFind    the string to be found in base string
+     * @return          true, if string is contained, false if not or string is empty
+     */
+    public static boolean stringContainsCaseInsensitive(String base, String toFind) {
+        int findLength = toFind.length();
+        if (findLength == 0 || findLength > base.length()) {
+            return false;
+        }
+        final char findLC = Character.toLowerCase(toFind.charAt(0));
+        final char findUC = Character.toUpperCase(toFind.charAt(0));
+        for (int i = base.length() - findLength; i>= 0; i--) {
+            final char baseCH = base.charAt(i);
+            if (baseCH != findLC && baseCH != findUC) {
+                continue;
+            }
+            if (base.regionMatches(false, i, toFind, 0, findLength)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

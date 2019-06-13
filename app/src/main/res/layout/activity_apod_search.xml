@@ -81,18 +81,24 @@
             android:hint="@string/archive_search_string_hint" />
     </android.support.design.widget.TextInputLayout>
 
+    <!--Checkboxes clicked handler currently deactivated again
+        android:onClick="onCbClicked"-->
     <CheckBox
         android:id="@+id/cb_archive_search_case_sensitive"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:onClick="onCbClicked"
         android:text="@string/archive_search_case_sensitive" />
+
+    <CheckBox
+        android:id="@+id/cb_archive_search_full"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/archive_search_full" />
 
     <CheckBox
         android:id="@+id/cb_archive_search_reload_deleted"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:onClick="onCbClicked"
         android:text="@string/archive_search_reload_deleted" />
 
     <LinearLayout

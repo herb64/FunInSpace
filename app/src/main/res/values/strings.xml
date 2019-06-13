@@ -263,16 +263,17 @@
         images of the last %d days to fill your list.</string>
     <string name="init_no_network">You do not have any active network connection. Please
         start the app again with an active network.</string>
-    <string name="refresh_content">Resync with Herbert\'s Dropbox</string>
+    <!--<string name="refresh_content">Resync with Herbert\'s Dropbox</string>
     <string name="refresh_dropbox_title">Refresh of image list</string>
     <string name="refresh_dropbox_message">Do you want to refresh your image list with my (Herbert\'s)
         Dropbox informations? Images, that you have deleted, will not be loaded again. If you want
-        to reload these deleted images, click "FULL SYNC".</string>
+        to reload these deleted images, click "FULL SYNC".</string>-->
 
 
-
-    <string name="search_option">Full Search</string>
-    <string name="full_search_explain">Search in explanation text in addition to title only</string>
+    <string name="case_sensitive_option">Case sensitive search/filter</string>
+    <string name="case_sensitive_search_explain">Search and filter using case sensitive string</string>
+    <string name="search_option">Full Text Search/Filter</string>
+    <string name="full_search_explain">Search and filter in explanation text in addition to title only</string>
     <string name="test_mail_text">Just a test email sent by the FunInSpace App. The attachment
         contains a debugging logfile. TIP: Add yourself as .cc to see, what has been sent.</string>
     <string name="test_mail_subject">Greetings from FunInSpace</string>
@@ -335,7 +336,7 @@
     loaded. Switch this on, if you like to hear "new apod" on successful information load.</string>
     <string name="privacy_policy">Privacy Policy</string>
     <string name="action_help">Help</string>
-    <string name="dropbox_reload_fullsync">FULL SYNC</string>
+    <!--<string name="dropbox_reload_fullsync">FULL SYNC</string>-->
 
     <!-- Setting of hires cache limit -->
     <string name="hd_cachelimit_title">Used Memory for Hires images</string>
@@ -364,6 +365,8 @@
         crash from 05.03.2018, caused by an unhandled link from NASA.\nThe dropbox sync has now been
         removed. You can now use the new NASA archive search to load images instead. This still
     might need some improvement.</string>
+    <string name="version_update_201906111">* Quick fix for a Live stream URL problem with NASA on
+        02.06.2019, leading to a crash. Livestream can still not be played, working on it.</string>
 
     <string name="remove_cachefile">Remove local copy</string>
     <string name="notify_apod_title">Fun In Space new image</string>
@@ -381,4 +384,7 @@
     <string name="archive_search_reload_deleted">Also reload previously deleted images</string>
     <string name="archive_search_do_search">Search</string>
     <string name="archive_search_cancel">Cancel</string>
+    <string name="archive_search_exceeded">Maximum date range of %d days has been exceeded. Please
+    select a shorter interval.</string>
+    <string name="archive_search_full">Search title AND explanation</string>
 </resources>

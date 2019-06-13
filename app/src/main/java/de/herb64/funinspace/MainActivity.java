@@ -26,7 +26,6 @@ import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.preference.PreferenceManager;
 // import android.support.multidex.MultiDexApplication;
-import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
@@ -55,23 +54,20 @@ import com.google.android.youtube.player.YouTubeStandalonePlayer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONTokener;
+
 import java.io.File;
 import java.net.HttpURLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.regex.Pattern;
 
 import de.herb64.funinspace.helpers.deviceInfo;
 import de.herb64.funinspace.helpers.dialogDisplay;
@@ -114,20 +110,24 @@ public class MainActivity extends AppCompatActivity
     private boolean wpShuffleChanged;
     private boolean wpShuffleTimesChanged;
 
-    // APOD search and load_range releated stuff
+    // APOD Filter view related -- hmm, is stored in the adapter, do we need these variables at all?
+    private boolean filterCaseSensitive;    // shared pref filter_case_sensitive
+    private boolean filterFullText;         // shared pref filter_full
+
+    // APOD Archive Search related
+    private boolean isSearch;               // TODO: remove, use search string content instead
     private boolean restoreDeletedApodsOnSearch;
-    private boolean isCaseSensitive;
-    private boolean isSearch;
-    private String apodSearchString;
-    private String apodSearchBeginDate;
-    private String apodSearchEndDate;
-    // + date range variables could go here in NASA format as strings
+    private boolean archiveSearchCaseSensitive;
+    private boolean archiveSearchFullText;
+    private String archiveSearchString;     // Search String for NASA archive search
+    private String archiveSearchBeginDate;
+    private String archiveSearchEndDate;
 
     //private boolean bgApodLoadChanged;    // new, simple logic, was bad before... TODO: more of that
     private boolean bg_apod_load;
 
-    private String hd_cachelimit;           // MAX_HIRES_PERCENT
-    private int hd_maxmempct;               //
+    private String hd_cachelimit;
+    private int hd_maxmempct;
 
     private int currentWallpaperIndex = -1;
     protected TimeZone tzNASA;
@@ -197,8 +197,7 @@ public class MainActivity extends AppCompatActivity
     protected static final int WP_NONE = 0;
     public static final int WP_EXISTS = 1;
     protected static final int WP_ACTIVE = 3;   // just in case of bitmap interpretation
-    //private static final int DEFAULT_MAX_STORED_WP = 20;      // TODO - how to limit?
-    protected static final int MAX_HIRES_PERCENT = 20;          // TODO - make config option
+    //private static final int DEFAULT_MAX_STORED_WP = 20;
     public static final int JOB_ID_SHUFFLE = 85407;
     public static final String BCAST_SHUFFLE = "SHUFFLE";
     public static final String BCAST_APOD = "APOD";
@@ -268,15 +267,19 @@ public class MainActivity extends AppCompatActivity
             selected = savedInstanceState.getIntegerArrayList("selecteditems");
             maxTextureSize = savedInstanceState.getInt("maxtexsize");
             restoreDeletedApodsOnSearch = savedInstanceState.getBoolean("restoreDeletedApodsOnSearch");
+            archiveSearchFullText = savedInstanceState.getBoolean("archiveSearchFullText");
+            archiveSearchCaseSensitive = savedInstanceState.getBoolean("archiveSearchCaseSensitive");
             isSearch = savedInstanceState.getBoolean("isSearch");
-            apodSearchString = savedInstanceState.getString("apodSearchString");
+            archiveSearchString = savedInstanceState.getString("archiveSearchString");
             devInfo.setGlMaxTextureSize(maxTextureSize);
         } else {
             SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
             maxTextureSize = shPref.getInt("maxtexsize", 0);
             restoreDeletedApodsOnSearch = false;
+            archiveSearchFullText = false;
+            archiveSearchCaseSensitive = true;
             isSearch = false;
-            apodSearchString = "";
+            archiveSearchString = "";
             devInfo.setGlMaxTextureSize(maxTextureSize);
             selected = new ArrayList<>();
         }
@@ -371,7 +374,6 @@ public class MainActivity extends AppCompatActivity
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
                 // Changed to not collapse when scrolling out. Also fixed collapsing when doing
                 // refresh of adapter when loading images at first time install
-                // TODO - do not ellipsize at all if explanation matches into minimum lines
                 TextView v = myItemsLV.findViewWithTag(position + MAX_ITEMS);
                 if (v.getMaxLines() == MAX_ELLIPSED_LINES) {
                     v.setMaxLines(MAX_LINES);
@@ -523,7 +525,6 @@ public class MainActivity extends AppCompatActivity
                 }
 
                 return true;        // ???
-                //return false;
             }
 
             /**
@@ -548,12 +549,10 @@ public class MainActivity extends AppCompatActivity
                         return true;
                     case R.id.cab_share:
                         // https://faq.whatsapp.com/en/android/28000012
-                        new dialogDisplay(MainActivity.this, "Sharing not yet possible", "Herbert TODO");
+                        new dialogDisplay(MainActivity.this, "Sharing not yet implemented", "Herbert TODO");
                         actionMode.finish();
                         return true;
                     case R.id.cab_rating:
-                        // AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                        // builder.setView(R.layout.rating_dialog);  // REQUIRES 21 minimum :(
                         // We use a DialogFragment that displays the Rating dialog and our main
                         // activity implements an interface for rating listener
                         FragmentManager fm = getSupportFragmentManager();
@@ -575,7 +574,6 @@ public class MainActivity extends AppCompatActivity
                         fragArguments.putInt("current_rating", current);
                         dlg.setArguments(fragArguments);
                         // dlg.setTargetFragment(); // this only works when calling from fragment,
-                        // not from activity as here
                         dlg.show(fm, "RATINGTAG");
                         actionMode.finish();
                         return true;
@@ -734,7 +732,8 @@ public class MainActivity extends AppCompatActivity
         myList = new ArrayList<> ();
         adp = new spaceAdapter(getApplicationContext(), MainActivity.this,
                 R.layout.space_item, myList);
-        adp.setFullSearch(sharedPref.getBoolean("full_search", false));
+        adp.setFullSearch(sharedPref.getBoolean("filter_full", false));
+        adp.setCaseSensitive(sharedPref.getBoolean("filter_case_sensitive", true));
         myItemsLV.setAdapter(adp);
 
         // SearchView - this had been defined in XML, but set to "GONE" by default. When search is
@@ -759,8 +758,8 @@ public class MainActivity extends AppCompatActivity
         // and parent array on config changes - only check to avoid unneeded calls to getLatestAPODs
         // On Android 8.0, saving spaceItem ArrayList and JSON data string to savedInstanceState
         // failed with "Transaction Too Large error".
-        //myList = savedInstanceState.getParcelableArrayList("myList");
-        //jsonData = savedInstanceState.getString("jsonData");
+        // myList = savedInstanceState.getParcelableArrayList("myList");
+        // jsonData = savedInstanceState.getString("jsonData");
         if (jsonData != null) {
             try {
                 parent = new JSONArray(jsonData);
@@ -770,8 +769,6 @@ public class MainActivity extends AppCompatActivity
                 parent = new JSONArray();
                 jsonData = "[]";
             }
-            // Parse the local json file contents and add these to ArrayList
-            //addItems();
             if (savedInstanceState == null) {
                 getLatestAPODs();
             }
@@ -815,79 +812,6 @@ public class MainActivity extends AppCompatActivity
                 initialLaunch();
             }
         }
-
-
-        /* OLD CODE which used savedInstanceState to save myList and jsonData string....
-        if (savedInstanceState != null) {
-            // Restore spaceItem ArrayList and JSON data string. On Android 8.0 this failed
-            // with "Transaction Too Large error", so we do not put these onto the saved instance
-            // state any more and instead recreate it using addItems()
-            //myList = savedInstanceState.getParcelableArrayList("myList");
-            //jsonData = savedInstanceState.getString("jsonData");
-            if (jsonData != null) {
-                try {
-                    parent = new JSONArray(jsonData);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }
-            addItems();
-        } else {
-            // -------------------------------------------------------------------
-            // DECIDE, IF WE ARE IN "FIRST LAUNCH" BY PRESENCE OF jsonData CONTENT
-            // jsonData != null: we have a file, so not first successful launch
-            // jsonData == null: no file, first launch most likely
-            // -------------------------------------------------------------------
-            if (jsonData != null) {
-                //SharedPreferences shPref = this.getPreferences(Context.MODE_PRIVATE);
-                //maxTextureSize = shPref.getInt("maxtexsize", 0);
-                //devInfo.setGlMaxTextureSize(maxTextureSize);
-                // TODO: if shared preferences are lost for some reason, run texsize check again
-                parent = null;
-                try {
-                    parent = new JSONArray(jsonData);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                    jsonData = "[]";
-                }
-                // Parse the local json file contents and add these to ArrayList
-                addItems();
-                getLatestAPODs();
-            } else {
-                // FIRST LAUNCH most likely - TODO: offer restore from sd card...
-                Intent texSizeIntent = new Intent(this, TexSizeActivity.class);
-                startActivityForResult(texSizeIntent, GL_MAX_TEX_SIZE_QUERY);
-                devInfo.setGlMaxTextureSize(maxTextureSize);
-                SharedPreferences.Editor editor = sharedPref.edit();
-                //editor = sharedPref.edit();
-                //editor.putBoolean("INITIAL_LAUNCH", true);
-                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
-                    editor.putBoolean("apod_bg_load", false); // by default it is true
-                }
-                editor.apply();
-                parent = new JSONArray();
-                // at initial run, do a network test which does not fall into DNS wait...
-                long conntime = utils.testSocketConnect(2000);
-                if (conntime == 2000) {
-                    Bundle fragArguments = new Bundle();
-                    fragArguments.putString("TITLE",
-                            "Welcome to FunInSpace");
-                    utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                            "INITIAL_LAUNCH - testSocketConnect TIMEOUT (" + conntime + "ms)");
-                    fragArguments.putString("MESSAGE",
-                            getString(R.string.init_no_network));
-                    fragArguments.putString("NEG",
-                            getString(R.string.hfcm_ok));
-                    fm = getSupportFragmentManager();
-                    confirmDialog confirmdlg = new confirmDialog();
-                    confirmdlg.setArguments(fragArguments);
-                    confirmdlg.show(fm, "INITLAUNCH");
-                } else {
-                    initialLaunch();
-                }
-            }
-        }
-        ------------------- END OF OLD CODE */
 
         utils.setWPShuffleCandidates(getApplicationContext(), myList);
 
@@ -1131,8 +1055,10 @@ public class MainActivity extends AppCompatActivity
         outState.putInt("maxtexsize", maxTextureSize);
         outState.putIntegerArrayList("selecteditems", selected);
         outState.putBoolean("restoreDeletedApodsOnSearch", restoreDeletedApodsOnSearch);
+        outState.putBoolean("archiveSearchFullText", archiveSearchFullText);
+        outState.putBoolean("archiveSearchCaseSensitive", archiveSearchCaseSensitive);
         outState.putBoolean("isSearch", isSearch);
-        outState.putString("apodSearchString", apodSearchString);
+        outState.putString("archiveSearchString", archiveSearchString);
         Log.i("HFCM", "Saving instance state, selected = " + selected);
     }
 
@@ -1240,7 +1166,6 @@ public class MainActivity extends AppCompatActivity
                 switch (tag) {
                     case "WP":
                         String wpfile = myList.get((int)o).getThumb().replace("th_", "wp_");
-                        //Log.i("HFCM", "Reached confirmation: " + wpfile);
                         if (!wpfile.equals("")) {
                             // update index values
                             if (currentWallpaperIndex >= 0) {
@@ -1260,7 +1185,6 @@ public class MainActivity extends AppCompatActivity
                         break;
                     case "INITLAUNCH":
                         // initial launch now uses the date range query and gets some days back
-                        //long endEpoch = utils.getDayBeforeEpoch(utils.getNASAEpoch());
                         long testEpoch = utils.getNASAEpoch();
                         long endEpoch = utils.getDaysBeforeEpoch(testEpoch, 1);
                         long beginEpoch = utils.getDaysBeforeEpoch(endEpoch, INIT_DAYS_TO_LOAD - 1);
@@ -1273,31 +1197,6 @@ public class MainActivity extends AppCompatActivity
                                 execute(nS()+
                                         "&start_date=" + beginDate +
                                         "&end_date=" + endDate);
-                        break;
-                    /*case "DROPBOX_REFRESH":
-                        utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                                tag + " - Kick off asyncLoad: DROPBOX_REFRESH");
-                        //new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
-                        new asyncLoad(MainActivity.this, "DROPBOX_REFRESH").execute(dPJ());
-                        break;*/
-
-                    case "TWO_LAST_MONTHS":
-                        // just for testing - currently shown instead of the search activity
-                        /*testEpoch = utils.getNASAEpoch();
-                        endEpoch = utils.getDaysBeforeEpoch(testEpoch, 130);
-                        beginEpoch = utils.getDaysBeforeEpoch(endEpoch, 9);
-                        beginDate = utils.getNASAStringFromEpoch(beginEpoch);
-                        endDate = utils.getNASAStringFromEpoch(endEpoch);
-                        restoreDeletedApodsOnSearch = false;
-                        isSearch = true;
-                        apodSearchString = "";
-                        // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
-                        new asyncLoad(MainActivity.this,
-                                "APOD_SEARCH_LOAD_RANGE",
-                                sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                                execute(nS()+
-                                        "&start_date=" + beginDate +
-                                        "&end_date=" + endDate);*/
                         break;
 
                     case "NOWIFI-ACCEPT":
@@ -1333,14 +1232,8 @@ public class MainActivity extends AppCompatActivity
                         // this is called also if not network found at initial launch - neg button
                         // is the ok button in this case - we could use the neutral button here
                         //terminateApp();
-                        // we might check network connectivity again
-                        //new asyncLoad(MainActivity.this,
-                        //        "APOD_LOAD",
-                        //        sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                        //        execute(nS());
                         break;
                     case "SHOW_LOG":
-                        //Log.i("HFCM", "Clear log");
                         File logFile = new File(getFilesDir(), MainActivity.DEBUG_LOG);
                         if (logFile.exists()) {
                             if (!logFile.delete()) {
@@ -1358,30 +1251,7 @@ public class MainActivity extends AppCompatActivity
                     case "SHOW_LOG":
                         emailLogFileToHerbert();
                         break;
-                    /*case "DROPBOX_REFRESH":
-                        utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                                tag + " - Kick off asyncLoad: DROPBOX_FORCE_REFRESH");
-                        //new asyncLoad(MainActivity.this, "DROPBOX_INIT").execute(dPJ());
-                        new asyncLoad(MainActivity.this, "DROPBOX_FORCE_REFRESH").execute(dPJ());
-                        break;*/
-                    case "TWO_LAST_MONTHS":
-                        // just for testing - currently simple dialog instead of search activity
-                        /*long testEpoch = utils.getNASAEpoch();
-                        long endEpoch = utils.getDaysBeforeEpoch(testEpoch, 130);
-                        long beginEpoch = utils.getDaysBeforeEpoch(endEpoch, 9);
-                        String beginDate = utils.getNASAStringFromEpoch(beginEpoch);
-                        String endDate = utils.getNASAStringFromEpoch(endEpoch);
-                        restoreDeletedApodsOnSearch = true;
-                        isSearch = true;
-                        apodSearchString = "";
-                        // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
-                        new asyncLoad(MainActivity.this,
-                                "APOD_SEARCH_LOAD_RANGE",                                           // APOD_SEARCH_DB_SYNC_VERSION retired??
-                                sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
-                                execute(nS()+
-                                        "&start_date=" + beginDate +
-                                        "&end_date=" + endDate);*/
-                        break;
+
                     default:
                         break;
                 }
@@ -1576,7 +1446,7 @@ public class MainActivity extends AppCompatActivity
      * same problem in above post - this was because activity was gone underneath
      * @param requestCode   request code
      * @param resultCode    result code
-     * @param data          intent
+     * @param data          intent returned by activity
      */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -1598,7 +1468,6 @@ public class MainActivity extends AppCompatActivity
                 if (data.getBooleanExtra("new_hd_cached_file", false)) {
                     ArrayList<Integer> del = utils.cleanupFiles(getApplicationContext(),
                             myList,
-                            //MAX_HIRES_PERCENT,
                             hd_maxmempct,
                             listidx);
                     for (int i : del) {
@@ -1762,26 +1631,27 @@ public class MainActivity extends AppCompatActivity
                 }
             }
         } else if (requestCode == APOD_SEARCH_REQUEST) {
-            // We now get infos back from ApodSearchActivity:
-            // - search string
-            // - date range
-            // - restore deleted
-            // - case sensitive search
+            // We get the following infos back from ApodSearchActivity:
+            // - search string (might be empty)
+            // - date range: begin and end date as strings
+            // - if we should restore previously deleted images
+            // - if case sensitive search should be used
             if (resultCode == RESULT_OK) {
-                apodSearchString = data.getStringExtra("search");
-                apodSearchBeginDate = data.getStringExtra("beginDate");
-                apodSearchEndDate = data.getStringExtra("endDate");
+                archiveSearchString = data.getStringExtra("search");
+                archiveSearchBeginDate = data.getStringExtra("beginDate");
+                archiveSearchEndDate = data.getStringExtra("endDate");
                 restoreDeletedApodsOnSearch = data.getBooleanExtra("reloadDeleted", false);
-                isCaseSensitive = data.getBooleanExtra("isCaseSensitive", false);
-                Log.i("HFCM", "returned from apod search activity: " + apodSearchString);
+                archiveSearchCaseSensitive = data.getBooleanExtra("archiveSearchCaseSensitive", true);
+                archiveSearchFullText = data.getBooleanExtra("archiveSearchFullText", false);
+                Log.i("HFCM", "returned from apod search activity: " + archiveSearchString);
                 isSearch = true;
                 // https://api.nasa.gov/planetary/apod?api_key=nnn&start_date=2018-02-05&end_date=2018-02-07
                 new asyncLoad(MainActivity.this,
                         "APOD_SEARCH_LOAD_RANGE",
                         sharedPref.getBoolean("enable_tls_pre_lollipop", true)).
                         execute(nS()+
-                                "&start_date=" + apodSearchBeginDate +
-                                "&end_date=" + apodSearchEndDate);
+                                "&start_date=" + archiveSearchBeginDate +
+                                "&end_date=" + archiveSearchEndDate);
 
             }
         }
@@ -1798,6 +1668,7 @@ public class MainActivity extends AppCompatActivity
      * IMPORTANT: Need to have set the "Changed" flags to TRUE, if no shared prefs exist, because
      * this listener gets called when first opening the preferences after installation. This is
      * done on sharedPreferences preparation in onCreate()
+     * TODO: better make switch-case or else-if!
      */
     SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener = new
             SharedPreferences.OnSharedPreferenceChangeListener() {
@@ -1819,9 +1690,11 @@ public class MainActivity extends AppCompatActivity
                     /*if (changed.equals("apod_bg_load")) {
                         bgApodLoadChanged ^= true;
                     }*/
-                    if (changed.equals("full_search")) {
-                        // this one: just set on each single toggle
-                        adp.setFullSearch(sharedPref.getBoolean("full_search", false));
+                    if (changed.equals("filter_full")) {
+                        adp.setFullSearch(sharedPref.getBoolean("filter_full", false));
+                    }
+                    if (changed.equals("filter_case_sensitive")) {
+                        adp.setCaseSensitive(sharedPref.getBoolean("filter_case_sensitive", true));
                     }
                     if (changed.equals("wallpaper_quality")) {
                         Log.d("HFCM", "Changed wall paper quality to " +
@@ -1879,6 +1752,7 @@ public class MainActivity extends AppCompatActivity
                 if (s.length() == 0) {
                     adp.cleanMap();
                 }
+                adp.setHiLight(s);
                 adp.getFilter().filter(s);
                 return false;
             }
@@ -1888,6 +1762,7 @@ public class MainActivity extends AppCompatActivity
                 if (s.length() == 0) {
                     adp.cleanMap();
                 }
+                adp.setHiLight(s);
                 adp.getFilter().filter(s);
                 return false;
             }
@@ -2039,10 +1914,14 @@ public class MainActivity extends AppCompatActivity
 
             //scheduleApod(5000, 5000);
 
-            new dialogDisplay(this, devInfo.getDeviceInfo() +
+            // Highlighting tests for filter / archive search. This is implemented in the adapter
+            //adp.setHiLight("moon");
+            //adp.notifyDataSetChanged();
+
+            /*new dialogDisplay(this, devInfo.getDeviceInfo() +
                     devInfo.getActMgrMemoryInfo(true) +
                     devInfo.getGLInfo() +
-                    devInfo.getNetworkInfo(true));
+                    devInfo.getNetworkInfo(true));*/
 
             //utils.logWrapped(getApplicationContext(), "wrapped", "This is an entry for wrapper test");
             //utils.getWrappedLogContents(getApplicationContext(), "wrapped", "testout");
@@ -2122,32 +2001,13 @@ public class MainActivity extends AppCompatActivity
             dlg.show(fm, "SHOW_LOG");
             return true;
         }
-        /*if (id == R.id.dropbox_sync) {
-            // Refresh metadata with dropbox. This allows to sync personal contents with dropbox
-            // comment for old code in lalatex
-            Bundle fragArguments = new Bundle();
-            fragArguments.putString("TITLE",
-                    getString(R.string.refresh_dropbox_title));
-            //fragArguments.putInt("ICON_ID", R.drawable.vimeo_icon); // just a test for icon
-            fragArguments.putString("MESSAGE",
-                    getString(R.string.refresh_dropbox_message));
-            fragArguments.putString("POS", getString(R.string.hfcm_yes));
-            fragArguments.putString("NEG", getString(R.string.hfcm_no));
-            fragArguments.putString("NEU", getString(R.string.dropbox_reload_fullsync));
-            FragmentManager fm = getSupportFragmentManager();
-            confirmDialog dlg = new confirmDialog();
-            dlg.setArguments(fragArguments);
-            // dlg.setTargetFragment(); // only if calling from fragment, not from activity!
-            dlg.show(fm, "DROPBOX_REFRESH");
-            return true;
-        }*/
         if (id == R.id.restore_wallpaper) {
             new dialogDisplay(MainActivity.this,
                     getString(R.string.dlg_revert_wp),
                     getString(R.string.dlg_title_info));
             changeWallpaper("");
         }
-        if (id == R.id.action_search_apod) {
+        if (id == R.id.action_search_archive) {
             // new code using date range picker library - see also build.gradle
             Intent apodSearchIntent = new Intent(this, ApodSearchActivity.class);
             startActivityForResult(apodSearchIntent, APOD_SEARCH_REQUEST);
@@ -2277,15 +2137,14 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * After filling the array list with all space items, this function is called to check for any
-     * missing informations:
-     * 1. get hires size information (for images)
-     * 2. get vimeo infos thumbnail url / duration
-     * 3. get thumbnail image (in any case)
+     * Get any missing informations for items in the apod list. This includes the following:
+     * 1. hires image: width, height
+     * 2. vimeo infos: thumbnail url, duration
+     * 3. thumbnail image (in any case)
      * The function triggers a chain of async operations, depending on type of item.
-     * MediaMetadataRetriever might also be able to retrieve an image from a stream, but it is
+     * Note: MediaMetadataRetriever might also be able to retrieve an image from a stream, but it is
      * better and faster to retrieve the "offical" thumb...
-     * TODO: check option for parallel execution option... (executeOnExecutor...)
+     * TODO: check options for parallel execution... (executeOnExecutor...)
      */
     public void getMissingApodInfos() {
         long conntime = utils.testSocketConnect(2000);
@@ -2372,7 +2231,8 @@ public class MainActivity extends AppCompatActivity
 
         unfinishedApods = 0;
         // No wildcard file filtering - a subdirectory for scheduled files could be used to avoid
-        // too many files in names list...
+        // too many files in names list, or just putting thumbnails in separate directory, as the
+        // local nasa json original files are no longer stored.
         File dir = new File(getApplicationContext().getFilesDir().getPath());
         String[] names = dir.list();
 
@@ -2387,14 +2247,10 @@ public class MainActivity extends AppCompatActivity
         // have not been covered by job scheduler. Run a date range query.
         long check = sharedPref.getLong("LAST_UI_LAUNCH_EPOCH", 0);
 
-        // TESTING ONLY - 04.03.2018 as last date, so it does reload 05.03.2018 and higher
-        //check = 1520143200000L;
-
         // Fill in epochsToLoad array based on the current date and the last UI launch
         long current = utils.getNASAEpoch();
         ArrayList<Long> epochsToLoad = new ArrayList<>();   // epochs to be checked
         if (check != 0) {
-            //long current = utils.getNASAEpoch();
             if (check == current) {
                 if (timeToNext != 0) {
                     Toast.makeText(MainActivity.this,
@@ -2407,10 +2263,9 @@ public class MainActivity extends AppCompatActivity
             do {
                 check = utils.getNextDaysEpoch(check);
                 epochsToLoad.add(check);
-                Log.i("HFCM", "Have epoch to load:" + check);
+                //Log.i("HFCM", "Have epoch to load:" + check);
             } while (check < current);
         } else {
-            //long current = utils.getNASAEpoch();
             epochsToLoad.add(current);
         }
 
@@ -2490,23 +2345,19 @@ public class MainActivity extends AppCompatActivity
             utils.logAppend(getApplicationContext(),
                     MainActivity.DEBUG_LOG,
                     tag + " > '" + output + "'");
+            new dialogDisplay(MainActivity.this,
+                    (String) output,
+                    "NASA Error");
+            return;
         }
 
         if (tag.equals("APOD_LOAD")) {
             String h = (String) output;
             // TODO: test 4.1 with tls off - need to handle return code...
-            /*if (h.startsWith("Connection")) {       // BAD
-                new dialogDisplay(MainActivity.this, h + "\n" + getString(R.string.enable_tls), "NASA Connect");
-                return;
-            }*/
             if (utils.isJson(h) == utils.JSON_OBJ) {
                 spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(), (String) output);
                 // TODO: we should check, if this is a real apod json, and not some http500 etc...
                 utils.insertSpaceItem(myList, item);
-
-                //SharedPreferences.Editor editor = sharedPref.edit();
-                //editor.putLong("LATEST_APOD_EPOCH", item.getDateTime());
-                //editor.apply();
 
                 getMissingApodInfos();
                 adp.notifyDataSetChanged();
@@ -2526,67 +2377,6 @@ public class MainActivity extends AppCompatActivity
                 //return;
             }
 
-            /* THIS ONE NIGHT NOT BE NEEDED ANY MORE AT ALL, ALSO RETIRING resyncwithdropbox()
-        } else if (tag.equals("APOD_SEARCH_DB_SYNC_VERSION")) {
-            // TODO - add the search string and only add items matching the search term into the
-            //        new list. This even might be done by load_range and can be retired at all ?
-            String h = (String) output;
-            ArrayList<spaceItem> newList = new ArrayList<>();
-            if (utils.isJson(h) == utils.JSON_ARRAY) {
-                try {
-                    JSONArray newarray = new JSONArray(h);
-                    Set<String> deleted_items = sharedPref.getStringSet("DELETED_ITEMS",
-                            new HashSet<String>());
-                    Set<String> deleted_set = new HashSet<>(deleted_items);  // USE A COPY!!!
-                    Boolean recoveredAnyDeleted = false;
-                    for (int i = 0; i < newarray.length(); i++) {
-                        spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(),
-                                newarray.getJSONObject(i).toString());
-                        // we can filter here: if item.title contains a search string - see new global variable for that
-
-                        // handle items on deleted list
-                        if (deleted_items.contains(item.getTitle())) {
-                            if (restoreDeletedApodsOnSearch) {
-                                // insertSpaceItem does not insert existing ones again
-                                utils.insertSpaceItem(newList, item);
-                                deleted_set.remove(item.getTitle());
-                                recoveredAnyDeleted = true;
-                                Log.i("HFCM", "Recovering deleted item: " + item.getTitle());
-                            }
-                        } else {
-                            utils.insertSpaceItem(newList, item);
-                        }
-                    }
-                    // update shared prefs deleted items
-                    if (recoveredAnyDeleted) {
-                        SharedPreferences.Editor editor = sharedPref.edit();
-                        editor.putStringSet("DELETED_ITEMS", deleted_set);
-                        editor.apply();
-                    }
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            } else {
-                String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
-                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
-                        "APOD_SEARCH_DB_SYNC_VERSION: JSON exception: " + first100);
-                new dialogDisplay(MainActivity.this,
-                        "No JSON object received\nContent: '" +
-                                first100 + "......'", "APOD_SEARCH_DB_SYNC_VERSION Debug");
-            }
-            JSONArray testarray = new JSONArray();
-            //String jsoncontent;
-            for (int i = newList.size()-1; i >= 0; i--) {
-                JSONObject testObj = utils.createJsonObjectFromSpaceItem(newList.get(i));
-                testarray.put(testObj);
-                //jsoncontent = testObj.toString();   // FIX MISSING NEW APOD AFTER ROTATE
-            }
-            Log.i("HFCM", "Have loaded " + newList.size() + " new item(s) via search");
-            if (testarray != null && testarray instanceof JSONArray) {
-                resyncWithDropbox((JSONArray) testarray, restoreDeletedApodsOnSearch);
-            }
-            */
-
         } else if (tag.equals("APOD_SEARCH_LOAD_RANGE")) {
             // Search function using the LOAD_RANGE instead resyncWithDropbox() logic
             String h = (String) output;
@@ -2601,6 +2391,7 @@ public class MainActivity extends AppCompatActivity
                 }
                 Boolean recoveredAnyDeleted = false;
                 int lastInsertIdx = -1;
+                long lastInsertEpoch = 0;
                 int numRecoveredDeleted = 0;
                 int numSkippedNonMatched = 0;
                 int numSkippedAsDeleted = 0;
@@ -2612,15 +2403,15 @@ public class MainActivity extends AppCompatActivity
                     if (isSearch) {
                         String title = newarray.getJSONObject(i).getString("title");
                         String searchtitle;
-                        if (isCaseSensitive) {
+                        if (archiveSearchCaseSensitive) {
                             searchtitle = title;
                         } else {
                             searchtitle = title.toLowerCase();
                         }
-                        if (!apodSearchString.isEmpty() && !searchtitle.contains(apodSearchString)) {
+                        if (!archiveSearchString.isEmpty() && !searchtitle.contains(archiveSearchString)) {
                             // 1. FIRST filter should be string filter for search string, independent
                             //    from deleted items recovery
-                            Log.i("HFCM", "Skipping because '" + apodSearchString + "' not in title: " + title);
+                            Log.i("HFCM", "Skipping because '" + archiveSearchString + "' not in title: " + title);
                             numSkippedNonMatched++;
                             continue;
                         }
@@ -2647,6 +2438,7 @@ public class MainActivity extends AppCompatActivity
                     if (lastSuccessfulInsert != -1) {
                         numInsertedItems++;
                         lastInsertIdx = lastSuccessfulInsert;
+                        lastInsertEpoch = item.getDateTime();
                     }
                 }
                 // update shared prefs deleted items by removing any recovered items from this list
@@ -2662,6 +2454,10 @@ public class MainActivity extends AppCompatActivity
                 if (lastInsertIdx != -1) {
                     myItemsLV.setSelection(lastInsertIdx);
                     Log.i("HFCM", "Setting selection index to " + lastInsertIdx);
+                    SharedPreferences.Editor editor = sharedPref.edit();
+                    editor.putString("NEXT_ARCHIVE_SEARCH_BEGIN_DATE",
+                            utils.getNASAStringFromEpoch(utils.getNextDaysEpoch(lastInsertEpoch)));
+                    editor.apply();
                     // TODO: check, if some items are omitted
                     if (numInsertedItems != numOverallItems) {
                         new dialogDisplay(MainActivity.this,
@@ -2673,7 +2469,7 @@ public class MainActivity extends AppCompatActivity
                     new dialogDisplay(MainActivity.this,
                             String.format(Locale.getDefault(),
                                     getString(R.string.archive_search_no_match),
-                                    apodSearchString, apodSearchBeginDate, apodSearchEndDate, numSkippedNonMatched, numSkippedAsDeleted),
+                                    archiveSearchString, archiveSearchBeginDate, archiveSearchEndDate, numSkippedNonMatched, numSkippedAsDeleted),
                             "NASA Archive search");
                 }
             } catch (JSONException e) {
@@ -2689,7 +2485,6 @@ public class MainActivity extends AppCompatActivity
 
         } else if (tag.equals("APOD_LOAD_RANGE")) {
             // TODO: this can be done by apod_search_load_range as well with isSearch = false
-            // Apod range loading must return a JSON array, anything else definitely is wrong
             String h = (String) output;
             try {
                 JSONArray newarray = new JSONArray(h);
@@ -2756,9 +2551,6 @@ public class MainActivity extends AppCompatActivity
                     }
                 }
 
-                //myList.get(idx).setLowSize(String.valueOf(((Bitmap) output).getWidth()) + "x" +
-                //        String.valueOf(((Bitmap)output).getHeight()));
-
                 // Create a thumbnail from the obtained bitmap and store as th_<file>.jpg
                 //thumbFile = new File(getApplicationContext().getFilesDir(), wkItem.getThumb());
                 Bitmap thumbnail = ThumbnailUtils.extractThumbnail((Bitmap) output, 120, 120);
@@ -2793,8 +2585,6 @@ public class MainActivity extends AppCompatActivity
                     }
                 }
                 // Once all items are in, get the newest date and set into sharedprefs
-                // uuuuuuu
-                //long latest = myList.get(0).getDateTime();
                 long latest = utils.getNASAEpoch();
                 utils.logAppend(getApplicationContext(),
                         DEBUG_LOG,
@@ -2803,11 +2593,6 @@ public class MainActivity extends AppCompatActivity
                 editor.putLong("LAST_UI_LAUNCH_EPOCH", latest);
                 editor.apply();
             }
-
-            // this only get's called ONCE, if just single apod is present
-            /*if (sharedPref.getBoolean("INITIAL_LAUNCH", false)) {
-                initialLaunch();
-            }*/
 
         } else if (tag.startsWith("SIZE_")) {
             int idx = Integer.parseInt(tag.replace("SIZE_", ""));
@@ -2864,30 +2649,7 @@ public class MainActivity extends AppCompatActivity
             new asyncLoad(MainActivity.this, "THUMB_" + idx).execute(thumbUrl);
             // TODO - good idea to refresh after VIM reload?
             adp.notifyDataSetChanged();
-
-        /*} else if (tag.equals("DROPBOX_REFRESH")) {
-            Object json;
-            try {
-                json = new JSONTokener((String) output).nextValue();
-            } catch (JSONException e) {
-                e.printStackTrace();
-                return;
-            }
-            if (json != null && json instanceof JSONArray) {
-                //resyncWithDropbox((JSONArray) json, false);
-            }
-
-        } else if (tag.equals("DROPBOX_FORCE_REFRESH")) {
-            Object json;
-            try {
-                json = new JSONTokener((String) output).nextValue();
-            } catch (JSONException e) {
-                e.printStackTrace();
-                return;
-            }
-            if (json != null && json instanceof JSONArray) {
-                //resyncWithDropbox((JSONArray) json, true);
-            }*/
+            // TODO Docu: json = new JSONTokener((String) output).nextValue();
 
         } else {
             new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
@@ -3255,7 +3017,6 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * Send logfile via email to funinspace mail account
-     * TODO: multiple attachments
      * TODO: attachment does not work with some apps, e.g. inbox (markus) - seems to be solved
      *       https://stackoverflow.com/questions/15946297/sending-email-with-attachment-using-sendto-on-some-devices-doesnt-work
      *       might be because ACTION_SENDTO is bad and we should use ACTION_SEND
@@ -3527,6 +3288,17 @@ public class MainActivity extends AppCompatActivity
                 // TODO also delete the logfile
                 updateString += getString(R.string.version_update_201803261) + "\n";
             }
+
+            // Fixing for 02.06.2019 bug with ustream.tv lifestream url
+            if (versionCodeInPrefs < 201906111 && versionCodeCurrent >= 201006111) {
+                updateString += getString(R.string.version_update_201906111) + "\n";
+            }
+
+            // Next version:
+            // 1. delete logfile or have it shortened with turnaround
+            // 2. delete local copies of nasa json files - no longer needed
+            // 3. introduce a thumbnail sub-directory ?
+
             if (!updateString.isEmpty()) {
                 new dialogDisplay(this,
                         updateString,
@@ -3628,7 +3400,7 @@ public class MainActivity extends AppCompatActivity
      * date. The time to next apod is calculated, and if this is found to be larger than 0, we do
      * not need to load a new item from NASA.
      */
-    private void getLatestAPOD() {
+    /*private void getLatestAPOD() {
         long timeToNext = 0;
 
         if (!myList.isEmpty()) {
@@ -3680,7 +3452,94 @@ public class MainActivity extends AppCompatActivity
 //                        getString(R.string.reminder));
 //            }
         }
-    }
+    }*/
+
+    /* RETIRED processFinish() TAG for archive search with syncing via old dropbox sync function
+        } else if (tag.equals("APOD_SEARCH_DB_SYNC_VERSION")) {
+            //        add the search string and only add items matching the search term into the
+            //        new list. This even might be done by load_range and can be retired at all ?
+            String h = (String) output;
+            ArrayList<spaceItem> newList = new ArrayList<>();
+            if (utils.isJson(h) == utils.JSON_ARRAY) {
+                try {
+                    JSONArray newarray = new JSONArray(h);
+                    Set<String> deleted_items = sharedPref.getStringSet("DELETED_ITEMS",
+                            new HashSet<String>());
+                    Set<String> deleted_set = new HashSet<>(deleted_items);  // USE A COPY!!!
+                    Boolean recoveredAnyDeleted = false;
+                    for (int i = 0; i < newarray.length(); i++) {
+                        spaceItem item = utils.createSpaceItemFromJsonString(getApplicationContext(),
+                                newarray.getJSONObject(i).toString());
+                        // we can filter here: if item.title contains a search string - see new global variable for that
+
+                        // handle items on deleted list
+                        if (deleted_items.contains(item.getTitle())) {
+                            if (restoreDeletedApodsOnSearch) {
+                                // insertSpaceItem does not insert existing ones again
+                                utils.insertSpaceItem(newList, item);
+                                deleted_set.remove(item.getTitle());
+                                recoveredAnyDeleted = true;
+                                Log.i("HFCM", "Recovering deleted item: " + item.getTitle());
+                            }
+                        } else {
+                            utils.insertSpaceItem(newList, item);
+                        }
+                    }
+                    // update shared prefs deleted items
+                    if (recoveredAnyDeleted) {
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        editor.putStringSet("DELETED_ITEMS", deleted_set);
+                        editor.apply();
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                String first100 = h.substring(0, h.length() > 100 ? 100 : h.length());
+                utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
+                        "APOD_SEARCH_DB_SYNC_VERSION: JSON exception: " + first100);
+                new dialogDisplay(MainActivity.this,
+                        "No JSON object received\nContent: '" +
+                                first100 + "......'", "APOD_SEARCH_DB_SYNC_VERSION Debug");
+            }
+            JSONArray testarray = new JSONArray();
+            //String jsoncontent;
+            for (int i = newList.size()-1; i >= 0; i--) {
+                JSONObject testObj = utils.createJsonObjectFromSpaceItem(newList.get(i));
+                testarray.put(testObj);
+                //jsoncontent = testObj.toString();   // FIX MISSING NEW APOD AFTER ROTATE
+            }
+            Log.i("HFCM", "Have loaded " + newList.size() + " new item(s) via search");
+            if (testarray != null && testarray instanceof JSONArray) {
+                resyncWithDropbox((JSONArray) testarray, restoreDeletedApodsOnSearch);
+            }
+            */
+
+    /* Retired processFinish() tags...
+    } else if (tag.equals("DROPBOX_REFRESH")) {
+            Object json;
+            try {
+                json = new JSONTokener((String) output).nextValue();
+            } catch (JSONException e) {
+                e.printStackTrace();
+                return;
+            }
+            if (json != null && json instanceof JSONArray) {
+                //resyncWithDropbox((JSONArray) json, false);
+            }
+
+        } else if (tag.equals("DROPBOX_FORCE_ REFRESH")) {
+            Object json;
+            try {
+                json = new JSONTokener((String) output).nextValue();
+            } catch (JSONException e) {
+                e.printStackTrace();
+                return;
+            }
+            if (json != null && json instanceof JSONArray) {
+                //resyncWithDropbox((JSONArray) json, true);
+            }*/
+
 
     /**
      * Retired function for dropbox sync
@@ -3694,7 +3553,7 @@ public class MainActivity extends AppCompatActivity
      * @param dropbox The JSON Array from dropbox, that has been loaded
      * @param forceFull if set to true, this forces to reload even previously deleted images
      */
-    private void resyncWithDropbox(JSONArray dropbox, boolean forceFull) {
+    /*private void resyncWithDropbox(JSONArray dropbox, boolean forceFull) {
         Set<String> deleted_items= sharedPref.getStringSet("DELETED_ITEMS", new HashSet<String>());
         Set<String> dropbox_items = new HashSet<>();
         JSONArray newjson = new JSONArray();
@@ -3819,7 +3678,7 @@ public class MainActivity extends AppCompatActivity
                 String.format(loc, "resyncWithDropbox(): LOCAL ADD=%d, DB ADD=%d, DB SKIP=%d",
                         l_add, db_add, db_skip));
 
-        // TODO how to handle the shared prefs DELETED_ITEMS info?
+        // how to handle the shared prefs DELETED_ITEMS info?
         //SharedPreferences.Editor editor = sharedPref.edit();
         //editor.putStringSet("DELETED_ITEMS", deleted_items);
         //editor.apply();
@@ -3830,7 +3689,7 @@ public class MainActivity extends AppCompatActivity
         myList.clear();
         addItems();
         getMissingApodInfos();
-        utils.cleanupFiles(getApplicationContext(), myList, hd_maxmempct, -1); // MAX_HIRES_PERCENT
+        utils.cleanupFiles(getApplicationContext(), myList, hd_maxmempct, -1);
         adp.notifyDataSetChanged();
-    }
+    }*/
 }

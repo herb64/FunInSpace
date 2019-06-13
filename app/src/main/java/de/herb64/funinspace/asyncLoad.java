@@ -3,6 +3,7 @@ package de.herb64.funinspace;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapRegionDecoder;
+import android.graphics.Movie;
 import android.graphics.Rect;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
@@ -220,7 +221,7 @@ public class asyncLoad extends AsyncTask {
 
             if (status != HttpsURLConnection.HTTP_OK) {
                 if (url2load.startsWith("https://api.nasa.gov/planetary/apod?api_key=")) {
-                    url2load = "https://api.nasa.gov/planetary/apod?api_key=xxxxxxxxxxxxxxxxxxxxxx";
+                    url2load = "https://api.nasa.gov/planetary/apod?api_key=nnn";
                 }
                 return "[" + conn.getResponseCode() + "] " + conn.getResponseMessage() + ", URL: " + url2load;
             }
@@ -236,7 +237,7 @@ public class asyncLoad extends AsyncTask {
             // Read data from this connection into a buffered input stream (default: 8192 bytes)
             InputStream istream = conn.getInputStream();
             //InputStream istream = (InputStream) url.getContent();
-            BufferedInputStream bStream = new BufferedInputStream(istream);
+            //BufferedInputStream bStream = new BufferedInputStream(istream);
 
             String contenttype = conn.getContentType();
             String type = MimeTypeMap.getFileExtensionFromUrl(contenttype);

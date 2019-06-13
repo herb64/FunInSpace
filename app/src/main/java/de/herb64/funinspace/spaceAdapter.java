@@ -8,6 +8,7 @@ import android.support.annotation.LayoutRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
+import android.text.Html;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseIntArray;
@@ -24,6 +25,8 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import de.herb64.funinspace.models.spaceItem;
 
@@ -42,6 +45,8 @@ import de.herb64.funinspace.models.spaceItem;
  * See https://www.youtube.com/watch?v=9OWmnYPX1uc
  * instead of SearchView.setOnQueryTextListener along with change listen, we can use
  * Searchable Configuration, as shown in above video. That's in XML and very powerful.
+ *
+ * 28.03.2018 - add highlighting of text within TextView elements (for filter / archive search)
  */
 
 public class spaceAdapter extends ArrayAdapter implements Filterable {
@@ -54,7 +59,11 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
     private MainActivity act;
     private spaceItemFilter filter;
     private SparseIntArray idxMap;      // mapping of filtered/unfiltered index values
-    private boolean bFullSearch;
+
+    private String hiLight = "";        // Highlighting: if filled, do highlighting
+    private boolean bFullSearch;        // Title only or title + explanation text
+    private boolean bCaseSensitive;     // do it case-sensitive
+
     private int wpActiveIdx;            // idx into spaceitem list for current wallpaper (-1=none)
 
     // Constructor (add via alt+insert) and adjust to our list of type spaceItem
@@ -218,7 +227,48 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         //ProgressBar lbThumb = convertView.findViewById(R.id.pb_thumb_loading);
         //noinspection ResourceType
         holder.lbThumb.setVisibility(iList.get(position).getThumbLoadingState());
-        holder.tvTitle.setText(iList.get(position).getTitle());
+
+        // HIGHLIGHTING OF SEARCH STRINGS - might be quite cpu consuming?
+        if (hiLight.isEmpty()) {
+            holder.tvTitle.setText(iList.get(position).getTitle());
+            holder.tvExplanation.setText(iList.get(position).getExplanation());
+        } else {
+            // Text has to be highlighted
+            // case insensitive replace:
+            // http://jelaniharris.com/2009/case-insensitive-replaceall-in-java/
+            // https://stackoverflow.com/questions/5054995/how-to-replace-case-insensitive-literal-substrings-in-java
+            if (isCaseSensitive()) {
+                String hl = iList.get(position).getTitle().replaceAll(hiLight, "<font color='#AA0044'>" + hiLight + "</font>");
+                //String hl = iList.get(position).getTitle().replaceAll(hiLight,"<i>" +hiLight + "</i>");
+                holder.tvTitle.setText(Html.fromHtml(hl));
+                if (bFullSearch) {
+                    hl = iList.get(position).getExplanation().replaceAll(hiLight, "<font color='#AA0044'>" + hiLight + "</font>");
+                    holder.tvExplanation.setText(Html.fromHtml(hl));
+                }
+            } else {
+                Pattern p = Pattern.compile("(?i)".concat(hiLight));
+                Matcher match = p.matcher(iList.get(position).getTitle());
+                // only using group(0) is not ok: if mixed cases are present, all occurrences will
+                // be replaced by the FIRST match only... TODO item
+                if(match.find()) {
+                    String hl = iList.get(position).getTitle().replaceAll(match.group(0), "<font color='#AA0044'>" + match.group(0) + "</font>");
+                    holder.tvTitle.setText(Html.fromHtml(hl));
+                } else {
+                    holder.tvTitle.setText(iList.get(position).getTitle());
+                }
+                if (bFullSearch) {
+                    match = p.matcher(iList.get(position).getExplanation());
+                    if(match.find()) {
+                        String hl = iList.get(position).getExplanation().replaceAll(match.group(0), "<font color='#AA0044'>" + match.group(0) + "</font>");
+                        holder.tvExplanation.setText(Html.fromHtml(hl));
+                    } else {
+                        holder.tvExplanation.setText(iList.get(position).getExplanation());
+                    }
+                }
+            }
+        }
+
+
         /*Date iDate = new Date(iList.get(position).getDateTime());
         String formattedDate = new SimpleDateFormat("dd. MMM yyyy").format(iDate);*/
 
@@ -229,7 +279,6 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         holder.tvDate.setText(formattedDate);
         holder.tvCopyright.setText(iList.get(position).getCopyright());
 
-        holder.tvExplanation.setText(iList.get(position).getExplanation());
         //iList.get(position).setMaxLines(holder.tvExplanation.getLineCount());
         if (idxMap.size() > 0) {
             //static member being accessed by instance reference
@@ -333,11 +382,25 @@ public class spaceAdapter extends ArrayAdapter implements Filterable {
         return bFullSearch;
     }
 
-    /*public int getWpActiveIdx() {
-        return wpActiveIdx;
+    /**
+     * @return String to be highlighted, i.e. filter or archive search string
+     */
+    public String getHiLight() {
+        return hiLight;
     }
 
-    public void setWpActiveIdx(int wpActive) {
-        this.wpActiveIdx = wpActive;
-    }*/
+    /**
+     * @param hiLight the sting to be shown in highlighted
+     */
+    public void setHiLight(String hiLight) {
+        this.hiLight = hiLight;
+    }
+
+    public boolean isCaseSensitive() {
+        return bCaseSensitive;
+    }
+
+    public void setCaseSensitive(boolean bCaseSensitive) {
+        this.bCaseSensitive = bCaseSensitive;
+    }
 }

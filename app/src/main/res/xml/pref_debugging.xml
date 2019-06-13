@@ -15,11 +15,13 @@
         android:summary="Activate the new fullscreen youtube play functionality for testing - there are still issues with device rotation.. and more??"
         android:title="Test YouTube fullscreen" />
 
+    <!--
     <SwitchPreference
         android:defaultValue="false"
         android:key="force_full_dropbox_sync"
         android:summary="Setting this option to on causes ALL items on dropbox being merged into your list, even those, that you have deleted before. This might result in a large list."
         android:title="Dropbox force full sync" />
+        -->
 
     <!--
     <SwitchPreference

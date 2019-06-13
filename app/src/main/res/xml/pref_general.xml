@@ -111,8 +111,14 @@
         android:title="@string/fallback_lowres_title" />
 
     <SwitchPreference
+        android:defaultValue="true"
+        android:key="filter_case_sensitive"
+        android:summary="@string/case_sensitive_search_explain"
+        android:title="@string/case_sensitive_option" />
+
+    <SwitchPreference
         android:defaultValue="false"
-        android:key="full_search"
+        android:key="filter_full"
         android:summary="@string/full_search_explain"
         android:title="@string/search_option" />
 
