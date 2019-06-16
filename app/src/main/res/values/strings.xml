@@ -367,6 +367,8 @@
     might need some improvement.</string>
     <string name="version_update_201906111">* Quick fix for a Live stream URL problem with NASA on
         02.06.2019, leading to a crash. Livestream can still not be played, working on it.</string>
+    <string name="version_update_201906161">* Streaming for ustream.tv test. ŃASA APOD with ISS
+        livestream from June 02. 2019.</string>
 
     <string name="remove_cachefile">Remove local copy</string>
     <string name="notify_apod_title">Fun In Space new image</string>

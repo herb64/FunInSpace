@@ -1164,8 +1164,8 @@ public final class utils {
                     item.setLowres(imgUrl);
                 } else if (host.equals("www.ustream.tv")) {
                     // TODO: bad hack only for ustream.tv, 02.06.2019 image of the day
-                    sMediaType = MainActivity.M_HTML_VIDEO;
-                    item.setThumb("th_UNKNOWN.jpg");
+                    sMediaType = MainActivity.M_USTREAM;
+                    item.setThumb("th_USTREAM.jpg");
                     item.setLowres(imgUrl);
                 } else {
                     // TODO: MP4 handling for correct media type video

@@ -359,6 +359,8 @@
     <string name="version_update_201906111">* Quick fix für das Problem, daß eine Livestream
         URL der NASA am 02.06.2019 zu einem Crash führt. Der Livestream kann noch nicht gespielt
         werden, daran wird noch gearbeitet (ustream.tv).</string>
+    <string name="version_update_201906161">* Streaming von ustream.tv test. ŃASA APOD mit ISS
+        Livestream vom 02.06.2019.</string>
 
     <string name="remove_cachefile">Lösche lokale Kopie</string>
     <string name="notify_apod_title">Fun In Space neues Bild</string>

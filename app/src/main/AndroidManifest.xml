@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <!-- Required for setPersistent() in JobInfo.builder -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Required for start/stopMethodTracing() -->
+    <!-- uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" -->
 
     <!--
      android:hardwareAccelerated="true"
@@ -45,6 +47,9 @@
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".VideoActivity"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".ustreamActivity"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity android:name=".PrivacyActivity" />
         <activity

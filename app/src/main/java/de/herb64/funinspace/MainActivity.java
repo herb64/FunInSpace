@@ -76,6 +76,9 @@ import de.herb64.funinspace.models.spaceItem;
 import de.herb64.funinspace.services.apodJobService;
 import de.herb64.funinspace.services.shuffleJobService;
 
+import static android.os.Debug.startMethodTracing;
+import static android.os.Debug.stopMethodTracing;
+
 // TODO Log statements: Log.d etc.. should not be contained in final release - how to automate?
 // see https://stackoverflow.com/questions/2446248/remove-all-debug-logging-calls-before-publishing-are-there-tools-to-do-this
 
@@ -185,6 +188,7 @@ public class MainActivity extends AppCompatActivity
     public static final String M_VIMEO = "vimeo";
     public static final String M_MP4 = "mp4";      // first nasa mp4 on 13.11.2017
     public static final String M_HTML_VIDEO = "html-video";    // first nasa html on 05.03.2018
+    public static final String M_USTREAM = "ustream";
     public static final String M_VIDEO_UNKNOWN = "unknown-video";
 
     // dealing with the number of displayed lines in the Explanation text view
@@ -748,11 +752,21 @@ public class MainActivity extends AppCompatActivity
         // code to be run, e.g. handle stuff like json format changes etc...
         processAppUpdates();
 
+        // TRACING TESTS - this is too much - would only like to trace own function call stack
+        // output goes into /sdcard/Android/data/de.herb64.funinspace/files
+        // graphviz needed for image creation (else: dot command not found)
+        // dmtracedump utility in /home/herbert/Android/Sdk/platform-tools
+        // needs manifest write external storage
+
+        //startMethodTracing("hfcmtesttrace");
+
         jsonData = null;
         File jsonFile = new File(getApplicationContext().getFilesDir(), localJson);
         if (jsonFile.exists()) {
             jsonData = utils.readf(getApplicationContext(), localJson);
         }
+
+        //stopMethodTracing();
 
         // No longer check for saved instance state here, we always reconstruct jsonData, myList
         // and parent array on config changes - only check to avoid unneeded calls to getLatestAPODs
@@ -1388,6 +1402,16 @@ public class MainActivity extends AppCompatActivity
          * because embedding iframes in WebView caused quite some trouble.. to be checked again.
          * For now, just use the NASA provided link in a webview. See lalatex doc for removed code
          */
+    }
+
+    /**
+     * Play a ustream.tv stream based on the url passed as string.
+     * @param url The stream url to be played
+     */
+    private void playUstream(String url) {
+        Intent ustreamIntent = new Intent(this, ustreamActivity.class);
+        ustreamIntent.putExtra("ustreamurl", url);
+        startActivity(ustreamIntent);
     }
 
     /**
@@ -2191,6 +2215,9 @@ public class MainActivity extends AppCompatActivity
                         utils.logAppend(getApplicationContext(), MainActivity.DEBUG_LOG,
                                 "getMissingApodInfos() - imgUrl is null or empty");
                     }
+                } else if (sMediaType.equals(M_USTREAM)) {
+                    Log.d("HFCM", "getMissingApodInfos() - launching asyncLoad for TAG USTREAM_" + i + ": " + imgUrl);
+                    new asyncLoad(MainActivity.this, "USTREAM_" + i).execute("ustream - no url");
                 } else {  // TODO double code as with html video link... check how to handle best
                     // DOCU see "short circuit evaluation" as keyword
                     if (imgUrl != null && !imgUrl.isEmpty()) {
@@ -2650,6 +2677,46 @@ public class MainActivity extends AppCompatActivity
             // TODO - good idea to refresh after VIM reload?
             adp.notifyDataSetChanged();
             // TODO Docu: json = new JSONTokener((String) output).nextValue();
+
+        } else if (tag.startsWith("USTREAM_")) {
+            // String "output" contains a json object returned for the specified video url
+            // We only use "video_id" and "thumbnail_url"
+            // duration is also available, as well as a description.. and more..
+            int idx = Integer.parseInt(tag.replace("USTREAM_", ""));
+            Log.i("HFCM", "processFinish(), tag = USTREAM_" + idx);
+            myList.get(idx).setThumbLoadingState(View.INVISIBLE);
+            adp.notifyDataSetChanged();
+
+            unfinishedApods--;
+            Log.d("HFCM", "processFinish() - (ustream) remaining unfinished APODs: " + unfinishedApods);
+            if (unfinishedApods == 0) {
+                parent = new JSONArray(); // other way to cleanup the array?
+                for (int i = myList.size() - 1; i >= 0; i--) {
+                    JSONObject apodObj = utils.createJsonObjectFromSpaceItem(myList.get(i));
+                    parent.put(apodObj);
+                    jsonData = parent.toString();   // FIX MISSING NEW APOD AFTER ROTATE
+                }
+                utils.writeJson(getApplicationContext(), localJson, parent);
+                File dir = new File(getFilesDir().getPath());
+                String[] names = dir.list();
+                for (String name : names) {
+                    if (name.startsWith(apodJobService.APOD_SCHED_PREFIX)) {
+                        File todelete = new File(getFilesDir(), name);
+                        Log.d("HFCM", "Deleting scheduled apod: " + name);
+                        if (!todelete.delete()) {
+                            Log.e("HFCM", "Error deleting file: " + name);
+                        }
+                    }
+                }
+                // Once all items are in, get the newest date and set into sharedprefs
+                long latest = utils.getNASAEpoch();
+                utils.logAppend(getApplicationContext(),
+                        DEBUG_LOG,
+                        "ustream - Setting LAST_UI_LAUNCH_EPOCH to " + latest + " (" + utils.getNASAStringFromEpoch(latest) + ")");
+                SharedPreferences.Editor editor = sharedPref.edit();
+                editor.putLong("LAST_UI_LAUNCH_EPOCH", latest);
+                editor.apply();
+            }
 
         } else {
             new dialogDisplay(MainActivity.this, "Unknown Tag '" + tag + "' from processFinish()", "Info for Herbert");
@@ -3205,6 +3272,14 @@ public class MainActivity extends AppCompatActivity
                 }
                 playVimeo(hiresUrl);
                 break;
+            case M_USTREAM:
+                if (reader != null) {
+                    reader.stop();
+                }
+                // TODO  hiresUrl is still empty
+                Log.d("HFCM", "USTREAM: " + hiresUrl);
+                playUstream("https://www.ustream.tv/embed/17074538?v=3&wmode=direct&autoplay=true");
+                break;
             case M_MP4:
                 if (reader != null) {
                     reader.stop();
@@ -3290,8 +3365,13 @@ public class MainActivity extends AppCompatActivity
             }
 
             // Fixing for 02.06.2019 bug with ustream.tv lifestream url
-            if (versionCodeInPrefs < 201906111 && versionCodeCurrent >= 201006111) {
+            if (versionCodeInPrefs < 201906111 && versionCodeCurrent >= 201906111) {
                 updateString += getString(R.string.version_update_201906111) + "\n";
+            }
+
+            // Add basic ustream.tv support in WebView
+            if (versionCodeInPrefs < 201906161 && versionCodeCurrent >= 201906161) {
+                updateString += getString(R.string.version_update_201906161) + "\n";
             }
 
             // Next version:

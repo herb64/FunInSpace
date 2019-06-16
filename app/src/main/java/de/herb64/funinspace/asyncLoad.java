@@ -185,7 +185,12 @@ public class asyncLoad extends AsyncTask {
             }
         } else if (params[0] instanceof String) {
             Log.i("HFCM", "Called asyncLoad(), tag = " + tag + ", single URL");
-            return getFromUrl((String) params[0]);
+            if (tag.startsWith("USTREAM_")){
+                status = HttpsURLConnection.HTTP_OK;
+                return "asyncload ustream return string";
+            } else {
+                return getFromUrl((String) params[0]);
+            }
         } else {
             Log.e("HFCM", "Called asyncLoad().execute() with bad type");
         }
